@@ -70,6 +70,19 @@ The production URL remains `https://piano.rit.cl`. The rebrand preserves the exi
 
 Third-party libraries keep their licenses in `node_modules`; VexFlow/Tonal/React/Dexie are MIT, WEBMIDI.js is Apache-2.0. No PianoPlayer source is imported. Lockfile pins the dependency graph.
 
+## Search visibility and Google Search Console
+
+The title, description, canonical URL, robots directive and Open Graph/Twitter metadata live in `index.html` and are included in the initial production HTML without running React. `public/robots.txt` permits all crawlers, including access to JavaScript, CSS and fonts, and points to `public/sitemap.xml`. The sitemap lists only `https://piano.rit.cl/`; Practice, Progress and Settings are views of the same page, not separate URLs. Vite copies these files into `dist/`, and the existing Docker image serves them through Nginx without deployment changes.
+
+After the normal GitHub-to-STRATO deployment:
+
+1. Open **View page source** at `https://piano.rit.cl/` and confirm the new title, description and canonical URL. Check that the page and `/assets/` resources return HTTP 200, and that neither the HTML nor response headers contain a restrictive `noindex` directive (`X-Robots-Tag` can also be set by an upstream proxy).
+2. Open `https://piano.rit.cl/robots.txt` and `https://piano.rit.cl/sitemap.xml`. They must return the text/XML files with HTTP 200, rather than the application's fallback HTML. JavaScript, CSS and fonts must remain crawlable. The repository's Nginx configuration sets no `X-Robots-Tag` or authentication restrictions; live DNS, TLS and any upstream proxy must be checked separately.
+3. In [Google Search Console](https://search.google.com/search-console/), add the URL-prefix property `https://piano.rit.cl/`. Choose **HTML tag**, copy Google's exact `google-site-verification` meta tag into the `<head>` of `index.html`, deploy through the existing workflow, and click **Verify**. Alternatively, choose **HTML file**, put Google's downloaded file unchanged in `public/`, deploy, check its public URL, and verify. Keep the tag/file permanently. For DNS verification without an application change, add a Domain property for `piano.rit.cl` and publish Google's TXT record at the DNS provider for that name. See [Google's ownership verification instructions](https://support.google.com/webmasters/answer/9008080?hl=en).
+4. In **Sitemaps**, submit `https://piano.rit.cl/sitemap.xml`. In **URL inspection**, inspect `https://piano.rit.cl/`, select **Test live URL**, check that crawling and indexing are allowed and that the rendered page loads its resources, then click **Request indexing**. Later, review the indexed result's Google-selected canonical. See [Google's URL inspection guide](https://support.google.com/webmasters/answer/9012289?hl=en).
+
+Verification requires the owner's Google token or DNS access; no placeholder token or analytics integration is included. Indexing and ranking are Google's decisions, and [a crawl request does not guarantee indexing](https://developers.google.com/search/docs/crawling-indexing/ask-google-to-recrawl).
+
 Builds include `THIRD_PARTY_LICENSES.md`; bundled font licenses are retained under `public/licenses/` and copied to `dist/licenses/`.
 
 In this restricted Windows workspace, a local toolchain is available without system installation:

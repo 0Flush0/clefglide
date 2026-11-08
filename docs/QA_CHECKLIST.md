@@ -1,6 +1,16 @@
 # ClefGlide QA
 
-## Current evidence: ClefGlide rebrand
+## Current evidence: search metadata and crawler access
+
+Verified on 2026-11-09 with the documented local Node 24.12.0 toolchain:
+
+- `npm run typecheck`, `npm run lint`, and `npm run build`: PASS.
+- `npm run test`: **PASS, 96 tests in 16 files** (89.21 seconds). `npm run test:e2e`: **PASS, all 18 desktop/tablet tests** (17.8 seconds). Playwright initially hit the sandbox's `spawn EPERM`; the approved rerun outside the sandbox passed. Browser/MIDI simulator tests do not verify physical hardware.
+- Parsed the raw generated `dist/index.html` without executing React: descriptive title, feature description, canonical `https://piano.rit.cl/`, Open Graph/Twitter metadata and `index, follow` are present. Referenced bundled assets exist. `dist/robots.txt` matches the allow-all source; `dist/sitemap.xml` parses as sitemap XML and lists only the canonical homepage. No `noindex` or crawler asset blocks were found in the application/deployment configuration.
+- Application source, local progress storage, dependencies, Dockerfile, Nginx configuration and GitHub-to-STRATO workflow are unchanged. Only static metadata/crawler files, existing metadata assertions and documentation changed.
+- Live verification remains outstanding: the web fetch could not access the site, and an approved direct HTTPS fetch failed to resolve `piano.rit.cl` from this environment. This does not establish the site's DNS status elsewhere. Production HTTP headers, upstream crawler rules and Google's indexing status could not be confirmed. No deployment or Search Console submission was performed. Follow the post-deployment and ownership/indexing steps in `README.md`.
+
+## Previous evidence: ClefGlide rebrand
 
 Verified on 2026-11-09 with the documented local Node 24.12.0 toolchain:
 

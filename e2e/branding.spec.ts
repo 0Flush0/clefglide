@@ -9,11 +9,11 @@ for (const language of ["en", "de"] as const) {
       localStorage.setItem("sightflow-language", lang);
     }, language);
     await page.goto("/");
-    await expect(page).toHaveTitle("ClefGlide · Read ahead. Play naturally.");
+    await expect(page).toHaveTitle("ClefGlide | Free Piano Sight-Reading Exercises");
     await expect(page.locator("html")).toHaveAttribute("lang", language);
     await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
       "href",
-      "https://piano.rit.cl",
+      "https://piano.rit.cl/",
     );
     await expect(page.locator('meta[name="description"]')).toHaveAttribute(
       "content",
@@ -25,7 +25,7 @@ for (const language of ["en", "de"] as const) {
     ]) {
       await expect(page.locator(selector)).toHaveAttribute(
         "content",
-        "ClefGlide · Read ahead. Play naturally.",
+        "ClefGlide | Free Piano Sight-Reading Exercises",
       );
     }
     const icon = await page.request.get("/favicon.svg");
