@@ -8,7 +8,7 @@ import {
 /** Capability check only: never requests MIDI permission. */
 export function midiUnavailableReason(): string | null {
   if (globalThis.isSecureContext !== true) {
-    return "MIDI requires HTTPS or localhost. HTTP LAN addresses can use the virtual piano; open SightFlow over HTTPS to connect a MIDI device.";
+    return "MIDI requires HTTPS or localhost. HTTP LAN addresses can use the virtual piano; open ClefGlide over HTTPS to connect a MIDI device.";
   }
   if (typeof globalThis.navigator?.requestMIDIAccess !== "function") {
     return "Web MIDI is unavailable in this browser. Use supported Chrome on HTTPS or localhost, or the virtual piano.";

@@ -12,7 +12,8 @@ describe("language preference", () => {
   });
   it("keeps an explicit English choice for a German browser", () => {
     vi.spyOn(navigator, "languages", "get").mockReturnValue(["de-DE"]);
-    localStorage.setItem(languageKey, "en");
+    localStorage.setItem("sightflow-language", "en");
+    expect(languageKey).toBe("sightflow-language");
     expect(initialLanguage()).toBe("en");
   });
   it("falls back to English and ignores invalid stored preferences", () => {

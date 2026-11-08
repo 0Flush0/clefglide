@@ -1,6 +1,19 @@
-# QA
+# ClefGlide QA
 
-## Current evidence: generator v4 chromatic notes and chords
+## Current evidence: ClefGlide rebrand
+
+Verified on 2026-11-09 with the documented local Node 24.12.0 toolchain:
+
+- `npm run typecheck`, `npm run lint`, and `npm run build`: PASS. Generated `dist/index.html` contains the ClefGlide title, new tagline, description, Open Graph/Twitter metadata and canonical URL `https://piano.rit.cl`; `dist/favicon.svg` contains the new musical icon. The theme color and existing score-first UI are preserved. There is no PWA manifest or structured data to migrate.
+- `npm run test`: **PASS, 96 tests in 16 files**, including all generator/scoring/MIDI and historical import tests. A new regression closes/reopens the existing `sightflow` database, restores saved tempo/assistance in the real React UI, displays the saved session and checks that preferences, seed, results and fingerprint remain identical. A language test restores the original `sightflow-language` key.
+- `npm run test:e2e`: **PASS, 18 tests** across desktop 1440×1000 and tablet 1024×768. New English/German scenarios check the wordmark, accessible home label, tagline, all three tabs for outdated branding, metadata, favicon, JSON/CSV filenames and page overflow. Screenshots are saved under ignored `test-results/` for light practice layouts and desktop dark mode. The existing responsive layout hides theme controls on tablet.
+- The sandbox initially rejected Playwright worker creation (`spawn EPERM`); approved execution outside the sandbox ran the browser suite successfully. Earlier environment-blocked reports below are historical.
+- Case-insensitive branding audit: remaining old-name occurrences are the intentional database/language/export/package identifiers, unchanged deployment workflow names/environment variable/server path, historical rename notes, and regression fixtures/assertions. No outdated visible branding remains in application strings or translations. The export schema stays `sightflow-1`; new download filenames use `clefglide-progress`.
+- Git diff confirms `.github/workflows/deploy.yml`, Dockerfile, deployment configuration, package/lockfile, database schema, language key, generator, scoring and score model are unchanged. The workflow's local typecheck/lint/test/build gates pass. No live deployment, registry push, SSH/server validation or hardware MIDI verification was performed.
+
+Remaining manual checks: after deployment through the existing workflow, open `https://piano.rit.cl` in a returning browser profile and confirm the new title/favicon, existing settings/history and an old JSON backup import. Verify physical USB MIDI and an actual Android tablet separately from simulator/browser viewport tests. The existing physical/teacher checklists below still apply.
+
+## Previous evidence: generator v4 chromatic notes and chords
 
 Verified on 2026-11-08 with the documented local Node 24.12.0 toolchain:
 
@@ -71,15 +84,15 @@ Simulator and mocked adapter results never establish physical MIDI compatibility
 |---|---|
 | 1 | Complete four-bar simulated UI test saves real correct outcomes; continuing bars generated. |
 | 2–3 | 10k seeded invariant/continuation suite; explicit placement and pitch/finger map checks. |
-| 4 | Register/C4/clef unit tests; browser range/clef scenario authored but blocked. |
+| 4 | Register/C4/clef unit tests and desktop/tablet browser range/clef scenario pass. |
 | 5 | Adapter user-gesture path implemented, SysEx=false verified with mocked API; physical QA outstanding. |
 | 6 | Pure trace tests demonstrate guided/timed differences, misses, early/late recovery and offsets. |
 | 7 | Event-derived metrics, validated persistence and fingerprint-filtered charts; simulated UI save test passes. |
 | 8 | Actual VexFlow SVG modifier removal test passes. |
-| 9 | Grand-staff implementation and simultaneous pitch-set scorer tests pass; visual browser QA blocked. |
+| 9 | Grand-staff implementation, simultaneous pitch-set scorer tests and desktop/tablet browser scenarios pass; physical review remains outstanding. |
 | 10 | Planned lift-and-reposition shifts implemented and validated independently; advance rest annotations, landing fingers, cue correspondence and continuation tested. Human comfort remains unverified. |
-| 11 | Responsive styles and desktop/tablet browser tests authored; actual viewport verification blocked. |
-| 12 | Build/unit checks pass; Playwright execution blocked as above. |
+| 11 | Desktop/tablet viewport scenarios pass; actual Android device review remains outstanding. |
+| 12 | Build/unit checks and all 18 Playwright tests pass for the rebrand. |
 
 ## Physical piano (outstanding)
 

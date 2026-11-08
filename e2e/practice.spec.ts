@@ -82,7 +82,7 @@ test("hints disappear while pitch expectations remain, range and clef apply", as
   await page.locator(".keyboard-range summary").click();
   await page.getByLabel("Lowest note").selectOption("48");
   await page.getByLabel("Highest note").selectOption("55");
-  await page.getByLabel("Clef").selectOption("bass");
+  await page.getByRole("combobox", { name: /^Clef/ }).selectOption("bass");
   await page.getByLabel("Fingering assistance").selectOption("all");
   await page.getByRole("button", { name: "Apply & generate" }).click();
   await expect(page.locator(".placement")).toContainText("C3");

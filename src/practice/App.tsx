@@ -600,14 +600,14 @@ export function App() {
         className="app-shell"
       >
         <aside className="rail">
-          <a className="brand" href="#" aria-label={tr("SightFlow home")}>
+          <a className="brand" href="#" aria-label={tr("ClefGlide home")}>
             <Music2 size={25} />
             <span>
-              {tr("SightFlow")}
+              {tr("ClefGlide")}
               <span className="brand-dot">.</span>
             </span>
           </a>
-          <p className="rail-caption">{tr("READ. PLAY. FLOW.")}</p>
+          <p className="rail-caption">{tr("Read ahead. Play naturally.")}</p>
           <Tabs.List className="nav" aria-label={tr("Main navigation")}>
             <Tabs.Trigger value="practice">
               <Music2 size={19} />
@@ -705,7 +705,7 @@ export function App() {
           <Tabs.Content value="practice" className="page">
             <div className="page-heading">
               <div>
-                <h1>{tr("Read. Play. Flow.")}</h1>
+                <h1>{tr("Read ahead. Play naturally.")}</h1>
                 <p>{tr("Fresh music, at your own pace.")}</p>
               </div>
               <span className="level-pill">
@@ -1135,7 +1135,7 @@ export function App() {
                   <button
                     onClick={() =>
                       download(
-                        "sightflow-progress.json",
+                        "clefglide-progress.json",
                         JSON.stringify(
                           { format: "sightflow-1", sessions },
                           null,
@@ -1150,7 +1150,7 @@ export function App() {
                   <button
                     onClick={() =>
                       download(
-                        "sightflow-progress.csv",
+                        "clefglide-progress.csv",
                         csv(sessions),
                         "text/csv",
                       )
@@ -1175,7 +1175,7 @@ export function App() {
                 ))}
               </div>
               <label className="import-label">
-                {tr("Import a SightFlow JSON backup")}
+                {tr("Import a ClefGlide JSON backup")}
                 <input
                   type="file"
                   accept="application/json,.json"
@@ -1349,8 +1349,8 @@ export function App() {
             </article>
           </Tabs.Content>
           <footer>
-            {tr("SIGHTFLOW")}
-            <span>{tr("Thoughtful practice. One note at a time.")}</span>
+            {tr("ClefGlide")}
+            <span>{tr("Read ahead. Play naturally.")}</span>
             <span>
               {tr("Local-first · Generator v")}
               {tr(VERSION)}

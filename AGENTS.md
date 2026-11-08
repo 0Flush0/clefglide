@@ -1,4 +1,4 @@
-# SightFlow
+# ClefGlide
 
 Static Vite + React + TypeScript piano sight-reading trainer. REQUIREMENTS.md is authoritative; read it before substantial changes.
 

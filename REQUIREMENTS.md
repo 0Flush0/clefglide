@@ -1,6 +1,9 @@
 # Adaptive Piano Sight-Reading Trainer — Product & Engineering Requirements
 
-**Project codename:** SightFlow  
+**Product:** ClefGlide (previously SightFlow)
+
+**Tagline:** Read ahead. Play naturally.
+
 **Document version:** 1.0 · **Prepared:** 2026-11-08  
 **Primary platform:** Google Chrome desktop and Chrome on compatible Android tablets, with Web MIDI input  
 **Status:** Implementation specification for Codex  

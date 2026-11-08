@@ -9,7 +9,7 @@ import {
 } from "@testing-library/react";
 import { createCanvas } from "@napi-rs/canvas";
 import { App } from "./App";
-import { db } from "../progress/store";
+import { db, record } from "../progress/store";
 import { defaults, fingerprint, VERSION, noteheads } from "../score/model";
 import { metrics } from "../scoring/engine";
 import { generate } from "../generation/planner";
@@ -39,6 +39,43 @@ function setupNotationDom() {
     value: () => {},
   });
 }
+
+it("ClefGlide restores existing SightFlow settings and progress without migration", async () => {
+  setupNotationDom();
+  await db.sessions.clear();
+  await db.preferences.clear();
+  const settings = { ...defaults, bpm: 72, hints: "all" as const };
+  const session = record("before-rebrand", "original-seed", settings, 2000, [
+    { id: "a", pitch: 60, hand: "right", kind: "correct", first: true },
+  ]);
+  expect(db.name).toBe("sightflow");
+  await db.sessions.put(session);
+  await db.preferences.put({ id: "settings", settings });
+  db.close();
+  await db.open();
+
+  const ui = render(<App />);
+  expect(ui.getByRole("link", { name: "ClefGlide home" })).toBeTruthy();
+  await waitFor(() =>
+    expect((ui.getByLabelText("Tempo") as HTMLInputElement).value).toBe("72"),
+  );
+  expect(
+    (ui.getByLabelText("Fingering assistance") as HTMLSelectElement).value,
+  ).toBe("all");
+  fireEvent.mouseDown(ui.getByRole("tab", { name: /^Progress$/ }), {
+    button: 0,
+    ctrlKey: false,
+  });
+  await waitFor(() =>
+    expect(ui.container.querySelectorAll(".session")).toHaveLength(1),
+  );
+  expect(ui.container.textContent).not.toMatch(/sightflow/i);
+  expect(await db.sessions.get(session.id)).toEqual(session);
+  expect(await db.preferences.get("settings")).toEqual({
+    id: "settings",
+    settings,
+  });
+});
 
 it("plays actual both-hand chromatic chords through four bars and persists separate chord accuracy", async () => {
   setupNotationDom();
@@ -83,9 +120,7 @@ it("plays actual both-hand chromatic chords through four bars and persists separ
         ?.getAttribute("data-staff-count"),
     ).toBe("2"),
   );
-  fireEvent.click(
-    ui.getByRole("button", { name: /^Start practice$/ }),
-  );
+  fireEvent.click(ui.getByRole("button", { name: /^Start practice$/ }));
   let playedChord = false;
   for (let i = 0; i < 50; i++) {
     const target = ui.getByTestId("target");

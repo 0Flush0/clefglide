@@ -1,6 +1,10 @@
-# SightFlow
+# ClefGlide
+
+**Read ahead. Play naturally.**
 
 An endless, local-first piano sight-reading trainer. Real VexFlow notation, playable five-finger plans, Chrome MIDI and a virtual piano. No account or backend.
+
+Available at [piano.rit.cl](https://piano.rit.cl). ClefGlide was previously called SightFlow. Existing practice history, settings and JSON backups remain compatible; no data migration or reset is needed. New downloads use `clefglide-progress.json` and `clefglide-progress.csv`, while the JSON format remains `sightflow-1`.
 
 ## Run
 
@@ -60,6 +64,8 @@ Timed mode: one-bar count-in, ±450 ms pitch-match window, separately configurab
 
 ## Deploy
 
+The production URL remains `https://piano.rit.cl`. The rebrand preserves the existing GitHub deployment workflow, GHCR image naming, Docker services and server paths. Internal `sightflow` names (including the IndexedDB database, `sightflow-language` preference key and package name) intentionally remain unchanged for compatibility.
+
 `npm run build` produces `dist/`. Serve it from any static HTTPS host (Cloudflare Pages, Netlify, etc.). No secrets, API keys or runtime server needed. Use a top-level page; embedded hosts must allow MIDI in their permissions policy. No runtime network calls are used to generate music.
 
 Third-party libraries keep their licenses in `node_modules`; VexFlow/Tonal/React/Dexie are MIT, WEBMIDI.js is Apache-2.0. No PianoPlayer source is imported. Lockfile pins the dependency graph.
@@ -73,4 +79,4 @@ $env:PATH = "$PWD\.tools;$env:PATH"
 .tools\node.exe .tools\package\bin\npm-cli.js run dev
 ```
 
-Browser QA is currently blocked by Windows process restrictions. Build, typecheck, lint and the unit/integration suite pass; see `docs/QA_CHECKLIST.md` for current counts, exact evidence and limitations. The responsive CSS and Playwright viewport scenarios still require a successful browser run before release.
+Typecheck, lint, production build, all 96 unit/integration tests and all 18 desktop/tablet Playwright tests pass for the ClefGlide rebrand. Browser tests required approved execution outside the Windows sandbox to start workers. See `docs/QA_CHECKLIST.md` for evidence and the remaining physical MIDI, real-device and production checks.

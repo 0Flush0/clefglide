@@ -1,7 +1,7 @@
 ﻿// English message keys remain stable across saved practice sessions.
 export const german: Record<string, string> = {
-  "SightFlow home": "SightFlow Startseite",
-  "READ. PLAY. FLOW.": "LESEN. SPIELEN. AUFGEHEN.",
+  "ClefGlide home": "ClefGlide Startseite",
+  "Read ahead. Play naturally.": "Vorauslesen. Natürlich spielen.",
   "Main navigation": "Hauptnavigation",
   "Made for your own pace": "In deinem eigenen Tempo",
   "Private by design.": "Privatsphäre von Anfang an.",
@@ -13,7 +13,6 @@ export const german: Record<string, string> = {
   "Choose piano input": "Klaviereingang wählen",
   "Connect MIDI": "MIDI verbinden",
   "Dismiss error": "Fehlermeldung schließen",
-  "Read. Play. Flow.": "Lesen. Spielen. Aufgehen.",
   "Fresh music, at your own pace.": "Neue Musik in deinem eigenen Tempo.",
   major: "Dur",
   "Plan checked": "Plan geprüft",
@@ -56,7 +55,7 @@ export const german: Record<string, string> = {
     "Spiele ein paar Noten und pausiere oder beende die Übung zum Speichern. Andere Einstellungen beginnen eine eigene Vergleichsreihe.",
   "Go to practice": "Zur Übung",
   "Session history": "Übungsverlauf",
-  "Import a SightFlow JSON backup": "SightFlow-JSON-Sicherung importieren",
+  "Import a ClefGlide JSON backup": "ClefGlide-JSON-Sicherung importieren",
   "A QUIETER KIND OF PRACTICE": "ENTSPANNT ÜBEN",
   "Settings & help": "Einstellungen & Hilfe",
   "Set up your piano, choose the skills to practice, and understand your results.":
@@ -72,7 +71,6 @@ export const german: Record<string, string> = {
   "Connection troubleshooting": "Verbindungsprobleme lösen",
   "Timing & local data": "Timing & lokale Daten",
   "Current teaching scope": "Aktueller Übungsumfang",
-  "Thoughtful practice. One note at a time.": "Bewusst üben. Note für Note.",
   "Local-first · Generator v": "Lokal gespeichert · Generator v",
   "major ·": "Dur ·",
   notes: "Noten",
@@ -246,8 +244,8 @@ export const german: Record<string, string> = {
   "Choose your piano input.": "Wähle deinen Klaviereingang.",
   "No MIDI inputs. Check USB/OTG and reconnect.":
     "Keine MIDI-Eingänge. Prüfe USB/OTG und verbinde erneut.",
-  "MIDI requires HTTPS or localhost. HTTP LAN addresses can use the virtual piano; open SightFlow over HTTPS to connect a MIDI device.":
-    "MIDI benötigt HTTPS oder localhost. Über HTTP im lokalen Netzwerk kannst du das virtuelle Klavier nutzen; öffne SightFlow über HTTPS, um MIDI zu verbinden.",
+  "MIDI requires HTTPS or localhost. HTTP LAN addresses can use the virtual piano; open ClefGlide over HTTPS to connect a MIDI device.":
+    "MIDI benötigt HTTPS oder localhost. Über HTTP im lokalen Netzwerk kannst du das virtuelle Klavier nutzen; öffne ClefGlide über HTTPS, um MIDI zu verbinden.",
   "Web MIDI is unavailable in this browser. Use supported Chrome on HTTPS or localhost, or the virtual piano.":
     "Web MIDI ist in diesem Browser nicht verfügbar. Nutze Chrome über HTTPS oder localhost oder das virtuelle Klavier.",
   "Generated sheet music with suggested fingering":

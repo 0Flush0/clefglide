@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <title>ClefGlide</title>
+  <rect width="32" height="32" rx="8" fill="#142f2c" />
+  <g fill="none" stroke="#f3efe5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M13 23V10l10-3v13M13 14l10-3" />
+    <ellipse cx="10" cy="23" rx="3" ry="2.5" />
+    <ellipse cx="20" cy="20" rx="3" ry="2.5" />
+  </g>
+</svg>
