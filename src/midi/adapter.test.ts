@@ -67,7 +67,7 @@ it("requests no permission until enabled, explicitly disables SysEx and normaliz
     ),
     removeListener: vi.fn((type: string) => callbacks.delete(type)),
   };
-  mock.inputs = [input];
+  mock.inputs = [input, { id: "other", addListener: vi.fn() }];
   const bus = new MidiBus(),
     events: MidiEvent[] = [];
   bus.subscribe((e) => events.push(e));
@@ -76,7 +76,8 @@ it("requests no permission until enabled, explicitly disables SysEx and normaliz
   expect(mock.enable).not.toHaveBeenCalled();
   await adapter.enable();
   expect(mock.enable).toHaveBeenCalledWith({ sysex: false });
-  adapter.select("piano");
+  expect(adapter.input).toBe(input);
+  expect(input.addListener).toHaveBeenCalledTimes(3);
   const event = {
     note: { number: 60, rawAttack: 90 },
     timestamp: 123,

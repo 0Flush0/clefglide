@@ -1,3 +1,5 @@
+import { useContext } from "react";
+import { LanguageContext, translate } from "../shared/i18n";
 import { useEffect, useRef, useState } from "react";
 import {
   Renderer,
@@ -50,6 +52,7 @@ export function Notation({
   hintEvents?: ScoreEvent[];
   hintMemory?: HintMemory;
 }) {
+  const language = useContext(LanguageContext);
   const host = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(900);
   const [fontsLoaded, setFontsLoaded] = useState(false);
@@ -164,7 +167,7 @@ export function Notation({
               );
               if (move)
                 note.addModifier(
-                  new Annotation(movementAnnotation(move))
+                  new Annotation(translate(movementAnnotation(move), language))
                     .setFont("Arial", 9)
                     .setVerticalJustification(Annotation.VerticalJustify.TOP),
                   0,
@@ -210,7 +213,7 @@ export function Notation({
       svg.setAttribute("role", "img");
       svg.setAttribute(
         "aria-label",
-        "Generated sheet music with suggested fingering",
+        translate("Generated sheet music with suggested fingering", language),
       );
       svg.setAttribute("data-staff-count", String(hands.length));
     }
@@ -221,6 +224,7 @@ export function Notation({
     startBar,
     width,
     reveal,
+    language,
     fontsLoaded,
     movements,
     positions,

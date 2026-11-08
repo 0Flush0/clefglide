@@ -1,3 +1,4 @@
+import { useTranslation } from "../shared/i18n";
 import { Note } from "tonal";
 import { useMemo } from "react";
 import { Settings2, ArrowRight, Info } from "lucide-react";
@@ -48,6 +49,7 @@ function RangeEditor({
   left?: boolean;
   onChange: (s: Settings) => void;
 }) {
+  const tr = useTranslation();
   const options = useMemo(
     () =>
       Array.from(
@@ -63,11 +65,13 @@ function RangeEditor({
   return (
     <fieldset className="range-editor">
       <legend>
-        {settings.hand === "both"
-          ? left
-            ? "Left hand range"
-            : "Right hand range"
-          : "Keyboard range"}
+        {tr(
+          settings.hand === "both"
+            ? left
+              ? "Left hand range"
+              : "Right hand range"
+            : "Keyboard range",
+        )}
       </legend>
       <div className="control-grid">
         {(["low", "high"] as const).map((edge) => {
@@ -88,9 +92,11 @@ function RangeEditor({
                 : 96;
           return (
             <label key={edge}>
-              {edge === "low" ? "Lowest note" : "Highest note"}
+              {tr(edge === "low" ? "Lowest note" : "Highest note")}
               <select
-                aria-label={`${left ? "Left hand " : ""}${edge === "low" ? "Lowest note" : "Highest note"}`}
+                aria-label={tr(
+                  `${left ? "Left hand " : ""}${edge === "low" ? "Lowest note" : "Highest note"}`,
+                )}
                 value={settings[key]}
                 onChange={(e) => {
                   const midi = +e.target.value;
@@ -110,7 +116,7 @@ function RangeEditor({
                       midi < minAllowed || midi > maxAllowed || !valid[edge]
                     }
                   >
-                    {Note.fromMidi(midi)}
+                    {tr(Note.fromMidi(midi))}
                   </option>
                 ))}
               </select>
@@ -134,27 +140,28 @@ function DifficultyButtons<T extends string>({
   levels: Record<T, { label: string; description?: string }>;
   onChange: (value: T) => void;
 }) {
+  const tr = useTranslation();
   return (
     <div className="difficulty-row">
       <details className="difficulty-info">
-        <summary aria-label={`About ${label.toLowerCase()}`}>
-          <span>{label}</span>
+        <summary aria-label={tr(`About ${label.toLowerCase()}`)}>
+          <span>{tr(label)}</span>
           <span className="difficulty-info-icon">
             <Info size={14} aria-hidden="true" />
           </span>
         </summary>
-        <p>{help}</p>
+        <p>{tr(help)}</p>
       </details>
-      <div className="segmented" role="group" aria-label={label}>
+      <div className="segmented" role="group" aria-label={tr(label)}>
         {(Object.keys(levels) as T[]).map((level) => (
           <button
             key={level}
             type="button"
             aria-pressed={level === value}
-            title={levels[level].description}
+            title={tr(levels[level].description)}
             onClick={() => onChange(level)}
           >
-            {levels[level].label}
+            {tr(levels[level].label)}
           </button>
         ))}
       </div>
@@ -182,6 +189,7 @@ export function PracticeSettings({
   children: React.ReactNode;
   assistanceUsed: boolean;
 }) {
+  const tr = useTranslation();
   const feasible =
     draft.hand !== "both" ||
     positionsFor(draft, "right").some((r) =>
@@ -194,42 +202,51 @@ export function PracticeSettings({
     <aside className="controls">
       <div className="controls-title">
         <Settings2 size={17} />
-        <h2>Your practice</h2>
+        <h2>{tr("Your practice")}</h2>
       </div>
       <div className="settings-scroll">
         <section
           className="exercise-difficulty"
-          aria-label="Exercise difficulty"
+          aria-label={tr("Exercise difficulty")}
         >
-          <h3>Exercise difficulty</h3>
+          <h3>{tr("Exercise difficulty")}</h3>
           <DifficultyButtons
-            label="Note jumps"
-            help="Changes the distance between successive melody notes. Small allows neighboring scale notes, Easy up to thirds, Medium up to fifths, and Large up to an octave."
+            label={tr("Note jumps")}
+            help={tr(
+              "Changes the distance between successive melody notes. Small allows neighboring scale notes, Easy up to thirds, Medium up to fifths, and Large up to an octave.",
+            )}
             value={draft.noteJumps}
             levels={jumpLevels}
             onChange={(level) => onChange(applyNoteJumps(draft, level))}
           />
           <DifficultyButtons
-            label="Hand movements"
-            help="Changes how often and how far your hand may move to a new position. Off keeps one position; Easy, Medium and Hard allow progressively more movement. Every planned move has a full beat of rest and an advance cue."
+            label={tr("Hand movements")}
+            help={tr(
+              "Changes how often and how far your hand may move to a new position. Off keeps one position; Easy, Medium and Hard allow progressively more movement. Every planned move has a full beat of rest and an advance cue.",
+            )}
             value={draft.handMovements}
             levels={movementLevels}
             onChange={(level) => onChange(applyHandMovements(draft, level))}
           />
           <DifficultyButtons
-            label="Finger spacing"
-            help="Changes the gaps between the keys assigned to your fingers. Off uses five consecutive scale notes. Higher levels introduce more varied approved gaps near the thumb and index finger, while retaining the planned hand position."
+            label={tr("Finger spacing")}
+            help={tr(
+              "Changes the gaps between the keys assigned to your fingers. Off uses five consecutive scale notes. Higher levels introduce more varied approved gaps near the thumb and index finger, while retaining the planned hand position.",
+            )}
             value={draft.fingerSpacing}
             levels={spacingLevels}
             onChange={(level) => field("fingerSpacing", level)}
           />
           <p className="settings-help">
-            Five independent skills. Chords and accidentals stay within your
-            movement and jump limits.
+            {tr(
+              "Adjust one skill at a time. All five controls respect your keyboard ranges, movement and jump limits. Allowed shapes may not fit every range.",
+            )}
           </p>
           <DifficultyButtons
-            label="Accidentals"
-            help="Adds notes outside the selected key. Off uses only the key's notes, including its key-signature sharps or flats. Easy adds occasional chromatic neighbors, Medium adds more neighbors and passing notes, and Hard adds more frequent chromatic figures and harmonic alterations."
+            label={tr("Accidentals")}
+            help={tr(
+              "Adds notes outside the selected key. Off uses only the key's notes, including its key-signature sharps or flats. Easy adds occasional chromatic neighbors, Medium adds more neighbors and passing notes, and Hard adds more frequent chromatic figures and harmonic alterations.",
+            )}
             value={draft.accidentals}
             levels={{
               off: {
@@ -255,8 +272,10 @@ export function PracticeSettings({
             onChange={(level) => field("accidentals", level)}
           />
           <DifficultyButtons
-            label="Chords"
-            help="Changes how many notes you play together and how often. Off uses single notes per hand. Easy adds occasional two-note shapes; Medium adds triads and simple inversions; Hard adds more chords and selected four-note shapes. Every chord must fit the validated fingering and keyboard range."
+            label={tr("Chords")}
+            help={tr(
+              "Changes how many notes you play together and how often. Off uses single notes per hand. Easy adds occasional two-note shapes; Medium adds triads and simple inversions; Hard adds more chords and selected four-note shapes. Every chord must fit the validated fingering and keyboard range.",
+            )}
             value={draft.chords}
             levels={{
               off: {
@@ -284,26 +303,29 @@ export function PracticeSettings({
         </section>
         <div className="control-grid">
           <label>
-            Hands
+            {tr("Hands")}
             <select
+              aria-label={tr("Hands")}
               value={draft.hand}
               onChange={(e) =>
                 field("hand", e.target.value as Settings["hand"])
               }
             >
-              <option value="right">Right</option>
-              <option value="left">Left</option>
-              <option value="both">Both</option>
+              <option value="right">{tr("Right")}</option>
+              <option value="left">{tr("Left")}</option>
+              <option value="both">{tr("Both")}</option>
             </select>
           </label>
         </div>
         <details className="keyboard-range">
           <summary>
-            Keyboard range · {Note.fromMidi(draft.min)}–
-            {Note.fromMidi(draft.max)}
-            {draft.hand === "both"
-              ? ` / LH ${Note.fromMidi(draft.leftMin)}–${Note.fromMidi(draft.leftMax)}`
-              : ""}
+            {tr("Keyboard range ·")}
+            {tr(Note.fromMidi(draft.min))}–{tr(Note.fromMidi(draft.max))}
+            {tr(
+              draft.hand === "both"
+                ? ` / LH ${Note.fromMidi(draft.leftMin)}–${Note.fromMidi(draft.leftMax)}`
+                : "",
+            )}
           </summary>
           <RangeEditor settings={draft} onChange={onChange} />
           {draft.hand === "both" && (
@@ -311,27 +333,32 @@ export function PracticeSettings({
           )}
         </details>
         <p className="range-explanation">
-          Music stays inside this range. {rangeSummary(draft)}
+          {tr("Music stays inside this range.")}
+          {tr(rangeSummary(draft))}
         </p>
         {!feasible && (
           <p role="alert" className="settings-help">
-            These hand ranges overlap. Lower the left-hand range or raise the
-            right-hand range.
+            {tr(
+              "These hand ranges overlap. Lower the left-hand range or raise the right-hand range.",
+            )}
           </p>
         )}
         <label>
-          Tempo <span className="range-value">{draft.bpm} BPM</span>
+          {tr("Tempo")}
+          <span className="range-value">
+            {draft.bpm} {tr("BPM")}
+          </span>
           <input
-            aria-label="Tempo"
+            aria-label={tr("Tempo")}
             type="range"
-            min="30"
+            min="10"
             max="180"
             value={draft.bpm}
             onChange={(e) => field("bpm", +e.target.value)}
           />
         </label>
         <label>
-          Fingering assistance
+          {tr("Fingering assistance")}
           <select
             value={
               draft.mode === "benchmark"
@@ -343,25 +370,27 @@ export function PracticeSettings({
             disabled={draft.mode === "benchmark"}
             onChange={(e) => onHints(e.target.value as Settings["hints"])}
           >
-            <option value="all">All — every finger</option>
-            <option value="smart">Smart — just what you need</option>
-            <option value="hidden">None — independent reading</option>
+            <option value="all">{tr("All — every finger")}</option>
+            <option value="smart">{tr("Smart — just what you need")}</option>
+            <option value="hidden">{tr("None — independent reading")}</option>
           </select>
         </label>
         <p className="settings-help">
-          Hints change immediately.{" "}
-          {draft.hints === "hidden" && assistanceUsed
-            ? "This exercise has already shown hints. New exercise starts independent practice."
-            : draft.mode === "benchmark"
-              ? "Independent mode hides all guidance."
-              : "Smart shows starting fingers, necessary spacing cues and planned moves."}
+          {tr("Hints change immediately.")}{" "}
+          {tr(
+            draft.hints === "hidden" && assistanceUsed
+              ? "This exercise has already shown hints. New exercise starts independent practice."
+              : draft.mode === "benchmark"
+                ? "Independent mode hides all guidance."
+                : "Smart shows starting fingers, necessary spacing cues and planned moves.",
+          )}
         </p>
         <details className="advanced">
-          <summary>Advanced settings</summary>
+          <summary>{tr("Advanced settings")}</summary>
           <div className="control-grid">
             {draft.hand !== "both" && (
               <label>
-                Clef
+                {tr("Clef")}
                 <select
                   value={draft.hand === "right" ? draft.rhClef : draft.lhClef}
                   onChange={(e) =>
@@ -371,56 +400,56 @@ export function PracticeSettings({
                     )
                   }
                 >
-                  <option value="treble">Treble</option>
-                  <option value="bass">Bass</option>
+                  <option value="treble">{tr("Treble")}</option>
+                  <option value="bass">{tr("Bass")}</option>
                 </select>
               </label>
             )}
             {draft.hand === "both" && (
               <>
                 <label>
-                  Right clef
+                  {tr("Right clef")}
                   <select
                     value={draft.rhClef}
                     onChange={(e) =>
                       field("rhClef", e.target.value as "treble" | "bass")
                     }
                   >
-                    <option value="treble">Treble</option>
-                    <option value="bass">Bass</option>
+                    <option value="treble">{tr("Treble")}</option>
+                    <option value="bass">{tr("Bass")}</option>
                   </select>
                 </label>
                 <label>
-                  Left clef
+                  {tr("Left clef")}
                   <select
                     value={draft.lhClef}
                     onChange={(e) =>
                       field("lhClef", e.target.value as "treble" | "bass")
                     }
                   >
-                    <option value="bass">Bass</option>
-                    <option value="treble">Treble</option>
+                    <option value="bass">{tr("Bass")}</option>
+                    <option value="treble">{tr("Treble")}</option>
                   </select>
                 </label>
               </>
             )}
           </div>
           <label>
-            Practice mode
+            {tr("Practice mode")}
             <select
               value={draft.mode}
               onChange={(e) =>
                 field("mode", e.target.value as Settings["mode"])
               }
             >
-              <option value="wait">Wait for correct notes</option>
-              <option value="timed">Timed playing</option>
-              <option value="benchmark">Independent benchmark</option>
+              <option value="wait">{tr("Wait for correct notes")}</option>
+              <option value="timed">{tr("Timed playing")}</option>
+              <option value="benchmark">{tr("Independent benchmark")}</option>
             </select>
           </label>
           <div className="control-grid">
             <label>
-              Key
+              {tr("Key")}
               <select
                 value={draft.key}
                 onChange={(e) =>
@@ -428,12 +457,12 @@ export function PracticeSettings({
                 }
               >
                 {["C", "G", "F", "D"].map((k) => (
-                  <option key={k}>{k}</option>
+                  <option key={k}>{tr(k)}</option>
                 ))}
               </select>
             </label>
             <label>
-              Meter
+              {tr("Meter")}
               <select
                 value={draft.beats}
                 onChange={(e) => field("beats", +e.target.value as 3 | 4)}
@@ -444,25 +473,27 @@ export function PracticeSettings({
             </label>
           </div>
           <label>
-            Rhythm
+            {tr("Rhythm")}
             <select
               value={draft.rhythm}
               onChange={(e) =>
                 field("rhythm", e.target.value as Settings["rhythm"])
               }
             >
-              <option value="gentle">Gentle notes & rests</option>
-              <option value="quarters">Quarter notes</option>
-              <option value="mixed">Mixed eighths through whole notes</option>
+              <option value="gentle">{tr("Gentle notes & rests")}</option>
+              <option value="quarters">{tr("Quarter notes")}</option>
+              <option value="mixed">
+                {tr("Mixed eighths through whole notes")}
+              </option>
             </select>
           </label>
           <label>
-            Hand-shift frequency{" "}
+            {tr("Hand-shift frequency")}{" "}
             <span className="range-value">
               {Math.round(draft.shiftFrequency * 100)}%
             </span>
             <input
-              aria-label="Hand-shift frequency"
+              aria-label={tr("Hand-shift frequency")}
               type="range"
               min="0"
               max="1"
@@ -473,7 +504,7 @@ export function PracticeSettings({
             />
           </label>
           <label>
-            Maximum repositioning distance
+            {tr("Maximum repositioning distance")}
             <select
               disabled={draft.handMovements === "off"}
               value={draft.maxShift}
@@ -483,19 +514,21 @@ export function PracticeSettings({
                 { length: movementRules[draft.handMovements].distance + 1 },
                 (_, i) => (
                   <option key={i} value={i}>
-                    {i} scale steps
+                    {i} {tr("scale steps")}
                   </option>
                 ),
               )}
             </select>
           </label>
           <p className="settings-help">
-            {draft.handMovements === "off"
-              ? "Off keeps one mapped position for the whole exercise."
-              : "Frequency applies at eligible phrase boundaries. A narrow range may prevent shifts even at 100%."}
+            {tr(
+              draft.handMovements === "off"
+                ? "Off keeps one mapped position for the whole exercise."
+                : "Frequency applies at eligible phrase boundaries. A narrow range may prevent shifts even at 100%.",
+            )}
           </p>
           <label>
-            Maximum melodic interval
+            {tr("Maximum melodic interval")}
             <select
               value={draft.interval}
               onChange={(e) => field("interval", +e.target.value)}
@@ -514,13 +547,13 @@ export function PracticeSettings({
                   value={i + 1}
                   disabled={i + 1 > jumpLevels[draft.noteJumps].interval}
                 >
-                  {name}
+                  {tr(name)}
                 </option>
               ))}
             </select>
           </label>
           <label>
-            Bars in view
+            {tr("Bars in view")}
             <select
               value={draft.bars}
               onChange={(e) => field("bars", +e.target.value as 2 | 3 | 4)}
@@ -531,7 +564,7 @@ export function PracticeSettings({
             </select>
           </label>
           <label>
-            Input timing offset (ms)
+            {tr("Input timing offset (ms)")}
             <input
               type="number"
               min="-500"
@@ -541,7 +574,7 @@ export function PracticeSettings({
             />
           </label>
           <label>
-            Timing tolerance (ms)
+            {tr("Timing tolerance (ms)")}
             <input
               type="number"
               min="50"
@@ -551,26 +584,29 @@ export function PracticeSettings({
             />
           </label>
           <label>
-            Exercise seed
+            {tr("Exercise seed")}
             <input value={seed} onChange={(e) => onSeed(e.target.value)} />
           </label>
-          {children}
+          {tr(children)}
         </details>
       </div>
       <div className="settings-apply">
         <p role="status">
-          {!valid
-            ? "Check the advanced values before generating."
-            : pending
-              ? "Changes ready — generate new music to apply."
-              : "Ready. Exercise settings apply to new music."}
+          {tr(
+            !valid
+              ? "Check the advanced values before generating."
+              : pending
+                ? "Changes ready — generate new music to apply."
+                : "Ready. Exercise settings apply to new music.",
+          )}
         </p>
         <button
           className="apply"
           disabled={!pending || !valid}
           onClick={onApply}
         >
-          Apply & generate <ArrowRight size={16} />
+          {tr("Apply & generate")}
+          <ArrowRight size={16} />
         </button>
       </div>
     </aside>

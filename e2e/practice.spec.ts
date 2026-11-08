@@ -1,4 +1,39 @@
 import { test, expect } from "@playwright/test";
+test("slow tempo and responsive menus remain accessible", async ({ page }) => {
+  await page.goto("/");
+  const tempo = page.getByRole("slider", { name: "Tempo", exact: true });
+  await tempo.fill("10");
+  await page.getByRole("button", { name: "Apply & generate" }).click();
+  await expect(tempo).toHaveValue("10");
+  for (const viewport of [
+    { width: 1440, height: 600 },
+    { width: 1024, height: 600 },
+    { width: 390, height: 700 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    expect(
+      await page.locator(".rail .nav").evaluate((nav) => {
+        const rect = nav.getBoundingClientRect();
+        return (
+          rect.top >= 0 &&
+          rect.bottom <= innerHeight &&
+          rect.right <= innerWidth
+        );
+      }),
+    ).toBe(true);
+    expect(
+      await page
+        .locator(".settings-scroll")
+        .evaluate((panel) => panel.scrollHeight <= panel.clientHeight + 1),
+    ).toBe(true);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+  }
+});
 test("plays four simulated bars, streams ahead, saves real progress, stays within viewport", async ({
   page,
 }) => {

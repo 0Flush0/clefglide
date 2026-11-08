@@ -1,3 +1,4 @@
+import { useTranslation } from "../shared/i18n";
 import { Hand } from "lucide-react";
 import {
   TPQ,
@@ -25,6 +26,7 @@ export function PracticeHints({
   revealed: boolean;
   atStart?: boolean;
 }) {
+  const tr = useTranslation();
   const show = showPlacement(settings.hints, revealed);
   const next = movements.filter(
     (m, i, all) => all.findIndex((x) => x.hand === m.hand) === i,
@@ -36,32 +38,38 @@ export function PracticeHints({
       </div>
       <div>
         <strong>
-          {show
-            ? atStart
-              ? "Before you play"
-              : "Hand position"
-            : settings.mode === "benchmark"
-              ? "Independent reading"
-              : "Hand placement hint available"}
+          {tr(
+            show
+              ? atStart
+                ? "Before you play"
+                : "Hand position"
+              : settings.mode === "benchmark"
+                ? "Independent reading"
+                : "Hand placement hint available",
+          )}
         </strong>
         <p>
-          {show
-            ? initialHands
-                .map((h) => {
-                  const first = firstNotes.find((n) => n.hand === h.hand);
-                  const thumb =
-                    h.hand === "right" ? h.pitches[0] : h.pitches[4];
-                  const heads = first ? noteheads(first) : [];
-                  const start =
-                    heads.length > 1
-                      ? ` Start with ${heads.map((n) => `${n.pitch}/${n.finger}`).join(" · ")} (note/finger).`
-                      : ` Start on ${first?.pitch} with finger ${first?.finger}.`;
-                  return `${h.hand === "right" ? "Right hand" : "Left hand"}: thumb on ${thumb}, position ${h.pitches[0]}–${h.pitches[4]}.${atStart ? start : ""}`;
-                })
-                .join(" / ")
-            : settings.mode === "benchmark"
-              ? "Independent reading · fingering hidden"
-              : "Reveal the starting position before playing, whenever you need it."}
+          {tr(
+            show
+              ? initialHands
+                  .map((h) => {
+                    const first = firstNotes.find((n) => n.hand === h.hand);
+                    const thumb =
+                      h.hand === "right" ? h.pitches[0] : h.pitches[4];
+                    const heads = first ? noteheads(first) : [];
+                    const start =
+                      heads.length > 1
+                        ? ` Start with ${heads.map((n) => `${n.pitch}/${n.finger}`).join(" · ")} (note/finger).`
+                        : ` Start on ${first?.pitch} with finger ${first?.finger}.`;
+                    return tr(
+                      `${h.hand === "right" ? "Right hand" : "Left hand"}: thumb on ${thumb}, position ${h.pitches[0]}–${h.pitches[4]}.${atStart ? tr(start) : ""}`,
+                    );
+                  })
+                  .join(" / ")
+              : settings.mode === "benchmark"
+                ? "Independent reading · fingering hidden"
+                : "Reveal the starting position before playing, whenever you need it.",
+          )}
         </p>
         {next.map((m) => {
           const pos = positions.find(
@@ -74,9 +82,11 @@ export function PracticeHints({
           const bar = Math.floor(m.landingTick / (settings.beats * TPQ)) + 1;
           return (
             <p key={m.id} data-movement-id={m.id} className="movement-cue">
-              {show
-                ? `Bar ${bar} · Move ${m.hand === "right" ? "right" : "left"} hand: thumb to ${pos?.pitches[m.hand === "right" ? 0 : 4]}, position ${pos?.pitches[0]}–${pos?.pitches[4]}. Land on ${note} with finger ${m.landingFinger}.`
-                : `Position change before bar ${bar} · ${settings.mode === "benchmark" ? "fingering hidden" : "hint available"}`}
+              {tr(
+                show
+                  ? `Bar ${bar} · Move ${m.hand === "right" ? "right" : "left"} hand: thumb to ${pos?.pitches[m.hand === "right" ? 0 : 4]}, position ${pos?.pitches[0]}–${pos?.pitches[4]}. Land on ${note} with finger ${m.landingFinger}.`
+                  : `Position change before bar ${bar} · ${settings.mode === "benchmark" ? "fingering hidden" : "hint available"}`,
+              )}
             </p>
           );
         })}

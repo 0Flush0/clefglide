@@ -73,7 +73,7 @@ export class HardwareMidi {
     WebMidi.addListener("connected", this.hotplug);
     WebMidi.addListener("disconnected", this.hotplug);
     this.hotplug();
-    if (this.input) this.select(this.input.id);
+    this.select(this.input?.id ?? WebMidi.inputs[0]?.id ?? "");
   }
   select(id: string) {
     this.cleanup?.();

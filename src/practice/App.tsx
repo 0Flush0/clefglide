@@ -1,4 +1,11 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useTranslation,
+  initialLanguage,
+  languageKey,
+  translate,
+  LanguageContext,
+} from "../shared/i18n";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as Tabs from "@radix-ui/react-tabs";
 import {
   Activity,
@@ -156,9 +163,18 @@ export function App() {
     [diagnostic, setDiagnostic] = useState<MidiEvent>(),
     [channel, setChannel] = useState(0),
     [dark, setDark] = useState(false),
-    [lang, setLang] = useState<"en" | "de">("en"),
+    [lang, setLang] = useState<"en" | "de">(initialLanguage),
     [click, setClick] = useState(false),
     [compareAll, setCompareAll] = useState(false);
+  const chooseLanguage = (language: "en" | "de") => {
+    setLang(language);
+    try {
+      localStorage.setItem(languageKey, language);
+    } catch {
+      /* Storage is optional. */
+    }
+  };
+  const tr = <T,>(value: T) => translate(value, lang);
   const t = labels[lang],
     audio = useRef<AudioContext | null>(null),
     lastBeat = useRef(-1),
@@ -536,6 +552,7 @@ export function App() {
     try {
       hardware.current?.dispose();
       await hardware.current?.enable();
+      if (hardware.current?.input) selectDevice(hardware.current.input.id);
       setError("");
     } catch (e) {
       setStatus("MIDI connection failed");
@@ -570,669 +587,778 @@ export function App() {
       npm: Math.round(metrics(s.results, s.ms, s.settings.tolerance).npm),
     }));
   return (
-    <Tabs.Root
-      value={tab}
-      onValueChange={(value) => {
-        if (value !== "practice") {
-          engine.pause(performance.now());
-          void persist(run);
-        }
-        setTab(value);
-      }}
-      className="app-shell"
-    >
-      <aside className="rail">
-        <a className="brand" href="#" aria-label="SightFlow home">
-          <Music2 size={25} />
-          <span>
-            SightFlow<span className="brand-dot">.</span>
-          </span>
-        </a>
-        <p className="rail-caption">READ. PLAY. FLOW.</p>
-        <Tabs.List className="nav" aria-label="Main navigation">
-          <Tabs.Trigger value="practice">
-            <Music2 size={19} />
-            {t.practice}
-          </Tabs.Trigger>
-          <Tabs.Trigger value="progress">
-            <BarChart3 size={19} />
-            {t.progress}
-          </Tabs.Trigger>
-          <Tabs.Trigger value="help">
-            <CircleHelp size={19} />
-            {t.help}
-          </Tabs.Trigger>
-        </Tabs.List>
-        <div className="rail-bottom">
-          <span className="local-dot" /> Made for your own pace
-          <p>
-            Private by design.
-            <br />
-            Your music stays on this device.
-          </p>
-          <button className="theme" onClick={() => setDark(!dark)}>
-            {dark ? <Sun size={17} /> : <Moon size={17} />}{" "}
-            {dark ? "Light" : "Dark"} appearance
-          </button>
-          <select
-            aria-label="Language"
-            value={lang}
-            onChange={(e) => setLang(e.target.value as "en" | "de")}
-          >
-            <option value="en">English</option>
-            <option value="de">Deutsch · core navigation</option>
-          </select>
-        </div>
-      </aside>
-      <main>
-        <header className="topbar">
-          <div className="breadcrumb">
-            Your piano companion <ChevronRight size={14} />
-            <strong>
-              {tab === "practice"
-                ? t.practice
-                : tab === "progress"
-                  ? t.progress
-                  : t.help}
-            </strong>
-          </div>
-          {inputs.length > 0 && (
-            <select
-              className="device-picker"
-              aria-label="MIDI device"
-              value={device}
-              onChange={(e) => selectDevice(e.target.value)}
-            >
-              <option value="">Choose piano input</option>
-              {inputs.map((i) => (
-                <option key={i.id} value={i.id}>
-                  {i.name}
-                </option>
-              ))}
-            </select>
-          )}
-          <button
-            className={`device-badge ${device ? "connected" : ""}`}
-            aria-label="Connect MIDI"
-            onClick={() => void connect()}
-          >
-            <span className="status-dot" />
-            {device
-              ? "MIDI connected"
-              : sim
-                ? "Connect MIDI"
-                : "Connect your piano"}
-            <Plug size={15} />
-          </button>
-        </header>
-        {error && (
-          <div role="alert" className="error">
-            {error}
-            <button onClick={() => setError("")} aria-label="Dismiss error">
-              ×
-            </button>
-          </div>
-        )}
-        <Tabs.Content value="practice" className="page">
-          <div className="page-heading">
-            <div>
-              <h1>Read. Play. Flow.</h1>
-              <p>Fresh music, at your own pace.</p>
-            </div>
-            <span className="level-pill">
-              {settings.hand === "both"
-                ? "Both hands"
-                : settings.hand === "right"
-                  ? "Right hand"
-                  : "Left hand"}{" "}
-              · {settings.bpm} BPM
+    <LanguageContext.Provider value={lang}>
+      <Tabs.Root
+        value={tab}
+        onValueChange={(value) => {
+          if (value !== "practice") {
+            engine.pause(performance.now());
+            void persist(run);
+          }
+          setTab(value);
+        }}
+        className="app-shell"
+      >
+        <aside className="rail">
+          <a className="brand" href="#" aria-label={tr("SightFlow home")}>
+            <Music2 size={25} />
+            <span>
+              {tr("SightFlow")}
+              <span className="brand-dot">.</span>
             </span>
+          </a>
+          <p className="rail-caption">{tr("READ. PLAY. FLOW.")}</p>
+          <Tabs.List className="nav" aria-label={tr("Main navigation")}>
+            <Tabs.Trigger value="practice">
+              <Music2 size={19} />
+              {tr(t.practice)}
+            </Tabs.Trigger>
+            <Tabs.Trigger value="progress">
+              <BarChart3 size={19} />
+              {tr(t.progress)}
+            </Tabs.Trigger>
+            <Tabs.Trigger value="help">
+              <CircleHelp size={19} />
+              {tr(t.help)}
+            </Tabs.Trigger>
+          </Tabs.List>
+          <div className="rail-bottom">
+            <span className="local-dot" /> {tr("Made for your own pace")}
+            <p>
+              {tr("Private by design.")}
+              <br />
+              {tr("Your music stays on this device.")}
+            </p>
+            <button className="theme" onClick={() => setDark(!dark)}>
+              {dark ? <Sun size={17} /> : <Moon size={17} />}{" "}
+              {tr(dark ? "Light" : "Dark")} {tr("appearance")}
+            </button>
+            <select
+              aria-label={tr("Language")}
+              value={lang}
+              onChange={(e) => chooseLanguage(e.target.value as "en" | "de")}
+            >
+              <option value="en">{tr("English")}</option>
+              <option value="de">{tr("Deutsch")}</option>
+            </select>
           </div>
-          <div className="practice-layout">
-            <section className="practice-main">
-              <div className="score-card">
-                <div className="score-toolbar">
-                  <div>
-                    <span className="small-label">
-                      {settings.mode === "timed"
-                        ? "CONTINUOUS RHYTHM"
-                        : settings.mode === "benchmark"
-                          ? "UNASSISTED · FIRST ATTEMPT"
-                          : "GUIDED NOTE READING"}
+        </aside>
+        <main>
+          <header className="topbar">
+            <div className="breadcrumb">
+              {tr("Your piano companion")}
+              <ChevronRight size={14} />
+              <strong>
+                {tr(
+                  tab === "practice"
+                    ? t.practice
+                    : tab === "progress"
+                      ? t.progress
+                      : t.help,
+                )}
+              </strong>
+            </div>
+            {inputs.length > 0 && (
+              <select
+                className="device-picker"
+                aria-label={tr("MIDI device")}
+                value={device}
+                onChange={(e) => selectDevice(e.target.value)}
+              >
+                <option value="">{tr("Choose piano input")}</option>
+                {inputs.map((i) => (
+                  <option key={i.id} value={i.id}>
+                    {i.name}
+                  </option>
+                ))}
+              </select>
+            )}
+            <button
+              className={`device-badge ${device ? "connected" : ""}`}
+              aria-label={tr("Connect MIDI")}
+              onClick={() => void connect()}
+            >
+              <span className="status-dot" />
+              {tr(
+                device
+                  ? "MIDI connected"
+                  : sim
+                    ? "Connect MIDI"
+                    : "Connect your piano",
+              )}
+              <Plug size={15} />
+            </button>
+          </header>
+          {tr(
+            error && (
+              <div role="alert" className="error">
+                {tr(error)}
+                <button
+                  onClick={() => setError("")}
+                  aria-label={tr("Dismiss error")}
+                >
+                  ×
+                </button>
+              </div>
+            ),
+          )}
+          <Tabs.Content value="practice" className="page">
+            <div className="page-heading">
+              <div>
+                <h1>{tr("Read. Play. Flow.")}</h1>
+                <p>{tr("Fresh music, at your own pace.")}</p>
+              </div>
+              <span className="level-pill">
+                {tr(
+                  settings.hand === "both"
+                    ? "Both hands"
+                    : settings.hand === "right"
+                      ? "Right hand"
+                      : "Left hand",
+                )}{" "}
+                · {settings.bpm} {tr("BPM")}
+              </span>
+            </div>
+            <div className="practice-layout">
+              <section className="practice-main">
+                <div className="score-card">
+                  <div className="score-toolbar">
+                    <div>
+                      <span className="small-label">
+                        {tr(
+                          settings.mode === "timed"
+                            ? "CONTINUOUS RHYTHM"
+                            : settings.mode === "benchmark"
+                              ? "UNASSISTED · FIRST ATTEMPT"
+                              : "GUIDED NOTE READING",
+                        )}
+                      </span>
+                      <h2>
+                        {tr(settings.key)} {tr("major")} <span> / </span>{" "}
+                        {settings.beats}/4 <span> / </span> {settings.bpm}{" "}
+                        {tr("BPM")}
+                      </h2>
+                    </div>
+                    <span className="validated">
+                      <Check size={14} /> {tr("Plan checked")}
                     </span>
-                    <h2>
-                      {settings.key} major <span> / </span> {settings.beats}/4{" "}
-                      <span> / </span> {settings.bpm} BPM
-                    </h2>
                   </div>
-                  <span className="validated">
-                    <Check size={14} /> Plan checked
-                  </span>
-                </div>
-                <PracticeHints
-                  initialHands={guidanceHands}
-                  atStart={startBar === 0}
-                  firstNotes={run.initialHands.map((h) =>
-                    engine.notes.find((n) => n.hand === h.hand)!,
-                  )}
-                  positions={planPositions}
-                  movements={reveal ? manualMovements : upcomingMovements}
-                  settings={notationSettings}
-                  revealed={settings.mode !== "benchmark" && reveal}
-                />
-                <div className="measure-labels">
-                  <span>Bar {(target?.bar ?? 0) + 1}</span>
-                  <span>
-                    {settings.mode === "timed"
-                      ? "Keep the pulse"
-                      : "Take your time. Read ahead."}
-                  </span>
-                </div>
-                <Notation
-                  events={events}
-                  hands={hands}
-                  positions={planPositions}
-                  settings={notationSettings}
-                  startBar={startBar}
-                  currentId={target?.id}
-                  reveal={settings.mode !== "benchmark" && reveal}
-                  movements={allMovements}
-                  hintEvents={hintEvents}
-                  hintMemory={run.phrases[0].initial.hints}
-                />
-                <div className="score-foot">
-                  <span>
-                    <span
-                      className={`pulse-dot ${engine.running ? "live" : ""}`}
-                    />
-                    {engine.running
-                      ? now < engine.origin
-                        ? `Count in: ${Math.ceil((engine.origin - now) / (60000 / settings.bpm))}`
-                        : "Listening to your playing"
-                      : "Ready · place your hand, then start"}
-                  </span>
-                  <span>{shownBars} bars in view · endless music</span>
-                </div>
-                <div className="transport">
-                  <button className="primary" onClick={toggle}>
-                    {engine.running ? <Pause size={18} /> : <Play size={18} />}{" "}
-                    {engine.running
-                      ? t.pause
-                      : pending
-                        ? "Apply & play"
-                        : t.start}
-                  </button>
-                  <button
-                    title="Restart this seed"
-                    aria-label="Restart"
-                    onClick={() => void change(settings, run.seed)}
-                  >
-                    <RotateCcw size={18} />
-                  </button>
-                  <button
-                    title="Skip current target"
-                    aria-label="Skip"
-                    onClick={() => {
-                      if (engine.running && now >= engine.origin) {
-                        engine.skip(now);
-                        setFeedback("Target skipped. Continue reading.");
-                        render((x) => x + 1);
-                      }
-                    }}
-                    disabled={!engine.running || now < engine.origin}
-                  >
-                    <SkipForward size={18} />
-                    <span>Skip</span>
-                  </button>
-                  {settings.mode !== "benchmark" && (
+                  <PracticeHints
+                    initialHands={guidanceHands}
+                    atStart={startBar === 0}
+                    firstNotes={run.initialHands.map((h) =>
+                      engine.notes.find((n) => n.hand === h.hand)!,
+                    )}
+                    positions={planPositions}
+                    movements={reveal ? manualMovements : upcomingMovements}
+                    settings={notationSettings}
+                    revealed={settings.mode !== "benchmark" && reveal}
+                  />
+                  <div className="measure-labels">
+                    <span>
+                      {tr("Bar")} {(target?.bar ?? 0) + 1}
+                    </span>
+                    <span>
+                      {tr(
+                        settings.mode === "timed"
+                          ? "Keep the pulse"
+                          : "Take your time. Read ahead.",
+                      )}
+                    </span>
+                  </div>
+                  <Notation
+                    events={events}
+                    hands={hands}
+                    positions={planPositions}
+                    settings={notationSettings}
+                    startBar={startBar}
+                    currentId={target?.id}
+                    reveal={settings.mode !== "benchmark" && reveal}
+                    movements={allMovements}
+                    hintEvents={hintEvents}
+                    hintMemory={run.phrases[0].initial.hints}
+                  />
+                  <div className="score-foot">
+                    <span>
+                      <span
+                        className={`pulse-dot ${engine.running ? "live" : ""}`}
+                      />
+                      {tr(
+                        engine.running
+                          ? now < engine.origin
+                            ? `Count in: ${Math.ceil((engine.origin - now) / (60000 / settings.bpm))}`
+                            : "Listening to your playing"
+                          : "Ready · place your hand, then start",
+                      )}
+                    </span>
+                    <span>
+                      {shownBars} {tr("bars in view · endless music")}
+                    </span>
+                  </div>
+                  <div className="transport">
+                    <button className="primary" onClick={toggle}>
+                      {engine.running ? (
+                        <Pause size={18} />
+                      ) : (
+                        <Play size={18} />
+                      )}{" "}
+                      {tr(
+                        engine.running
+                          ? t.pause
+                          : pending
+                            ? "Apply & play"
+                            : t.start,
+                      )}
+                    </button>
                     <button
-                      aria-label={reveal ? "Hide hint" : "Reveal hint"}
+                      title={tr("Restart this seed")}
+                      aria-label={tr("Restart")}
+                      onClick={() => void change(settings, run.seed)}
+                    >
+                      <RotateCcw size={18} />
+                    </button>
+                    <button
+                      title={tr("Skip current target")}
+                      aria-label={tr("Skip")}
                       onClick={() => {
-                        if (!reveal) {
-                          run.assistanceUsed = true;
-                          void persist(run);
+                        if (engine.running && now >= engine.origin) {
+                          engine.skip(now);
+                          setFeedback("Target skipped. Continue reading.");
+                          render((x) => x + 1);
                         }
-                        setReveal((x) => !x);
+                      }}
+                      disabled={!engine.running || now < engine.origin}
+                    >
+                      <SkipForward size={18} />
+                      <span>{tr("Skip")}</span>
+                    </button>
+                    {settings.mode !== "benchmark" && (
+                      <button
+                        aria-label={tr(reveal ? "Hide hint" : "Reveal hint")}
+                        onClick={() => {
+                          if (!reveal) {
+                            run.assistanceUsed = true;
+                            void persist(run);
+                          }
+                          setReveal((x) => !x);
+                        }}
+                      >
+                        <Lightbulb size={18} />
+                        <span>{tr(reveal ? "Hide hint" : "Reveal hint")}</span>
+                      </button>
+                    )}
+                    <button
+                      className="next"
+                      onClick={() =>
+                        void change(
+                          pending ? draft : settings,
+                          createLocalId("exercise"),
+                        )
+                      }
+                    >
+                      {tr(t.next)}
+                      <ArrowRight size={16} />
+                    </button>
+                    <button
+                      className="finish"
+                      title={tr("Save & finish")}
+                      onClick={() => {
+                        engine.pause(performance.now());
+                        void persist(run);
+                        setTab("progress");
                       }}
                     >
-                      <Lightbulb size={18} />
-                      <span>{reveal ? "Hide hint" : "Reveal hint"}</span>
+                      {tr(t.save)}
+                      <Check size={16} />
                     </button>
-                  )}
-                  <button
-                    className="next"
-                    onClick={() =>
-                      void change(
-                        pending ? draft : settings,
-                        createLocalId("exercise"),
-                      )
-                    }
-                  >
-                    {t.next}
-                    <ArrowRight size={16} />
-                  </button>
-                  <button
-                    className="finish"
-                    title="Save & finish"
-                    onClick={() => {
-                      engine.pause(performance.now());
-                      void persist(run);
-                      setTab("progress");
-                    }}
-                  >
-                    {t.save}
-                    <Check size={16} />
-                  </button>
+                  </div>
                 </div>
-              </div>
-              <div
-                className="feedback"
-                role="status"
-                data-testid="target"
-                data-pitches={engine.required.map((n) => n.midi).join(",")}
-                data-bar={target?.bar ?? 0}
-              >
-                <Activity size={17} />
-                <span>{feedback}</span>
-              </div>
-              <div className="stats">
-                {settings.chords !== "off" && (
+                <div
+                  className="feedback"
+                  role="status"
+                  data-testid="target"
+                  data-pitches={engine.required.map((n) => n.midi).join(",")}
+                  data-bar={target?.bar ?? 0}
+                >
+                  <Activity size={17} />
+                  <span>{tr(feedback)}</span>
+                </div>
+                <div className="stats">
+                  {settings.chords !== "off" && (
+                    <Stat
+                      label={tr("Chord-event accuracy")}
+                      value={
+                        m.chordEvents ? `${Math.round(m.chordAccuracy)}%` : "—"
+                      }
+                      detail={tr(
+                        `${m.chordCorrect} / ${m.chordEvents} first-attempt simultaneous chords`,
+                      )}
+                    />
+                  )}
                   <Stat
-                    label="Chord-event accuracy"
+                    label={tr("Correct notes")}
+                    value={String(m.correct)}
+                    detail={tr("Matched pitches")}
+                  />
+                  <Stat
+                    label={tr("First-attempt accuracy")}
                     value={
-                      m.chordEvents ? `${Math.round(m.chordAccuracy)}%` : "—"
+                      engine.results.length ? `${Math.round(m.accuracy)}%` : "—"
                     }
-                    detail={`${m.chordCorrect} / ${m.chordEvents} first-attempt simultaneous chords`}
+                    detail={tr(
+                      `${m.wrong} wrong · ${m.missed} missed · ${m.skipped} skipped`,
+                    )}
                   />
-                )}
-                <Stat
-                  label="Correct notes"
-                  value={String(m.correct)}
-                  detail="Matched pitches"
-                />
-                <Stat
-                  label="First-attempt accuracy"
-                  value={
-                    engine.results.length ? `${Math.round(m.accuracy)}%` : "—"
-                  }
-                  detail={`${m.wrong} wrong · ${m.missed} missed · ${m.skipped} skipped`}
-                />
-                <Stat
-                  label={
-                    settings.mode === "timed"
-                      ? "Correct notes / min"
-                      : "Wait-mode notes / min"
-                  }
-                  value={engine.results.length ? m.npm.toFixed(1) : "—"}
-                  detail="Active practice time only"
-                />
-                {settings.mode === "timed" && (
                   <Stat
-                    label="Timing within window"
-                    value={m.correct ? `${Math.round(m.timing)}%` : "—"}
-                    detail={`±${settings.tolerance} ms · separate from pitch`}
+                    label={tr(
+                      settings.mode === "timed"
+                        ? "Correct notes / min"
+                        : "Wait-mode notes / min",
+                    )}
+                    value={engine.results.length ? m.npm.toFixed(1) : "—"}
+                    detail={tr("Active practice time only")}
                   />
-                )}
-              </div>
-              <details className="piano-card">
-                <summary>
-                  <span>
-                    <Keyboard size={18} />
-                    Virtual piano
-                  </span>
-                  <span className="tag">SIMULATOR · OPEN KEYBOARD</span>
-                </summary>
+                  {settings.mode === "timed" && (
+                    <Stat
+                      label={tr("Timing within window")}
+                      value={m.correct ? `${Math.round(m.timing)}%` : "—"}
+                      detail={tr(
+                        `±${settings.tolerance} ms · separate from pitch`,
+                      )}
+                    />
+                  )}
+                </div>
+                <details className="piano-card">
+                  <summary>
+                    <span>
+                      <Keyboard size={18} />
+                      {tr("Virtual piano")}
+                    </span>
+                    <span className="tag">
+                      {tr("SIMULATOR · OPEN KEYBOARD")}
+                    </span>
+                  </summary>
+                  <label className="check">
+                    <input
+                      type="checkbox"
+                      checked={sim}
+                      onChange={(e) => {
+                        engine.pause(performance.now());
+                        void persist(run);
+                        setSim(e.target.checked);
+                      }}
+                    />
+                    {tr("Enable")}
+                  </label>
+                  <p>
+                    {tr(
+                      "Try without a piano. Use the keys below or your computer keyboard: A W S E D F T G Y H U J…",
+                    )}
+                  </p>
+                  <div className={`piano ${!sim ? "disabled" : ""}`}>
+                    {pianoPitches.map((p) => {
+                      const black = [1, 3, 6, 8, 10].includes(p % 12);
+                      return (
+                        <button
+                          key={p}
+                          className={`${black ? "black" : "white"} ${engine.held.has(p) ? "pressed" : ""}`}
+                          disabled={!sim}
+                          aria-label={tr(`Play ${Note.fromMidi(p)}`)}
+                          data-midi={p}
+                          onPointerDown={(e) => {
+                            e.currentTarget.setPointerCapture(e.pointerId);
+                            bus.virtual(p, "on");
+                          }}
+                          onPointerUp={() => bus.virtual(p, "off")}
+                          onPointerCancel={() => bus.virtual(p, "off")}
+                          onLostPointerCapture={() => bus.virtual(p, "off")}
+                        >
+                          <span>
+                            {tr(p % 12 === 0 ? Note.fromMidi(p) : "")}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </details>
+                <p className="honesty">
+                  <Hand size={14} />{" "}
+                  {tr(
+                    "Fingering is suggested. MIDI checks pitch and timing, never which finger you use.",
+                  )}
+                </p>
+              </section>
+              <PracticeSettings
+                draft={draft}
+                seed={seed}
+                pending={pending}
+                onChange={setDraft}
+                onSeed={setSeed}
+                onHints={setHints}
+                onApply={() => void apply()}
+                assistanceUsed={run.assistanceUsed}
+              >
+                <label className="check metronome">
+                  <input
+                    type="checkbox"
+                    checked={click}
+                    onChange={(e) => {
+                      setClick(e.target.checked);
+                      if (e.target.checked) {
+                        audio.current ??= new AudioContext();
+                        void audio.current.resume();
+                      }
+                    }}
+                  />
+                  <Volume2 size={16} />
+                  {tr("Metronome click (immediate)")}
+                </label>
+                <div className="connection">
+                  <p>{tr(status)}</p>
+                  <button onClick={() => void connect()}>
+                    <Plug size={16} />
+                    {tr("Retry MIDI connection")}
+                  </button>
+                  <label>
+                    {tr("MIDI channel")}
+                    <select
+                      value={channel}
+                      onChange={(e) => setChannel(+e.target.value)}
+                    >
+                      <option value="0">{tr("All channels")}</option>
+                      {Array.from({ length: 16 }, (_, i) => (
+                        <option key={i} value={i + 1}>
+                          {i + 1}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <p>
+                    {tr("Input activity:")}{" "}
+                    {tr(
+                      diagnostic
+                        ? diagnostic.source +
+                            " · " +
+                            diagnostic.type +
+                            (diagnostic.type === "sustain"
+                              ? " · CC "
+                              : " · note ") +
+                            diagnostic.pitch +
+                            " · velocity " +
+                            diagnostic.velocity
+                        : "No input yet",
+                    )}
+                  </p>
+                </div>
+              </PracticeSettings>
+            </div>
+          </Tabs.Content>
+          <Tabs.Content value="progress" className="page">
+            <div className="eyebrow">{tr("SMALL STEPS, REAL PROGRESS")}</div>
+            <h1>{tr("Your reading, over time.")}</h1>
+            <p>
+              {tr(
+                "Recorded performances only. First-attempt pitch accuracy includes misses and skips.",
+              )}
+            </p>
+            <div className="panel">
+              <div className="section-line">
+                <h2>{tr("Comparable practice")}</h2>
                 <label className="check">
                   <input
                     type="checkbox"
-                    checked={sim}
-                    onChange={(e) => {
-                      engine.pause(performance.now());
-                      void persist(run);
-                      setSim(e.target.checked);
-                    }}
+                    checked={compareAll}
+                    onChange={(e) => setCompareAll(e.target.checked)}
                   />
-                  Enable
+                  {tr("Show all difficulties (not comparable)")}
                 </label>
-                <p>
-                  Try without a piano. Use the keys below or your computer
-                  keyboard: A W S E D F T G Y H U J…
-                </p>
-                <div className={`piano ${!sim ? "disabled" : ""}`}>
-                  {pianoPitches.map((p) => {
-                    const black = [1, 3, 6, 8, 10].includes(p % 12);
-                    return (
-                      <button
-                        key={p}
-                        className={`${black ? "black" : "white"} ${engine.held.has(p) ? "pressed" : ""}`}
-                        disabled={!sim}
-                        aria-label={`Play ${Note.fromMidi(p)}`}
-                        data-midi={p}
-                        onPointerDown={(e) => {
-                          e.currentTarget.setPointerCapture(e.pointerId);
-                          bus.virtual(p, "on");
-                        }}
-                        onPointerUp={() => bus.virtual(p, "off")}
-                        onPointerCancel={() => bus.virtual(p, "off")}
-                        onLostPointerCapture={() => bus.virtual(p, "off")}
-                      >
-                        <span>{p % 12 === 0 ? Note.fromMidi(p) : ""}</span>
-                      </button>
-                    );
-                  })}
+              </div>
+              <p>
+                {tr(
+                  compareAll
+                    ? "Mixed settings; this chart is not an improvement comparison."
+                    : "Showing only the current mode and exact settings, including assistance and tempo.",
+                )}
+              </p>
+              {chart.length ? (
+                <div className="chart">
+                  <ResponsiveContainer width="100%" height={270}>
+                    <LineChart data={chart}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="session" />
+                      <YAxis yAxisId="accuracy" domain={[0, 100]} />
+                      <YAxis yAxisId="rate" orientation="right" />
+                      <Tooltip />
+                      <Legend />
+                      <Line
+                        yAxisId="accuracy"
+                        type="monotone"
+                        dataKey="accuracy"
+                        name={tr("First-attempt accuracy %")}
+                        stroke="#43836e"
+                        strokeWidth={2}
+                      />
+                      <Line
+                        yAxisId="rate"
+                        type="monotone"
+                        dataKey="npm"
+                        name={tr("Correct notes/min")}
+                        stroke="#b78945"
+                        strokeWidth={2}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
                 </div>
-              </details>
-              <p className="honesty">
-                <Hand size={14} /> Fingering is suggested. MIDI checks pitch and
-                timing, never which finger you use.
-              </p>
-            </section>
-            <PracticeSettings
-              draft={draft}
-              seed={seed}
-              pending={pending}
-              onChange={setDraft}
-              onSeed={setSeed}
-              onHints={setHints}
-              onApply={() => void apply()}
-              assistanceUsed={run.assistanceUsed}
-            >
-              <label className="check metronome">
-                <input
-                  type="checkbox"
-                  checked={click}
-                  onChange={(e) => {
-                    setClick(e.target.checked);
-                    if (e.target.checked) {
-                      audio.current ??= new AudioContext();
-                      void audio.current.resume();
-                    }
-                  }}
-                />
-                <Volume2 size={16} />
-                Metronome click (immediate)
-              </label>
-              <div className="connection">
-                <p>{status}</p>
-                <button onClick={() => void connect()}>
-                  <Plug size={16} />
-                  Retry MIDI connection
-                </button>
-                <label>
-                  MIDI channel
-                  <select
-                    value={channel}
-                    onChange={(e) => setChannel(+e.target.value)}
+              ) : (
+                <div className="empty">
+                  <BarChart3 size={35} />
+                  <h3>{tr("Your first session starts the story.")}</h3>
+                  <p>
+                    {tr(
+                      "Play a few notes, then pause or finish to save. Different settings begin a separate series.",
+                    )}
+                  </p>
+                  <button
+                    className="primary"
+                    onClick={() => setTab("practice")}
                   >
-                    <option value="0">All channels</option>
-                    {Array.from({ length: 16 }, (_, i) => (
-                      <option key={i} value={i + 1}>
-                        {i + 1}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <p>
-                  Input activity:{" "}
-                  {diagnostic
-                    ? diagnostic.source +
-                      " · " +
-                      diagnostic.type +
-                      (diagnostic.type === "sustain" ? " · CC " : " · note ") +
-                      diagnostic.pitch +
-                      " · velocity " +
-                      diagnostic.velocity
-                    : "No input yet"}
-                </p>
+                    {tr("Go to practice")}
+                    <ArrowRight size={16} />
+                  </button>
+                </div>
+              )}
+            </div>
+            <div className="panel">
+              <div className="section-line">
+                <h2>{tr("Session history")}</h2>
+                <div className="inline-actions">
+                  <button
+                    onClick={() =>
+                      download(
+                        "sightflow-progress.json",
+                        JSON.stringify(
+                          { format: "sightflow-1", sessions },
+                          null,
+                          2,
+                        ),
+                      )
+                    }
+                  >
+                    <Download size={16} />
+                    {tr("JSON")}
+                  </button>
+                  <button
+                    onClick={() =>
+                      download(
+                        "sightflow-progress.csv",
+                        csv(sessions),
+                        "text/csv",
+                      )
+                    }
+                  >
+                    <Download size={16} />
+                    {tr("CSV")}
+                  </button>
+                </div>
               </div>
-            </PracticeSettings>
-          </div>
-        </Tabs.Content>
-        <Tabs.Content value="progress" className="page">
-          <div className="eyebrow">SMALL STEPS, REAL PROGRESS</div>
-          <h1>Your reading, over time.</h1>
-          <p>
-            Recorded performances only. First-attempt pitch accuracy includes
-            misses and skips.
-          </p>
-          <div className="panel">
-            <div className="section-line">
-              <h2>Comparable practice</h2>
-              <label className="check">
+              <div className="history">
+                {filtered.map((s) => (
+                  <SessionRow
+                    key={s.id}
+                    session={s}
+                    replay={() => {
+                      void change(settingsSchema.parse(s.settings), s.seed);
+                      setTab("practice");
+                    }}
+                    remove={() => void db.sessions.delete(s.id)}
+                  />
+                ))}
+              </div>
+              <label className="import-label">
+                {tr("Import a SightFlow JSON backup")}
                 <input
-                  type="checkbox"
-                  checked={compareAll}
-                  onChange={(e) => setCompareAll(e.target.checked)}
+                  type="file"
+                  accept="application/json,.json"
+                  onChange={async (e) => {
+                    try {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        if (file.size > 20_000_000)
+                          throw new Error("Backup is too large (20 MB limit).");
+                        const n = await importSessions(await file.text());
+                        setFeedback(`Imported ${n} sessions.`);
+                      }
+                    } catch (err) {
+                      setError(`Import rejected: ${String(err)}`);
+                    }
+                    e.target.value = "";
+                  }}
                 />
-                Show all difficulties (not comparable)
+              </label>
+              <p role="status">
+                {tr(feedback.startsWith("Imported") ? feedback : "")}
+              </p>
+            </div>
+          </Tabs.Content>
+          <Tabs.Content value="help" className="page help">
+            <div className="eyebrow">{tr("A QUIETER KIND OF PRACTICE")}</div>
+            <h1>{tr("Settings & help")}</h1>
+            <p className="page-intro">
+              {tr(
+                "Set up your piano, choose the skills to practice, and understand your results.",
+              )}
+            </p>
+            <div className="panel section-line">
+              <button onClick={() => setDark(!dark)}>
+                {dark ? <Sun size={17} /> : <Moon size={17} />}{" "}
+                {tr(dark ? "Light" : "Dark")} {tr("appearance")}
+              </button>
+              <label className="check">
+                {tr("Language")}
+                <select
+                  aria-label={tr("Help language")}
+                  value={lang}
+                  onChange={(e) =>
+                    chooseLanguage(e.target.value as "en" | "de")
+                  }
+                >
+                  <option value="en">{tr("English")}</option>
+                  <option value="de">{tr("Deutsch")}</option>
+                </select>
               </label>
             </div>
-            <p>
-              {compareAll
-                ? "Mixed settings; this chart is not an improvement comparison."
-                : "Showing only the current mode and exact settings, including assistance and tempo."}
-            </p>
-            {chart.length ? (
-              <div className="chart">
-                <ResponsiveContainer width="100%" height={270}>
-                  <LineChart data={chart}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="session" />
-                    <YAxis yAxisId="accuracy" domain={[0, 100]} />
-                    <YAxis yAxisId="rate" orientation="right" />
-                    <Tooltip />
-                    <Legend />
-                    <Line
-                      yAxisId="accuracy"
-                      type="monotone"
-                      dataKey="accuracy"
-                      name="First-attempt accuracy %"
-                      stroke="#43836e"
-                      strokeWidth={2}
-                    />
-                    <Line
-                      yAxisId="rate"
-                      type="monotone"
-                      dataKey="npm"
-                      name="Correct notes/min"
-                      stroke="#b78945"
-                      strokeWidth={2}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            ) : (
-              <div className="empty">
-                <BarChart3 size={35} />
-                <h3>Your first session starts the story.</h3>
+            <div className="help-grid">
+              <article className="panel">
+                <Plug />
+                <h2>{tr("1. Connect your piano")}</h2>
                 <p>
-                  Play a few notes, then pause or finish to save. Different
-                  settings begin a separate series.
+                  {tr(
+                    "Use Chrome on HTTPS or localhost. Connect USB MIDI (with an OTG adapter on a compatible Android tablet), click Connect MIDI, grant permission, and the first available input connects automatically. Use the input picker in the top bar to switch if your piano exposes multiple ports. Play a key to check the live input indicator, or use the virtual piano without MIDI.",
+                  )}
                 </p>
-                <button className="primary" onClick={() => setTab("practice")}>
-                  Go to practice <ArrowRight size={16} />
+                <button className="primary" onClick={() => void connect()}>
+                  {tr(t.connect)}
                 </button>
-              </div>
-            )}
-          </div>
-          <div className="panel">
-            <div className="section-line">
-              <h2>Session history</h2>
-              <div className="inline-actions">
-                <button
-                  onClick={() =>
-                    download(
-                      "sightflow-progress.json",
-                      JSON.stringify(
-                        { format: "sightflow-1", sessions },
-                        null,
-                        2,
-                      ),
-                    )
-                  }
-                >
-                  <Download size={16} />
-                  JSON
-                </button>
-                <button
-                  onClick={() =>
-                    download(
-                      "sightflow-progress.csv",
-                      csv(sessions),
-                      "text/csv",
-                    )
-                  }
-                >
-                  <Download size={16} />
-                  CSV
-                </button>
-              </div>
+                <p>{tr(status)}</p>
+              </article>
+              <article className="panel">
+                <Hand />
+                <h2>{tr("2. Find your position")}</h2>
+                <p>
+                  {tr(
+                    "The placement banner names your thumb key. With Finger spacing Off, fingers cover five consecutive scale notes. Other spacing levels allow selected gaps near the thumb and index finger. Smart numbers on the score establish the intended mapping for each hand. Hand movements Off keeps it throughout the exercise; planned moves allow a full beat of rest and show landing fingers ahead of time.",
+                  )}
+                </p>
+              </article>
+              <article className="panel">
+                <Music2 />
+                <h2>{tr("3. Read and play")}</h2>
+                <p>
+                  {tr(
+                    "Guided mode waits for the correct pitch. Release a key before repeating it. Timed mode counts in for one bar and continues through omissions. Chords and two-hand targets must be played within 120 ms.",
+                  )}
+                </p>
+              </article>
             </div>
-            <div className="history">
-              {filtered.map((s) => (
-                <SessionRow
-                  key={s.id}
-                  session={s}
-                  replay={() => {
-                    void change(settingsSchema.parse(s.settings), s.seed);
-                    setTab("practice");
-                  }}
-                  remove={() => void db.sessions.delete(s.id)}
-                />
-              ))}
-            </div>
-            <label className="import-label">
-              Import a SightFlow JSON backup
-              <input
-                type="file"
-                accept="application/json,.json"
-                onChange={async (e) => {
-                  try {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      if (file.size > 20_000_000)
-                        throw new Error("Backup is too large (20 MB limit).");
-                      const n = await importSessions(await file.text());
-                      setFeedback(`Imported ${n} sessions.`);
-                    }
-                  } catch (err) {
-                    setError(`Import rejected: ${String(err)}`);
-                  }
-                  e.target.value = "";
-                }}
-              />
-            </label>
-            <p role="status">
-              {feedback.startsWith("Imported") ? feedback : ""}
-            </p>
-          </div>
-        </Tabs.Content>
-        <Tabs.Content value="help" className="page help">
-          <div className="eyebrow">A QUIETER KIND OF PRACTICE</div>
-          <h1>Set up. Settle in. Play.</h1>
-          <div className="panel section-line">
-            <button onClick={() => setDark(!dark)}>
-              {dark ? <Sun size={17} /> : <Moon size={17} />}{" "}
-              {dark ? "Light" : "Dark"} appearance
-            </button>
-            <label className="check">
-              Language
-              <select
-                aria-label="Help language"
-                value={lang}
-                onChange={(e) => setLang(e.target.value as "en" | "de")}
-              >
-                <option value="en">English</option>
-                <option value="de">Deutsch · core navigation</option>
-              </select>
-            </label>
-          </div>
-          <div className="help-grid">
             <article className="panel">
-              <Plug />
-              <h2>1. Connect your piano</h2>
+              <h2>{tr("Choose what to practice")}</h2>
               <p>
-                Use Chrome on HTTPS or localhost. Connect USB MIDI (with an OTG
-                adapter on a compatible Android tablet), click Connect MIDI,
-                grant permission, and choose your input.
+                {tr(
+                  "Your practice has five independent controls. Change one skill at a time; every generated phrase must still fit your ranges and validated hand positions.",
+                )}
               </p>
-              <button className="primary" onClick={() => void connect()}>
-                {t.connect}
-              </button>
-              <p>{status}</p>
-            </article>
-            <article className="panel">
-              <Hand />
-              <h2>2. Find your position</h2>
+              <ul>
+                <li>
+                  {tr(
+                    "Note jumps: the largest melodic step, from small steps to an octave.",
+                  )}
+                </li>
+                <li>
+                  {tr(
+                    "Hand movements: Off retains the same position across phrases; Easy through Hard allow more frequent and larger explicit relocations, each prepared by a full beat of rest.",
+                  )}
+                </li>
+                <li>
+                  {tr(
+                    "Finger spacing: Off uses consecutive scale notes; higher levels allow selected gaps near the thumb and index finger.",
+                  )}
+                </li>
+                <li>
+                  {tr(
+                    "Accidentals: Off uses the selected key signature; higher levels add chromatic neighbors, passing notes and harmonic alterations.",
+                  )}
+                </li>
+                <li>
+                  {tr(
+                    "Chords: Off uses one note per hand; Easy adds dyads, Medium adds triads and inversions, and Hard allows selected four-note shapes. Narrow ranges and spacing can limit the available shapes.",
+                  )}
+                </li>
+              </ul>
               <p>
-                The placement banner names your thumb key. With Finger spacing
-                Off, fingers cover five consecutive scale notes. Other spacing
-                levels allow selected gaps near the thumb and index finger.
-                Smart numbers on the score establish the intended mapping for
-                each hand. Hand movements Off keeps it throughout the exercise;
-                planned moves allow a full beat of rest and show landing fingers
-                ahead of time.
+                {tr(
+                  "Choose hands and tempo alongside these controls. Expand Keyboard range for note-name and octave limits (middle C is C4). Changing difficulty or hands preserves your ranges. Advanced settings contains clefs, practice mode, key, meter, rhythm, exact movement and interval limits, bars in view, timing calibration, seed and MIDI diagnostics.",
+                )}
+              </p>
+              <h2>{tr("Apply settings and use hints")}</h2>
+              <p>
+                {tr(
+                  "Exercise changes are staged until Apply & generate, Apply & play or New exercise. All shows every planned finger; Smart shows starting fingers, spacing exceptions and movement landings; None hides automatic fingering. Hint changes apply immediately and keep the same notes and score. Reveal temporarily shows the visible passage and upcoming moves. A fresh exercise with None starts an unassisted attempt; hiding hints after using them keeps the current attempt assisted.",
+                )}
+              </p>
+              <p>
+                {tr(
+                  "Independent benchmark hides guidance and disables Reveal. MIDI checks pitches and timing; it cannot tell which fingers you used.",
+                )}
+              </p>
+              <h2>{tr("Read your progress")}</h2>
+              <p>
+                {tr(
+                  "Wait mode reports pitch results and correct notes per active minute, including thinking time. Timed mode reports timing accuracy separately. Chord-event accuracy requires every required pitch without extra notes. Progress compares matching settings, tempo, assistance and generator version by default. Mixed settings are not an improvement comparison; older generator history remains separate. Replaying a seed records a new attempt rather than restoring the previous cursor.",
+                )}
               </p>
             </article>
             <article className="panel">
-              <Music2 />
-              <h2>3. Read and play</h2>
+              <h2>{tr("Connection troubleshooting")}</h2>
               <p>
-                Guided mode waits for the correct pitch. Release a key before
-                repeating it. Timed mode counts in for one bar and continues
-                through omissions. Chords and two-hand targets must be played
-                within 120 ms.
+                {tr(
+                  "Check that your cable carries data, that the piano has USB MIDI enabled, and that your OS recognizes it. Try another port and close other MIDI software. Check Chrome’s site MIDI permission and retry. SysEx is never requested.",
+                )}
+              </p>
+              <p>
+                {tr(
+                  "Safari and iPadOS are not supported MIDI targets. Android support depends on Chrome, your tablet, power supply and cable. Simulator tests do not verify a physical piano.",
+                )}
+              </p>
+              <h2>{tr("Timing & local data")}</h2>
+              <p>
+                {tr(
+                  "Timed pitch matching accepts onsets within 450 ms; timing accuracy uses your chosen tolerance. Positive input offset subtracts device latency. Guided throughput includes thinking time and excludes pauses. Changing tabs or hiding the page pauses practice.",
+                )}
+              </p>
+              <p>
+                {tr(
+                  "Settings and sessions live in IndexedDB on this device. Clearing browser data removes them. Export JSON regularly; CSV contains summary metrics. No account, server, remote generation or tracking.",
+                )}
+              </p>
+              <h2>{tr("Current teaching scope")}</h2>
+              <p>
+                {tr(
+                  "Five-finger positions with validated chromatic neighbors in C, G, F and D major; 3/4 and 4/4; synchronized two-hand notes. Independent difficulty controls control melodic jumps, planned rested hand relocations, finger spacing, accidentals and harmonic chords. Approved dyads, triads, inversions and selected four-note shapes remain subject to the same ergonomic limits. No finger crossings, adaptive scheduler or finger verification. Benchmarks hide all hints and mark wrong first attempts; each seed replay is a new recorded attempt. Algorithmic validation checks the declared rules, not comfort for every pianist.",
+                )}
               </p>
             </article>
-          </div>
-          <article className="panel">
-            <h2>Connection troubleshooting</h2>
-            <p>
-              Check that your cable carries data, that the piano has USB MIDI
-              enabled, and that your OS recognizes it. Try another port and
-              close other MIDI software. Check Chrome’s site MIDI permission and
-              retry. SysEx is never requested.
-            </p>
-            <p>
-              Safari and iPadOS are not supported MIDI targets. Android support
-              depends on Chrome, your tablet, power supply and cable. Simulator
-              tests do not verify a physical piano.
-            </p>
-            <h2>Timing & local data</h2>
-            <p>
-              Timed pitch matching accepts onsets within 450 ms; timing accuracy
-              uses your chosen tolerance. Positive input offset subtracts device
-              latency. Guided throughput includes thinking time and excludes
-              pauses. Changing tabs or hiding the page pauses practice.
-            </p>
-            <p>
-              Settings and sessions live in IndexedDB on this device. Clearing
-              browser data removes them. Export JSON regularly; CSV contains
-              summary metrics. No account, server, remote generation or
-              tracking.
-            </p>
-            <h2>Current teaching scope</h2>
-            <p>
-              Five-finger positions with validated chromatic neighbors in C, G,
-              F and D major; 3/4 and 4/4; synchronized two-hand notes.
-              Independent difficulty controls control melodic jumps, planned
-              rested hand relocations, finger spacing, accidentals and harmonic
-              chords. Approved dyads, triads, inversions and selected four-note
-              shapes remain subject to the same ergonomic limits. No finger
-              crossings, adaptive scheduler or finger verification. Benchmarks
-              hide all hints and mark wrong first attempts; each seed replay is
-              a new recorded attempt. Algorithmic validation checks the declared
-              rules, not comfort for every pianist. German currently translates
-              core navigation and transport only.
-            </p>
-          </article>
-        </Tabs.Content>
-        <footer>
-          SIGHTFLOW <span>Thoughtful practice. One note at a time.</span>
-          <span>Local-first · Generator v{VERSION}</span>
-        </footer>
-      </main>
-    </Tabs.Root>
+          </Tabs.Content>
+          <footer>
+            {tr("SIGHTFLOW")}
+            <span>{tr("Thoughtful practice. One note at a time.")}</span>
+            <span>
+              {tr("Local-first · Generator v")}
+              {tr(VERSION)}
+            </span>
+          </footer>
+        </main>
+      </Tabs.Root>
+    </LanguageContext.Provider>
   );
 }
 function Stat({
@@ -1244,11 +1370,12 @@ function Stat({
   value: string;
   detail: string;
 }) {
+  const tr = useTranslation();
   return (
     <div className="stat">
-      <span>{label}</span>
-      <strong>{value}</strong>
-      <small>{detail}</small>
+      <span>{tr(label)}</span>
+      <strong>{tr(value)}</strong>
+      <small>{tr(detail)}</small>
     </div>
   );
 }
@@ -1261,56 +1388,78 @@ function SessionRow({
   replay: () => void;
   remove: () => void;
 }) {
+  const tr = useTranslation();
   const m = metrics(s.results, s.ms, s.settings.tolerance);
   return (
     <details className="session">
       <summary>
         <span>
-          {new Date(s.date).toLocaleString()}
+          {tr(new Date(s.date).toLocaleString())}
           <small>
-            {s.settings.hand} · {s.settings.key} major · {s.settings.mode}
+            {tr(s.settings.hand)} · {s.settings.key} {tr("major ·")}
+            {tr(s.settings.mode)}
           </small>
         </span>
-        <strong>{m.correct} notes</strong>
-        <span>{Math.round(m.accuracy)}% first attempt</span>
+        <strong>
+          {m.correct} {tr("notes")}
+        </strong>
+        <span>
+          {Math.round(m.accuracy)}
+          {tr("% first attempt")}
+        </span>
       </summary>
       <p>
-        {(s.ms / 60000).toFixed(1)} active minutes · {m.npm.toFixed(1)}{" "}
-        correct/min · {m.wrong} wrong · {m.missed} missed · {m.skipped} skipped
-        {s.settings.mode === "timed"
-          ? ` · ${Math.round(m.timing)}% on time`
-          : ""}
+        {tr((s.ms / 60000).toFixed(1))} {tr("active minutes ·")}
+        {tr(m.npm.toFixed(1))} {tr("correct/min ·")}
+        {m.wrong} {tr("wrong ·")}
+        {m.missed} {tr("missed ·")}
+        {m.skipped} {tr("skipped")}
+        {tr(
+          s.settings.mode === "timed"
+            ? ` · ${Math.round(m.timing)}% on time`
+            : "",
+        )}
       </p>
       <p>
-        Seed: {s.seed} · {s.settings.bpm} BPM · hints:{" "}
-        {s.settings.mode === "benchmark" ? "hidden" : s.settings.hints}
+        {tr("Seed:")}
+        {s.seed} · {s.settings.bpm} {tr("BPM · hints:")}{" "}
+        {tr(s.settings.mode === "benchmark" ? "hidden" : s.settings.hints)}
       </p>
       {m.chordEvents > 0 && (
         <p>
-          {m.chordCorrect} / {m.chordEvents} simultaneous first-attempt chords ·{" "}
-          {Math.round(m.chordAccuracy)}% chord-event accuracy
+          {m.chordCorrect} / {m.chordEvents}{" "}
+          {tr("simultaneous first-attempt chords ·")}{" "}
+          {Math.round(m.chordAccuracy)}
+          {tr("% chord-event accuracy")}
         </p>
       )}
       {s.generatorVersion === VERSION ? (
-        <button onClick={replay}>Replay seed</button>
+        <button onClick={replay}>{tr("Replay seed")}</button>
       ) : (
         <p>
-          Legacy generator {s.generatorVersion}: history retained; exact replay
-          requires that generator version.
+          {tr("Legacy generator")}
+          {tr(s.generatorVersion)}
+          {tr(
+            ": history retained; exact replay requires that generator version.",
+          )}
         </p>
       )}
       <p>
-        {"noteJumps" in s.settings
-          ? difficultySummary(s.settings)
-          : "Legacy difficulty"}{" "}
+        {tr(
+          "noteJumps" in s.settings
+            ? difficultySummary(s.settings)
+            : "Legacy difficulty",
+        )}{" "}
         ·{" "}
-        {s.generatorVersion === VERSION
-          ? s.assistanceUsed
-            ? "Assisted practice"
-            : "No hints used"
-          : "Legacy assistance not tracked"}
+        {tr(
+          s.generatorVersion === VERSION
+            ? s.assistanceUsed
+              ? "Assisted practice"
+              : "No hints used"
+            : "Legacy assistance not tracked",
+        )}
       </p>
-      <button onClick={remove}>Delete session</button>
+      <button onClick={remove}>{tr("Delete session")}</button>
     </details>
   );
 }

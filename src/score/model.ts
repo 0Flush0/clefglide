@@ -10,7 +10,7 @@ export const legacySettingsSchema = z.object({
   max: z.number().int().min(36).max(96).default(67),
   leftMin: z.number().int().min(24).max(72).default(48),
   leftMax: z.number().int().min(24).max(84).default(55),
-  bpm: z.number().int().min(30).max(180).default(60),
+  bpm: z.number().int().min(10).max(180).default(60),
   beats: z.union([z.literal(3), z.literal(4)]).default(4),
   rhythm: z.enum(["gentle", "quarters", "mixed"]).default("gentle"),
   interval: z.number().int().min(1).max(4).default(2),
