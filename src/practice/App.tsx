@@ -884,7 +884,15 @@ export function App() {
                   data-bar={target?.bar ?? 0}
                 >
                   <Activity size={17} />
-                  <span>{tr(feedback)}</span>
+                  <span
+                    className={
+                      feedback.startsWith("Try again")
+                        ? "feedback-error"
+                        : undefined
+                    }
+                  >
+                    {tr(feedback)}
+                  </span>
                 </div>
                 <div className="stats">
                   {settings.chords !== "off" && (
@@ -1229,6 +1237,8 @@ export function App() {
             <span>
               {tr("Local-first · Generator v")}
               {tr(VERSION)}
+              {" · "}
+              {tr("Private, non-commercial project for personal use.")}
             </span>
           </footer>
         </main>

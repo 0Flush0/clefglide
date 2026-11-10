@@ -134,6 +134,8 @@ export const german: Record<string, string> = {
     "Dem installierten Paket fehlt der Lizenztext; der Hinweis wurde aus der zugehörigen Quellversion übernommen.",
   "ClefGlide home": "ClefGlide Startseite",
   "Read ahead. Play naturally.": "Vorauslesen. Natürlich spielen.",
+  "Private, non-commercial project for personal use.":
+    "Privates, nicht kommerzielles Projekt zur persönlichen Nutzung.",
   "Main navigation": "Hauptnavigation",
   "Made for your own pace": "In deinem eigenen Tempo",
   "Private by design.": "Privatsphäre von Anfang an.",

@@ -6,8 +6,12 @@
 
 **Document version:** 1.0 · **Prepared:** 2026-11-08  
 **Primary platform:** Google Chrome desktop and Chrome on compatible Android tablets, with Web MIDI input  
-**Status:** Implementation specification for Codex  
+**Status:** Product and engineering specification  
 **Priority notation:** **P0** = essential for first usable release; **P1** = required for a complete v1; **P2** = later enhancement.
+
+---
+
+This specification includes future scope and proposed implementation details. See the [README](../README.md) for shipped features and [implementation decisions](DECISIONS.md) for the current generator and architecture.
 
 ---
 

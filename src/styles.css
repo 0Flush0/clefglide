@@ -589,6 +589,12 @@ main {
 .feedback svg {
   color: #7c9468;
 }
+.feedback-error {
+  color: #b42318;
+}
+[data-theme="dark"] .feedback-error {
+  color: #ff8a80;
+}
 .subtle {
   margin-left: auto;
   font-size: 9px;

@@ -1,6 +1,22 @@
 # ClefGlide QA
 
-## Current evidence: search metadata and crawler access
+## Repository cleanup checks (2026-11-10)
+
+Verified on Windows with Node.js 24.12.0 and npm 10.9.2. A separate working copy allowed a clean install while the existing development server stayed running.
+
+| Check | Result |
+| --- | --- |
+| `npm ci` | Passed using the local npm cache. |
+| `npm run typecheck` and `npm run lint` | Passed. |
+| `npm run test` | 96 tests passed across 16 files. |
+| `npm run test:e2e` | 24 Chromium tests passed across desktop and tablet viewports. The local run used port 5174 because port 5173 was occupied. |
+| `npm run build` | Passed. Build references resolved and the favicon, Search Console verification file, robots file, sitemap and font notices matched their source files. |
+| `npm run licenses` | Passed. Generated notices for 342 installed packages and two font families. |
+| `npm run test:licenses` | Six Chromium tests passed against the production preview on port 4173. |
+
+Playwright ran outside the Windows sandbox so its browser and server processes could start. The [practice screenshot](practice.png) comes from the English desktop branding test in a fresh browser context. The live homepage returned HTTP 200 over HTTPS. Physical MIDI, real Android hardware and the deployed container were outside this run.
+
+## Previous evidence: search metadata and crawler access
 
 Verified on 2026-11-09 with the documented local Node 24.12.0 toolchain:
 
@@ -8,7 +24,7 @@ Verified on 2026-11-09 with the documented local Node 24.12.0 toolchain:
 - `npm run test`: **PASS, 96 tests in 16 files** (89.21 seconds). `npm run test:e2e`: **PASS, all 18 desktop/tablet tests** (17.8 seconds). Playwright initially hit the sandbox's `spawn EPERM`; the approved rerun outside the sandbox passed. Browser/MIDI simulator tests do not verify physical hardware.
 - Parsed the raw generated `dist/index.html` without executing React: descriptive title, feature description, canonical `https://piano.rit.cl/`, Open Graph/Twitter metadata and `index, follow` are present. Referenced bundled assets exist. `dist/robots.txt` matches the allow-all source; `dist/sitemap.xml` parses as sitemap XML and lists only the canonical homepage. No `noindex` or crawler asset blocks were found in the application/deployment configuration.
 - Application source, local progress storage, dependencies, Dockerfile, Nginx configuration and GitHub-to-STRATO workflow are unchanged. Only static metadata/crawler files, existing metadata assertions and documentation changed.
-- Live verification remains outstanding: the web fetch could not access the site, and an approved direct HTTPS fetch failed to resolve `piano.rit.cl` from this environment. This does not establish the site's DNS status elsewhere. Production HTTP headers, upstream crawler rules and Google's indexing status could not be confirmed. No deployment or Search Console submission was performed. Follow the post-deployment and ownership/indexing steps in `README.md`.
+- The live site could not be reached during this run. Production HTTP headers, upstream crawler rules and Google's indexing status could not be confirmed. Follow the post-deployment and ownership/indexing steps in the [hosting guide](HOSTING.md#search-metadata-and-verification).
 
 ## Previous evidence: ClefGlide rebrand
 
@@ -80,11 +96,11 @@ Verified on 2026-11-08, Windows, Node 24.12.0:
 - Smart/UI refinement checks: automatic initial fingers per hand; no redundant natural-mapping numbers; a validated C4/1 → rest → E4/2 action displays 2 on the exact E4 SVG group; movement landings match their plan and preparation-rest annotations. All/Smart/None and manual reveal preserve note IDs, generated pitches, cursor and scoring. UI tests cover note-name selectors, disabled invalid boundaries, one-position explanation, Apply & play, Pause while editing, and fresh independent sessions becoming assisted only after reveal.
 - The preview was served successfully at `http://127.0.0.1:5174/` (HTTP 200; 5173 was already occupied). This verifies serving, not browser rendering. The existing port-5173 server was not stopped.
 - `npm run test:e2e`: **ENVIRONMENT BLOCKED**, not passed, including the rerun for the UI refinement. Playwright detects six desktop/tablet tests but Windows rejects worker creation with `spawn EPERM` in `WorkerHost.startRunner`. Browser installation is also blocked by `spawn EPERM`; a workspace browser path avoids the separate read-only user-profile restriction but not process spawning. Test scenarios were updated for note selectors, immediate assistance changes and the expandable virtual piano.
-- Installed Edge headless fallback also exits with `Access denied (0x5)` / `FATAL mojo platform_channel.cc`. Supplemental `scripts/browser-qa.mjs` cannot connect because the browser never opens its CDP endpoint. No browser screenshot, responsive visual QA or real-device verification is claimed.
+- Installed Edge headless fallback also exited with `Access denied (0x5)` / `FATAL mojo platform_channel.cc`. The former supplemental CDP script could not connect because the browser never opened its debug endpoint.
 
 Reproduce browser tests on an unrestricted machine: `npm ci`, `npx playwright install chromium`, `npm run test:e2e`. Tests cover desktop 1440×1000 and tablet 1024×768, SVG rendering, hidden hints/range/clef, four-bar virtual playing with continuation and persisted metrics, two-hand targets, and page overflow.
 
-The sandbox lacked Node/npm on PATH. The installed Visual Studio Node runtime was copied to ignored `.tools/node.exe`; npm was downloaded locally. Dependency installation used `--ignore-scripts` because lifecycle spawning was denied. Vite's optional Windows `net use` probe is handled by `scripts/tooling.mjs` when that probe raises EPERM. Builds and Vitest run normally through the supplied scripts without bypassing blocked child processes.
+This run used the [Windows workspace fallback](DEVELOPMENT.md#windows-workspace-fallback). Dependency installation used `--ignore-scripts` because lifecycle spawning was denied.
 
 Simulator and mocked adapter results never establish physical MIDI compatibility.
 
