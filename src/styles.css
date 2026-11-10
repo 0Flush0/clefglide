@@ -20,6 +20,16 @@
   min-width: 44px;
   flex-shrink: 0;
 }
+.github-link::before {
+  content: "";
+  width: 18px;
+  height: 18px;
+  background: url("./shared/assets/GitHub_Invertocat_Black.svg") center / contain
+    no-repeat;
+}
+[data-theme="dark"] .github-link::before {
+  background-image: url("./shared/assets/GitHub_Invertocat_White.svg");
+}
 .topbar .breadcrumb {
   margin-right: auto;
 }

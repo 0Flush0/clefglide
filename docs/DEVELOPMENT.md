@@ -16,7 +16,7 @@ The inventory covers installed production and development packages. Optional pac
 
 [Notice checks](../scripts/license-notices.mjs) require review for new compound SPDX expressions and check the hashes of the three embedded VexFlow WOFF2 files. When updating VexFlow, review each font’s version, copyright, reserved names and full OFL text against the new binaries. Package tarballs that omit license files use [version-specific sources](../scripts/license-sources.mjs). An unreviewed missing notice fails generation. The inventory flags the unverified `jazz-midi@1.7.9` copyright and identifies the later upstream notice available for `@tybys/wasm-util@0.10.3`.
 
-The app uses Lucide’s generic code icon to link to its GitHub repository. The Lucide entry preserves the release’s ISC text and Feather’s MIT notice. See [Lucide’s original icon metadata](https://github.com/lucide-icons/lucide/blob/0.511.0/icons/github.json) and [GitHub’s logo usage terms](https://brand.github.com/foundations/logo).
+The Invertocat design is a trademark of GitHub, Inc. ClefGlide uses the original black and white SVGs only for links to its GitHub repository. The artwork is subject to [GitHub’s logo usage terms](https://brand.github.com/foundations/logo) and comes from the [official logo archive](https://brand.github.com/GitHub_Logos.zip).
 
 ## Windows workspace fallback
 

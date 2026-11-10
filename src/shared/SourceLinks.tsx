@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { CodeXml, X } from "lucide-react";
+import { X } from "lucide-react";
 import { useTranslation } from "./i18n";
 import { licenseReportSchema, type LicenseEntry } from "./licenseReport";
 
@@ -13,9 +13,7 @@ export function GitHubLink() {
       rel="noopener noreferrer"
       aria-label={tr("View source code on GitHub")}
       title={tr("View source code on GitHub")}
-    >
-      <CodeXml size={18} aria-hidden="true" />
-    </a>
+    />
   );
 }
 
