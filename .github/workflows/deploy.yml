@@ -64,7 +64,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions: {}
     # Activate after configuring the environment and secrets in docs/HOSTING.md.
-    # environment: production
+    environment: production
     steps:
       - name: Deploy over SSH
         shell: bash
