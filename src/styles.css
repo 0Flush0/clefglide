@@ -1,4 +1,106 @@
 @import "tailwindcss";
+.source-links {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  letter-spacing: 0;
+}
+.github-link,
+.licenses-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  color: var(--muted);
+  border: 0;
+  background: transparent;
+  border-radius: 8px;
+}
+.github-link {
+  min-width: 44px;
+  flex-shrink: 0;
+}
+.topbar .breadcrumb {
+  margin-right: auto;
+}
+.licenses-link {
+  padding: 6px;
+  font-size: 11px;
+}
+.github-link:hover {
+  color: var(--ink);
+  background: var(--soft);
+}
+.licenses-dialog {
+  margin: auto;
+  padding: 0;
+  width: min(760px, calc(100vw - 32px));
+  max-height: calc(100dvh - 40px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 13px;
+  letter-spacing: 0;
+}
+.licenses-dialog::backdrop {
+  background: rgb(0 0 0 / 45%);
+}
+body:has(.licenses-dialog[open]) {
+  overflow: hidden;
+}
+.licenses-content {
+  padding: 20px;
+}
+.licenses-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+.licenses-heading button {
+  flex-shrink: 0;
+}
+.licenses-dialog a {
+  display: inline-block;
+  color: var(--green);
+  text-decoration: underline;
+  margin-block: 8px;
+  overflow-wrap: anywhere;
+}
+.license-search {
+  display: grid;
+  gap: 6px;
+  margin-block: 16px;
+}
+.license-entry {
+  padding-block: 12px;
+  border-top: 1px solid var(--line);
+  overflow-wrap: anywhere;
+}
+.license-entry summary {
+  cursor: pointer;
+  padding: 4px;
+}
+.license-entry summary span {
+  color: var(--muted);
+}
+.license-entry h3 {
+  margin-top: 12px;
+  font-size: 12px;
+}
+.license-entry pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.license-issue {
+  margin-block: 8px;
+}
 .practice-main .score-toolbar {
   padding: 10px 16px;
 }
@@ -754,22 +856,194 @@ details[open] summary {
 .inline-actions {
   flex-wrap: wrap;
 }
-.help-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 20px;
-}
 .help h2 {
-  margin: 20px 0 12px;
-}
-.help .panel > svg {
-  color: #7f956e;
+  margin: 0 0 12px;
 }
 .help .panel p {
   font-size: 13px;
 }
-.help .primary {
-  margin: 15px 0;
+.help .panel {
+  margin-top: 18px;
+}
+.help-preferences,
+.help-preference-controls,
+.help-simulator {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.help-preferences,
+.help-simulator {
+  justify-content: space-between;
+}
+.help-preferences h2,
+.help-simulator h2 {
+  margin-bottom: 4px;
+  font-size: 15px;
+}
+.help-preference-controls label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+.help-preference-controls select {
+  width: auto;
+}
+.connection-methods,
+.help-next-steps {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+.connection-methods {
+  margin-top: 20px;
+}
+.connection-method {
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  min-width: 0;
+  align-self: start;
+}
+.connection-method h3,
+.help-next-steps h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.connection-method h3 {
+  margin-bottom: 8px;
+}
+.connection-method svg,
+.help-next-steps svg,
+.help-simulator > svg {
+  color: var(--green);
+  flex-shrink: 0;
+}
+.help ol,
+.help ul {
+  padding-left: 22px;
+  font-size: 13px;
+  line-height: 1.7;
+}
+.help ol {
+  list-style: decimal;
+}
+.help ul {
+  list-style: disc;
+}
+.help li {
+  margin-block: 10px;
+}
+.help a {
+  color: var(--green);
+  text-decoration: underline;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+.help-inline-details {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+  margin-top: 16px;
+}
+.help summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.6;
+  padding-block: 6px;
+}
+.help details p {
+  margin-block: 12px;
+}
+.platform-guides section + section {
+  margin-top: 18px;
+}
+.platform-guides h4 {
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+.help-guide-links {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.help-connect {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px 20px;
+  padding: 20px;
+  border-radius: 10px;
+  background: var(--soft);
+  margin-top: 20px;
+}
+.help-connect > div {
+  flex: 1 1 300px;
+}
+.help-connect h3 {
+  margin-bottom: 6px;
+}
+.help-connect .primary {
+  flex-shrink: 0;
+}
+.help-input-picker {
+  flex: 1 1 220px;
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+}
+.help-connection-status,
+.help-input-check {
+  flex-basis: 100%;
+}
+.help-connect .help-connection-status {
+  color: var(--ink);
+}
+.help .help-compatibility {
+  margin-top: 16px;
+  font-size: 12px;
+}
+.help-disclosure {
+  border-top: 1px solid var(--line);
+  padding-block: 10px;
+}
+.help-disclosure:last-child {
+  padding-bottom: 0;
+}
+.help dl {
+  margin-block: 14px;
+  font-size: 13px;
+}
+.help dl > div {
+  margin-block: 12px;
+}
+.help dt {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.help dd {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.7;
+}
+.help-simulator > div {
+  flex: 1 1 240px;
+}
+@media (max-width: 800px) {
+  .connection-methods,
+  .help-next-steps {
+    grid-template-columns: 1fr;
+  }
+  .connection-method,
+  .help-connect {
+    padding: 16px;
+  }
+  .help-next-steps {
+    gap: 0;
+  }
 }
 .error {
   margin: 16px 38px 0;
@@ -918,12 +1192,6 @@ footer span:last-child {
   .subtle {
     width: 100%;
     margin-left: 24px;
-  }
-  .help-grid {
-    grid-template-columns: 1fr;
-  }
-  .help-grid .panel {
-    margin-top: 10px;
   }
 }
 @media (max-width: 700px) {

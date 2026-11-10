@@ -4,3 +4,5 @@ dist/
 test-results/
 playwright-report/
 *.tsbuildinfo
+public/licenses/dependencies.json
+public/licenses/THIRD_PARTY_NOTICES.txt

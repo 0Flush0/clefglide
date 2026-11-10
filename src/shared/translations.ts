@@ -1,5 +1,137 @@
 ﻿// English message keys remain stable across saved practice sessions.
 export const german: Record<string, string> = {
+  "GET CONNECTED, GET PLAYING": "VERBINDEN UND LOSSPIELEN",
+  "Connect your keyboard, find your starting position, and play your first notes.":
+    "Verbinde dein Keyboard, finde deine Ausgangsposition und spiele deine ersten Noten.",
+  "Make it yours": "Ganz nach deinem Geschmack",
+  "Choose your language and appearance.": "Wähle Sprache und Darstellung.",
+  "1. Connect your keyboard": "1. Keyboard verbinden",
+  "Choose a USB cable or Bluetooth MIDI. Use Chrome and open ClefGlide over HTTPS.":
+    "Wähle ein USB-Kabel oder Bluetooth MIDI. Nutze Chrome und öffne ClefGlide über HTTPS.",
+  "USB cable": "USB-Kabel",
+  "A good place to start for a stable connection.":
+    "Ein einfacher Einstieg für eine stabile Verbindung.",
+  "Turn on your keyboard. Connect its USB TO HOST / USB MIDI port to your computer with a cable that carries data.":
+    "Schalte dein Keyboard ein. Verbinde seinen Anschluss USB TO HOST / USB MIDI über ein Datenkabel mit deinem Computer.",
+  "On an Android tablet, use a compatible USB-C or OTG adapter. Some keyboards also need their own power supply or a powered USB hub.":
+    "Nutze am Android-Tablet einen passenden USB-C- oder OTG-Adapter. Manche Keyboards benötigen zusätzlich ihr Netzteil oder einen USB-Hub mit Stromversorgung.",
+  "Once connected, allow MIDI access below and choose your keyboard.":
+    "Erlaube nach dem Anschließen unten den MIDI-Zugriff und wähle dein Keyboard.",
+  "My keyboard only has round MIDI sockets":
+    "Mein Keyboard hat nur runde MIDI-Buchsen",
+  "Use a USB MIDI interface. Connect the keyboard’s MIDI OUT to the interface’s MIDI IN, then plug the interface into your computer or tablet. An audio cable cannot carry MIDI notes.":
+    "Nutze ein USB-MIDI-Interface. Verbinde MIDI OUT am Keyboard mit MIDI IN am Interface und schließe das Interface am Computer oder Tablet an. Ein Audiokabel überträgt keine MIDI-Noten.",
+  "Connect in a MIDI connector app first, then return here.":
+    "Verbinde dich zuerst in einer MIDI-Verbindungs-App und kehre dann hierher zurück.",
+  "Enable Bluetooth MIDI (BLE-MIDI) on your keyboard, or attach a compatible Bluetooth MIDI adapter. Bluetooth audio alone does not send notes.":
+    "Aktiviere Bluetooth MIDI (BLE-MIDI) am Keyboard oder schließe einen passenden Bluetooth-MIDI-Adapter an. Bluetooth-Audio allein überträgt keine Noten.",
+  "On the same computer or tablet running ClefGlide, open a compatible MIDI connector app and connect to your keyboard there. Bluetooth pairing alone may not create a MIDI input.":
+    "Öffne auf dem Computer oder Tablet, auf dem ClefGlide läuft, eine passende MIDI-Verbindungs-App und verbinde dort dein Keyboard. Die Bluetooth-Kopplung allein stellt nicht immer einen MIDI-Eingang bereit.",
+  "Keep any MIDI bridge app running. Return to ClefGlide, allow MIDI access below, and choose the keyboard or the bridge’s MIDI port.":
+    "Lass eine verwendete MIDI-Bridge-App geöffnet. Kehre zu ClefGlide zurück, erlaube unten den MIDI-Zugriff und wähle das Keyboard oder den MIDI-Port der Bridge.",
+  "Which connector do I use?": "Welche Verbindungs-App brauche ich?",
+  "For example, Bluetooth MIDI Connect by ROCKRELAY connects BLE-MIDI devices to Android’s MIDI service. Open the app, allow the Bluetooth scanning permissions it requests, and select your keyboard before returning to Chrome.":
+    "Zum Beispiel verbindet Bluetooth MIDI Connect von ROCKRELAY BLE-MIDI-Geräte mit dem MIDI-Dienst von Android. Öffne die App, erlaube die angefragten Berechtigungen für die Bluetooth-Suche und wähle dein Keyboard. Kehre danach zu Chrome zurück.",
+  "Bluetooth MIDI Connect on Google Play":
+    "Bluetooth MIDI Connect bei Google Play",
+  "Open Audio MIDI Setup, choose Window → Show MIDI Studio, open the Bluetooth configuration, and connect your keyboard. Then select it in ClefGlide in Chrome.":
+    "Öffne Audio-MIDI-Setup, wähle Fenster → MIDI-Studio einblenden, öffne die Bluetooth-Konfiguration und verbinde dein Keyboard. Wähle es anschließend in ClefGlide in Chrome.",
+  "Apple’s Bluetooth MIDI guide": "Apples Anleitung für Bluetooth MIDI",
+  "Use a BLE-MIDI connector or bridge compatible with your Windows version and keyboard. If using MIDIberry with loopMIDI, create a virtual port in loopMIDI, choose your keyboard as MIDIberry’s input and that port as its output. Select the same port in ClefGlide. Keep both apps running.":
+    "Nutze eine BLE-MIDI-Verbindungs-App oder Bridge, die zu deiner Windows-Version und deinem Keyboard passt. Wenn du MIDIberry mit loopMIDI nutzt, erstelle in loopMIDI einen virtuellen Port. Wähle in MIDIberry dein Keyboard als Eingang und diesen Port als Ausgang. Wähle denselben Port in ClefGlide und lass beide Apps geöffnet.",
+  "Allow access, then play a key": "Zugriff erlauben und eine Taste spielen",
+  "Click Connect MIDI and allow access when Chrome asks. The first input connects automatically; choose another if needed.":
+    "Klicke auf MIDI verbinden und erlaube den Zugriff, wenn Chrome fragt. Der erste Eingang wird automatisch verbunden; wähle bei Bedarf einen anderen.",
+  "Piano input": "Keyboard-Eingang",
+  "Pedal input received.": "Pedalsignal empfangen.",
+  "Last MIDI input: note {n}.": "Letztes MIDI-Signal: Note {n}.",
+  "Press a key on your piano to check that MIDI notes arrive here.":
+    "Drücke eine Taste am Keyboard, um zu prüfen, ob hier MIDI-Noten ankommen.",
+  "Android requires compatible hardware and Chrome. Safari and iPadOS MIDI are not supported by ClefGlide. Bluetooth support depends on your keyboard, operating system and connector app.":
+    "Android benötigt kompatible Hardware und Chrome. ClefGlide unterstützt MIDI in Safari und auf iPadOS nicht. Die Bluetooth-Unterstützung hängt von Keyboard, Betriebssystem und Verbindungs-App ab.",
+  "My keyboard does not appear": "Mein Keyboard wird nicht angezeigt",
+  "USB: check the data cable, keyboard power and USB MIDI setting. Try another USB port. Install the manufacturer’s MIDI driver only if your keyboard requires it.":
+    "USB: Prüfe Datenkabel, Stromversorgung und USB-MIDI-Einstellung am Keyboard. Probiere einen anderen USB-Anschluss. Installiere den MIDI-Treiber des Herstellers nur, wenn dein Keyboard ihn benötigt.",
+  "Bluetooth: check that the connector app shows your keyboard as connected and exposes a MIDI port. Keep bridge apps open, and disconnect the keyboard from other phones or tablets.":
+    "Bluetooth: Prüfe, ob die Verbindungs-App dein Keyboard als verbunden anzeigt und einen MIDI-Port bereitstellt. Lass Bridge-Apps geöffnet und trenne das Keyboard von anderen Handys oder Tablets.",
+  "Close other apps that may be using the MIDI port, then click Connect MIDI again. If Chrome still has an old device list, reload the page after connecting.":
+    "Schließe andere Apps, die den MIDI-Port belegen könnten, und klicke erneut auf MIDI verbinden. Wenn Chrome noch die alte Geräteliste zeigt, lade die Seite nach dem Verbinden neu.",
+  "Chrome blocked MIDI access": "Chrome hat den MIDI-Zugriff blockiert",
+  "Open Chrome’s site controls beside the address bar, allow MIDI devices in the site permissions, and try Connect MIDI again. Use the HTTPS address; an ordinary HTTP address on your local network cannot request MIDI access.":
+    "Öffne die Website-Einstellungen neben der Chrome-Adressleiste, erlaube dort MIDI-Geräte und versuche erneut MIDI verbinden. Nutze die HTTPS-Adresse; eine normale HTTP-Adresse im lokalen Netzwerk kann keinen MIDI-Zugriff anfordern.",
+  "Connected, but no notes arrive": "Verbunden, aber es kommen keine Noten an",
+  "Try another piano input; some keyboards expose several ports. In Practice → Advanced settings, leave MIDI channel on All channels unless you need a specific channel. For Bluetooth bridges, check that the keyboard input is routed to the same port selected in ClefGlide.":
+    "Probiere einen anderen Eingang; manche Keyboards stellen mehrere Ports bereit. Lass unter Üben → Erweiterte Einstellungen den MIDI-Kanal auf Alle Kanäle, sofern du keinen bestimmten brauchst. Prüfe bei Bluetooth-Bridges, ob das Keyboard an den in ClefGlide gewählten Port weitergeleitet wird.",
+  "In Practice, the Before you play banner shows where to put your thumb and which finger starts. Begin with one hand and leave Hand movements and Finger spacing Off for a fixed five-note position.":
+    "Unter Üben zeigt Vor dem Spielen, wo dein Daumen liegt und welcher Finger beginnt. Starte mit einer Hand und lass Handbewegungen und Fingerabstände auf Aus für eine feste Fünftonposition.",
+  "Start with Wait for correct notes: the score waits while you find each pitch. Release a key before playing it again. Try Timed playing when you are ready to follow a steady beat.":
+    "Beginne mit Auf richtige Noten warten: Die Notenanzeige wartet, bis du die richtige Taste findest. Lass eine Taste vor dem erneuten Anschlagen los. Probiere Im Takt spielen, wenn du einem gleichmäßigen Puls folgen möchtest.",
+  "Practice at your own pace": "In deinem Tempo üben",
+  All: "Alle",
+  Smart: "Smart",
+  None: "Keine",
+  "Choose your hands and tempo in Practice. Change one difficulty control at a time; your keyboard ranges stay the same.":
+    "Wähle unter Üben Hände und Tempo. Ändere jeweils eine Schwierigkeitseinstellung; deine Tonumfänge bleiben erhalten.",
+  "How far the next note can move, from small steps to an octave.":
+    "Wie weit die nächste Note springen darf: von kleinen Schritten bis zur Oktave.",
+  "Off keeps one hand position across phrases. Higher levels allow planned moves, each prepared by a full beat of rest.":
+    "Aus behält die Handposition über Phrasen hinweg bei. Höhere Stufen erlauben geplante Wechsel, jeweils nach einer vollen Zählzeit Pause.",
+  "Off uses five consecutive scale notes. Higher levels allow selected gaps near the thumb and index finger.":
+    "Aus nutzt fünf aufeinanderfolgende Tonleitertöne. Höhere Stufen erlauben ausgewählte Lücken bei Daumen und Zeigefinger.",
+  "Off follows your chosen key signature. Higher levels add notes outside the key.":
+    "Aus folgt den Vorzeichen deiner Tonart. Höhere Stufen ergänzen tonartfremde Töne.",
+  "Off plays one note per hand. Easy adds two-note shapes, Medium adds triads and inversions, and Hard allows selected four-note shapes. Your ranges can limit the available shapes.":
+    "Aus spielt eine Note pro Hand. Leicht ergänzt Zweiklänge, Mittel Dreiklänge und Umkehrungen, Schwer ausgewählte Vierklänge. Deine Tonumfänge können die verfügbaren Formen begrenzen.",
+  "Expand Keyboard range to set note names and octaves; middle C is C4. Clefs, key, meter, rhythm, timing calibration and MIDI diagnostics are in Advanced settings.":
+    "Öffne Tonumfang, um Notennamen und Oktaven festzulegen; das mittlere C heißt C4. Notenschlüssel, Tonart, Taktart, Rhythmus, Timing-Kalibrierung und MIDI-Diagnose findest du in Erweiterte Einstellungen.",
+  "Use Apply & generate, Apply & play or New exercise to apply exercise changes. Hint changes take effect immediately, keeping the same notes and score.":
+    "Übernimm Übungsänderungen mit Übernehmen & erzeugen, Übernehmen & spielen oder Neue Übung. Änderungen der Hinweise gelten sofort; Noten und Bewertung bleiben erhalten.",
+  "Shows every planned finger.": "Zeigt jeden geplanten Finger.",
+  "Shows starting fingers, spacing exceptions and movement landings.":
+    "Zeigt Startfinger, Ausnahmen bei Fingerabständen und Zielfinger bei Wechseln.",
+  "Hides automatic finger numbers. Generate a fresh exercise with None for an unassisted attempt.":
+    "Blendet automatische Fingerzahlen aus. Erzeuge eine neue Übung mit Keine für einen Versuch ohne Hilfe.",
+  "Reveal hint temporarily shows guidance. Hiding hints later does not undo assistance already used. Independent benchmark hides hints and disables Reveal. MIDI checks pitch and timing, never which finger you use.":
+    "Hinweis zeigen blendet vorübergehend Hilfen ein. Späteres Ausblenden macht bereits genutzte Hilfe nicht rückgängig. Vergleichstest ohne Hilfe blendet Hinweise aus und sperrt deren Anzeige. MIDI prüft Tonhöhe und Timing, erkennt aber deine Finger nicht.",
+  "Wait mode shows pitch results and correct notes per active minute, including thinking time. Timed mode reports timing accuracy separately. Progress compares matching settings, tempo, assistance and generator version by default; mixed settings are not an improvement comparison.":
+    "Der Wartemodus zeigt Tonhöhenergebnisse und richtige Noten pro aktiver Minute einschließlich Denkzeit. Im Takt spielen weist Timing-Genauigkeit getrennt aus. Fortschritt vergleicht standardmäßig gleiche Einstellungen, Tempo, Hilfen und Generatorversion; gemischte Einstellungen zeigen keinen vergleichbaren Lernfortschritt.",
+  "Chord-event accuracy requires all required pitches without extra notes. Replaying an exercise records a new attempt. Older generator history stays separate.":
+    "Akkordgenauigkeit erfordert alle geforderten Töne ohne zusätzliche Noten. Eine wiederholte Übung wird als neuer Versuch gespeichert. Ältere Generatorergebnisse bleiben getrennt.",
+  "Timed playing counts in for one bar and continues through missed notes. Chord and two-hand attacks must arrive within 120 ms. Pitch matching accepts onsets within 450 ms; timing accuracy uses your chosen tolerance. A positive input offset subtracts device latency.":
+    "Im Takt spielen zählt einen Takt ein und läuft bei verpassten Noten weiter. Akkorde und beidhändige Anschläge müssen innerhalb von 120 ms eintreffen. Die Tonhöhenerkennung akzeptiert Anschläge innerhalb von 450 ms; die Timing-Genauigkeit nutzt deine gewählte Toleranz. Ein positiver Eingangsversatz zieht Geräteverzögerung ab.",
+  "Changing tabs or hiding the page pauses practice. Settings and sessions stay on this device. Clearing browser data removes them, so export a JSON backup from Progress regularly. CSV exports contain summary metrics.":
+    "Ein Tabwechsel oder das Ausblenden der Seite pausiert die Übung. Einstellungen und Übungen bleiben auf diesem Gerät. Beim Löschen der Browserdaten gehen sie verloren. Exportiere deshalb regelmäßig eine JSON-Sicherung unter Fortschritt. CSV-Exporte enthalten zusammengefasste Kennzahlen.",
+  "Practice supports C, G, F and D major, 3/4 and 4/4, fixed hand positions, planned rested moves, selected finger spacing, chromatic neighbors and synchronized two-hand chords. Ranges and hand-position rules still apply to every phrase.":
+    "Unterstützt werden C-, G-, F- und D-Dur, 3/4 und 4/4, feste Handpositionen, geplante Wechsel nach Pausen, ausgewählte Fingerabstände, chromatische Nachbartöne und gleichzeitige beidhändige Akkorde. Tonumfänge und Handpositionsregeln gelten für jede Phrase.",
+  "Finger crossings, an adaptive scheduler and finger verification are not available. The fingering plan follows the declared rules; it cannot guarantee comfort for every pianist.":
+    "Fingerkreuzungen, adaptive Übungsplanung und Fingererkennung sind nicht verfügbar. Der Fingersatzplan folgt den festgelegten Regeln; er garantiert keine bequeme Haltung für alle Hände.",
+  "No keyboard connected?": "Kein Keyboard verbunden?",
+  "You can still try ClefGlide. Open the Virtual piano in Practice and use its keys or your computer keyboard.":
+    "Du kannst ClefGlide trotzdem ausprobieren. Öffne unter Üben das Virtuelle Klavier und nutze dessen Tasten oder deine Computertastatur.",
+  "Try the virtual piano": "Virtuelles Klavier ausprobieren",
+  "View source code on GitHub": "Quellcode auf GitHub ansehen",
+  "Open-source licenses": "Open-Source-Lizenzen",
+  "Close licenses": "Lizenzen schließen",
+  "Third-party libraries, build tools and fonts used by ClefGlide. Original notices are shown in their published language.":
+    "Von ClefGlide verwendete Bibliotheken, Build-Werkzeuge und Schriftarten. Originalhinweise werden in ihrer veröffentlichten Sprache angezeigt.",
+  "Read all notices as plain text": "Alle Lizenzhinweise als Text lesen",
+  "Loading licenses…": "Lizenzen werden geladen…",
+  "Could not load the license report.":
+    "Der Lizenzbericht konnte nicht geladen werden.",
+  "Try again": "Erneut versuchen",
+  "Search libraries or licenses": "Bibliotheken oder Lizenzen suchen",
+  "No matching libraries.": "Keine passenden Bibliotheken.",
+  "Version not specified": "Version nicht angegeben",
+  Repository: "Repository",
+  "License metadata is missing; the reported license was detected from package files.":
+    "Lizenzmetadaten fehlen; die angezeigte Lizenz wurde aus Paketdateien ermittelt.",
+  "License metadata needs review.": "Lizenzmetadaten müssen geprüft werden.",
+  "No license text was found in the installed package.":
+    "Im installierten Paket wurde kein Lizenztext gefunden.",
+  "The bundled font notice does not specify a version.":
+    "Der mitgelieferte Schrifthinweis nennt keine Version.",
+  "The installed package omits its license text; the notice is preserved from its exact upstream source revision.":
+    "Dem installierten Paket fehlt der Lizenztext; der Hinweis wurde aus der zugehörigen Quellversion übernommen.",
   "ClefGlide home": "ClefGlide Startseite",
   "Read ahead. Play naturally.": "Vorauslesen. Natürlich spielen.",
   "Main navigation": "Hauptnavigation",

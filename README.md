@@ -31,6 +31,10 @@ Assistance is **All / Smart / None**. Smart is the default: numbers beside the s
 
 Chrome on HTTPS or localhost is required. Connect a USB MIDI piano, click **Connect MIDI**, grant permission and select the device. SysEx is disabled. Select all channels unless you need filtering. Input diagnostics show actual pitch, velocity and source. A disconnect pauses practice; reconnect and resume manually.
 
+**Settings & help** has separate USB and Bluetooth MIDI walkthroughs, an input picker and feedback from received hardware MIDI events. For USB, use a data cable and the keyboard's USB TO HOST / USB MIDI port; Android may need a USB-C/OTG adapter and external power. A keyboard with only DIN MIDI sockets needs a USB MIDI interface (keyboard MIDI OUT to interface MIDI IN).
+
+For Bluetooth, enable BLE-MIDI on the keyboard or its adapter and connect it in a compatible app on the same computer/tablet before clicking **Connect MIDI** in ClefGlide. Bluetooth audio and ordinary pairing alone do not necessarily expose MIDI notes to Chrome. The guide links to [Bluetooth MIDI Connect for Android](https://play.google.com/store/apps/details?id=bluetooth.midi.connect), Apple's Audio MIDI Setup instructions for macOS, and MIDIberry/loopMIDI for compatible Windows setups. Keep any routing/bridge apps running and select their exposed MIDI input in ClefGlide. Compatibility depends on the device, operating system and connector; these instructions do not establish hardware verification.
+
 If there are no inputs, check the data cable, OS device detection, piano USB MIDI mode, Chrome permissions, other MIDI applications, and USB power. Android additionally requires compatible hardware/Chrome and OTG. Safari/iPadOS MIDI is not supported. No automated test establishes physical device compatibility.
 
 ## Checks
@@ -68,7 +72,13 @@ The production URL remains `https://piano.rit.cl`. The rebrand preserves the exi
 
 `npm run build` produces `dist/`. Serve it from any static HTTPS host (Cloudflare Pages, Netlify, etc.). No secrets, API keys or runtime server needed. Use a top-level page; embedded hosts must allow MIDI in their permissions policy. No runtime network calls are used to generate music.
 
-Third-party libraries keep their licenses in `node_modules`; VexFlow/Tonal/React/Dexie are MIT, WEBMIDI.js is Apache-2.0. No PianoPlayer source is imported. Lockfile pins the dependency graph.
+The footer links to the GitHub repository and opens a searchable, keyboard-accessible **Open-source licenses** dialog. Full copyright, license and NOTICE texts are bundled as static files, with a plain-text download. No server API or external request is needed to read them. No PianoPlayer source is imported.
+
+`npm run licenses` uses `license-checker-rseidelsohn` to scan actual installed packages and checks their versions against `package-lock.json`. Both `npm run dev` and `npm run build` regenerate `public/licenses/dependencies.json` and `THIRD_PARTY_NOTICES.txt`; these generated files are ignored by Git and copied into `dist/licenses/`. Production and development/build dependencies are included conservatively, with only public package names, versions, license identifiers, repository URLs and notices published. Private packages, machine paths, registry credentials and publisher metadata are excluded. Optional packages absent on the build platform are omitted. Vite's existing bundled-code `THIRD_PARTY_LICENSES.md` is retained as an additional report.
+
+Missing license text or unknown/unlicensed metadata fails generation; missing or inferred metadata is reported explicitly. Preserve any additional license and NOTICE files supplied by packages. The one current exception is `@napi-rs/wasm-runtime@1.2.2`, whose npm package omits LICENSE. Its version-specific notice in `scripts/license-overrides/` comes from [the exact upstream revision recorded by npm](https://github.com/napi-rs/napi-rs/blob/5b344c367eeed81d1917f7c4d8e65b1adc16de12/LICENSE). A version update requires a fresh review if the license remains absent. Academico and Bravura retain their complete SIL OFL 1.1 notices; their bundled notice files do not specify font versions, which the viewer states explicitly. No license text is fetched during builds.
+
+The checker is pinned to 4.4.2 for compatibility with the workspace's Node/npm fallback. Its newer successor requires newer tooling. A scoped `read-package-json`/`glob` override keeps the build-only scan dependency patched. `npm run test:licenses` builds and tests the production site on desktop and tablet, including English/German notices, link behavior, search, themes, dismissal and load retry.
 
 ## Search visibility and Google Search Console
 

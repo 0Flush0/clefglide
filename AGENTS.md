@@ -13,3 +13,18 @@ Generator v2 movement rules are in docs/DECISIONS.md. Very Easy never shifts, in
 Smart hints live in `src/score/hints.ts`: derive from validated position maps and explicit movements, never interval heuristics. All/Smart/None are UI modes; legacy reveal is retained only for history compatibility and migrated to Smart for active practice. Hint changes must not regenerate notes or reset scoring. A rested alternate finger requires an explicit, independently validated plan tag; do not weaken fixed-position mapping for unexplained finger mismatches. The generator still emits natural mappings only. Keep note-name range controls and technical settings collapsed by default.
 
 Toolchain fallback for this Windows workspace: `.tools/node.exe .tools/package/bin/npm-cli.js <command>` with `.tools` on PATH. `.tools` is ignored. Prefer a normal Node 24 installation for clean setups.
+
+## Commit conventions
+
+These rules apply to all future Codex tasks in this repository.
+
+- Follow Conventional Commits: `type(scope): short description`.
+- Use appropriate types: `feat`, `fix`, `refactor`, `test`, `docs`, `style`, `perf`, `ci`, `build`, or `chore`.
+- Use meaningful scopes when relevant.
+- Write concise, imperative subjects, preferably under 72 characters.
+- Base commit messages on actual changes, not just the original prompt.
+- At the end of every Codex task that modifies repository files, include a section titled **Suggested commit message** in the final response.
+- Provide exactly one recommended commit message in a copyable code block.
+- If the changes are substantial, optionally include a short commit body explaining why the change was made.
+- If no files were modified, do not suggest a commit.
+- Do not automatically create commits or push changes unless explicitly requested.

@@ -3,6 +3,7 @@
 import childProcess from "node:child_process";
 import process from "node:process";
 import { syncBuiltinESMExports } from "node:module";
+import { generateLicenses } from "./licenses.mjs";
 const original = childProcess.exec;
 childProcess.exec = function (command, ...args) {
   try {
@@ -17,15 +18,24 @@ childProcess.exec = function (command, ...args) {
 syncBuiltinESMExports();
 const task = process.argv[2];
 if (task === "build") {
+  await generateLicenses();
   const { build } = await import("vite");
   await build({ configLoader: "native" });
 } else if (task === "dev") {
+  await generateLicenses();
   const { createServer } = await import("vite");
   const server = await createServer({
     configLoader: "native",
     server: { host: "127.0.0.1" },
   });
   await server.listen();
+  server.printUrls();
+} else if (task === "preview") {
+  const { preview } = await import("vite");
+  const server = await preview({
+    configLoader: "native",
+    preview: { host: "127.0.0.1", port: 4173, strictPort: true },
+  });
   server.printUrls();
 } else if (task === "test") {
   const { startVitest } = await import("vitest/node");

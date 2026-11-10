@@ -42,6 +42,7 @@ import {
 import { Note } from "tonal";
 import { difficultySummary } from "./presets";
 import { PracticeSettings } from "./PracticeSettings";
+import { SettingsHelp } from "./SettingsHelp";
 import { visibleMovements, nextMovements } from "../score/hints";
 import { PracticeHints } from "./PracticeHints";
 import {
@@ -63,6 +64,7 @@ import {
   type MidiEvent,
 } from "../midi/adapter";
 import { createLocalId } from "../shared/ids";
+import { GitHubLink, SourceLinks } from "../shared/SourceLinks";
 import { Notation } from "../score/Notation";
 import {
   db,
@@ -688,6 +690,7 @@ export function App() {
               )}
               <Plug size={15} />
             </button>
+            <GitHubLink />
           </header>
           {tr(
             error && (
@@ -1201,156 +1204,28 @@ export function App() {
             </div>
           </Tabs.Content>
           <Tabs.Content value="help" className="page help">
-            <div className="eyebrow">{tr("A QUIETER KIND OF PRACTICE")}</div>
-            <h1>{tr("Settings & help")}</h1>
-            <p className="page-intro">
-              {tr(
-                "Set up your piano, choose the skills to practice, and understand your results.",
-              )}
-            </p>
-            <div className="panel section-line">
-              <button onClick={() => setDark(!dark)}>
-                {dark ? <Sun size={17} /> : <Moon size={17} />}{" "}
-                {tr(dark ? "Light" : "Dark")} {tr("appearance")}
-              </button>
-              <label className="check">
-                {tr("Language")}
-                <select
-                  aria-label={tr("Help language")}
-                  value={lang}
-                  onChange={(e) =>
-                    chooseLanguage(e.target.value as "en" | "de")
-                  }
-                >
-                  <option value="en">{tr("English")}</option>
-                  <option value="de">{tr("Deutsch")}</option>
-                </select>
-              </label>
-            </div>
-            <div className="help-grid">
-              <article className="panel">
-                <Plug />
-                <h2>{tr("1. Connect your piano")}</h2>
-                <p>
-                  {tr(
-                    "Use Chrome on HTTPS or localhost. Connect USB MIDI (with an OTG adapter on a compatible Android tablet), click Connect MIDI, grant permission, and the first available input connects automatically. Use the input picker in the top bar to switch if your piano exposes multiple ports. Play a key to check the live input indicator, or use the virtual piano without MIDI.",
-                  )}
-                </p>
-                <button className="primary" onClick={() => void connect()}>
-                  {tr(t.connect)}
-                </button>
-                <p>{tr(status)}</p>
-              </article>
-              <article className="panel">
-                <Hand />
-                <h2>{tr("2. Find your position")}</h2>
-                <p>
-                  {tr(
-                    "The placement banner names your thumb key. With Finger spacing Off, fingers cover five consecutive scale notes. Other spacing levels allow selected gaps near the thumb and index finger. Smart numbers on the score establish the intended mapping for each hand. Hand movements Off keeps it throughout the exercise; planned moves allow a full beat of rest and show landing fingers ahead of time.",
-                  )}
-                </p>
-              </article>
-              <article className="panel">
-                <Music2 />
-                <h2>{tr("3. Read and play")}</h2>
-                <p>
-                  {tr(
-                    "Guided mode waits for the correct pitch. Release a key before repeating it. Timed mode counts in for one bar and continues through omissions. Chords and two-hand targets must be played within 120 ms.",
-                  )}
-                </p>
-              </article>
-            </div>
-            <article className="panel">
-              <h2>{tr("Choose what to practice")}</h2>
-              <p>
-                {tr(
-                  "Your practice has five independent controls. Change one skill at a time; every generated phrase must still fit your ranges and validated hand positions.",
-                )}
-              </p>
-              <ul>
-                <li>
-                  {tr(
-                    "Note jumps: the largest melodic step, from small steps to an octave.",
-                  )}
-                </li>
-                <li>
-                  {tr(
-                    "Hand movements: Off retains the same position across phrases; Easy through Hard allow more frequent and larger explicit relocations, each prepared by a full beat of rest.",
-                  )}
-                </li>
-                <li>
-                  {tr(
-                    "Finger spacing: Off uses consecutive scale notes; higher levels allow selected gaps near the thumb and index finger.",
-                  )}
-                </li>
-                <li>
-                  {tr(
-                    "Accidentals: Off uses the selected key signature; higher levels add chromatic neighbors, passing notes and harmonic alterations.",
-                  )}
-                </li>
-                <li>
-                  {tr(
-                    "Chords: Off uses one note per hand; Easy adds dyads, Medium adds triads and inversions, and Hard allows selected four-note shapes. Narrow ranges and spacing can limit the available shapes.",
-                  )}
-                </li>
-              </ul>
-              <p>
-                {tr(
-                  "Choose hands and tempo alongside these controls. Expand Keyboard range for note-name and octave limits (middle C is C4). Changing difficulty or hands preserves your ranges. Advanced settings contains clefs, practice mode, key, meter, rhythm, exact movement and interval limits, bars in view, timing calibration, seed and MIDI diagnostics.",
-                )}
-              </p>
-              <h2>{tr("Apply settings and use hints")}</h2>
-              <p>
-                {tr(
-                  "Exercise changes are staged until Apply & generate, Apply & play or New exercise. All shows every planned finger; Smart shows starting fingers, spacing exceptions and movement landings; None hides automatic fingering. Hint changes apply immediately and keep the same notes and score. Reveal temporarily shows the visible passage and upcoming moves. A fresh exercise with None starts an unassisted attempt; hiding hints after using them keeps the current attempt assisted.",
-                )}
-              </p>
-              <p>
-                {tr(
-                  "Independent benchmark hides guidance and disables Reveal. MIDI checks pitches and timing; it cannot tell which fingers you used.",
-                )}
-              </p>
-              <h2>{tr("Read your progress")}</h2>
-              <p>
-                {tr(
-                  "Wait mode reports pitch results and correct notes per active minute, including thinking time. Timed mode reports timing accuracy separately. Chord-event accuracy requires every required pitch without extra notes. Progress compares matching settings, tempo, assistance and generator version by default. Mixed settings are not an improvement comparison; older generator history remains separate. Replaying a seed records a new attempt rather than restoring the previous cursor.",
-                )}
-              </p>
-            </article>
-            <article className="panel">
-              <h2>{tr("Connection troubleshooting")}</h2>
-              <p>
-                {tr(
-                  "Check that your cable carries data, that the piano has USB MIDI enabled, and that your OS recognizes it. Try another port and close other MIDI software. Check Chrome’s site MIDI permission and retry. SysEx is never requested.",
-                )}
-              </p>
-              <p>
-                {tr(
-                  "Safari and iPadOS are not supported MIDI targets. Android support depends on Chrome, your tablet, power supply and cable. Simulator tests do not verify a physical piano.",
-                )}
-              </p>
-              <h2>{tr("Timing & local data")}</h2>
-              <p>
-                {tr(
-                  "Timed pitch matching accepts onsets within 450 ms; timing accuracy uses your chosen tolerance. Positive input offset subtracts device latency. Guided throughput includes thinking time and excludes pauses. Changing tabs or hiding the page pauses practice.",
-                )}
-              </p>
-              <p>
-                {tr(
-                  "Settings and sessions live in IndexedDB on this device. Clearing browser data removes them. Export JSON regularly; CSV contains summary metrics. No account, server, remote generation or tracking.",
-                )}
-              </p>
-              <h2>{tr("Current teaching scope")}</h2>
-              <p>
-                {tr(
-                  "Five-finger positions with validated chromatic neighbors in C, G, F and D major; 3/4 and 4/4; synchronized two-hand notes. Independent difficulty controls control melodic jumps, planned rested hand relocations, finger spacing, accidentals and harmonic chords. Approved dyads, triads, inversions and selected four-note shapes remain subject to the same ergonomic limits. No finger crossings, adaptive scheduler or finger verification. Benchmarks hide all hints and mark wrong first attempts; each seed replay is a new recorded attempt. Algorithmic validation checks the declared rules, not comfort for every pianist.",
-                )}
-              </p>
-            </article>
+            <SettingsHelp
+              dark={dark}
+              onToggleTheme={() => setDark(!dark)}
+              language={lang}
+              onLanguage={chooseLanguage}
+              onConnect={() => void connect()}
+              inputs={inputs}
+              device={device}
+              onSelectDevice={selectDevice}
+              status={status}
+              diagnostic={diagnostic}
+              onPractice={() => setTab("practice")}
+              onSimulator={() => {
+                setSim(true);
+                setTab("practice");
+              }}
+            />
           </Tabs.Content>
           <footer>
             {tr("ClefGlide")}
             <span>{tr("Read ahead. Play naturally.")}</span>
+            <SourceLinks />
             <span>
               {tr("Local-first · Generator v")}
               {tr(VERSION)}
