@@ -2,7 +2,29 @@
 
 `npm run build` writes the static site to `dist/`. Serve it over HTTPS so Chrome can offer Web MIDI when the user selects **Connect MIDI**. Use a top-level page, or allow MIDI through the embedding page’s permissions policy. The app requires no runtime backend, accounts or API keys.
 
-Production is served at [piano.rit.cl](https://piano.rit.cl/). The [GitHub Actions workflow](../.github/workflows/deploy.yml) publishes the `ghcr.io/0flush0/sightflow` image used by the existing STRATO deployment. The [Dockerfile](../Dockerfile) builds the app and copies `dist/` into Nginx, which serves the site behind Caddy. The image name and other internal deployment identifiers retain the original SightFlow name for compatibility.
+Production is served at [piano.rit.cl](https://piano.rit.cl/). The [GitHub Actions workflow](../.github/workflows/deploy.yml) publishes `ghcr.io/0flush0/sightflow` and updates the existing Docker Compose project over SSH. The [Dockerfile](../Dockerfile) builds the app and copies `dist/` into Nginx. The image name and `SIGHTFLOW_IMAGE` retain the original SightFlow name for compatibility.
+
+## Production deployment setup
+
+The preparation workflow uses the existing repository SSH secrets. With `DEPLOY_PATH` unset, it resolves `hosting/apps/sightflow` under the remote SSH user's home. Before pushing the preparation workflow to `main`, confirm that this resolves to the existing Compose directory. If the directory differs or you are unsure, add `DEPLOY_PATH` with the current absolute path under **Settings → Secrets and variables → Actions → Repository secrets → New repository secret**. A push to `main` runs checks and, on success, publishes and deploys automatically.
+
+Complete these steps before pushing the environment activation.
+
+1. Open **Settings → Environments → New environment**, enter `production`, and click **Configure environment**. GitHub Free supports this on public repositories. A private personal repository requires GitHub Pro for environment secrets and branch rules.
+2. In `production`, under **Deployment branches and tags**, select **Selected branches and tags**. Click **Add deployment branch or tag rule**, choose **Branch**, enter `main`, and click **Add rule**. Leave required reviewers unset to keep deployment automatic.
+3. In the same environment, under **Environment secrets → Add secret**, add all five values below from your deployment setup. Use the existing Compose directory for `DEPLOY_PATH`.
+
+   | Secret | Value |
+   | --- | --- |
+   | `DEPLOY_HOST` | SSH hostname or IP |
+   | `DEPLOY_USER` | SSH login username |
+   | `DEPLOY_SSH_KEY` | Private SSH key, including its header and footer |
+   | `DEPLOY_KNOWN_HOSTS` | Existing verified `known_hosts` entry for the SSH server |
+   | `DEPLOY_PATH` | Absolute path to the directory containing the server's Compose file |
+
+4. Uncomment `environment: production` under `jobs.deploy` in the workflow. The branch rule and environment secrets apply to jobs that reference `production`. The environment values take precedence over repository secrets with the same names. A repository-scoped SSH key remains usable by other eligible jobs while the server authorizes it. If the SSH credential itself must be exclusive to `production`, put a new key in the environment and retire the old key's server authorization after verifying the new key works.
+
+[GitHub's environment setup guide](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments)
 
 ## Search metadata and verification
 
