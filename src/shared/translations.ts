@@ -112,8 +112,9 @@ export const german: Record<string, string> = {
   "View source code on GitHub": "Quellcode auf GitHub ansehen",
   "Open-source licenses": "Open-Source-Lizenzen",
   "Close licenses": "Lizenzen schließen",
-  "Third-party libraries, build tools and fonts used by ClefGlide. Original notices are shown in their published language.":
-    "Von ClefGlide verwendete Bibliotheken, Build-Werkzeuge und Schriftarten. Originalhinweise werden in ihrer veröffentlichten Sprache angezeigt.",
+  "Third-party libraries, build tools and fonts have their own licenses. Original notices appear in their published language.":
+    "Bibliotheken, Build-Werkzeuge und Schriftarten von Drittanbietern haben eigene Lizenzen. Die Originalhinweise werden in ihrer veröffentlichten Sprache angezeigt.",
+  "Read ClefGlide’s MIT License": "MIT-Lizenz von ClefGlide lesen",
   "Read all notices as plain text": "Alle Lizenzhinweise als Text lesen",
   "Loading licenses…": "Lizenzen werden geladen…",
   "Could not load the license report.":
@@ -121,21 +122,14 @@ export const german: Record<string, string> = {
   "Try again": "Erneut versuchen",
   "Search libraries or licenses": "Bibliotheken oder Lizenzen suchen",
   "No matching libraries.": "Keine passenden Bibliotheken.",
-  "Version not specified": "Version nicht angegeben",
   Repository: "Repository",
-  "License metadata is missing; the reported license was detected from package files.":
-    "Lizenzmetadaten fehlen; die angezeigte Lizenz wurde aus Paketdateien ermittelt.",
-  "License metadata needs review.": "Lizenzmetadaten müssen geprüft werden.",
-  "No license text was found in the installed package.":
-    "Im installierten Paket wurde kein Lizenztext gefunden.",
-  "The bundled font notice does not specify a version.":
-    "Der mitgelieferte Schrifthinweis nennt keine Version.",
-  "The installed package omits its license text; the notice is preserved from its exact upstream source revision.":
-    "Dem installierten Paket fehlt der Lizenztext; der Hinweis wurde aus der zugehörigen Quellversion übernommen.",
+  "The npm package declares MIT. The copyright notice for this release could not be verified.":
+    "Das npm-Paket gibt MIT als Lizenz an. Der Urheberrechtshinweis für diese Version konnte nicht verifiziert werden.",
+  "The npm package declares MIT. The upstream repository published this copyright notice after this release.":
+    "Das npm-Paket gibt MIT als Lizenz an. Der Urheberrechtshinweis wurde im Quell-Repository nach dieser Version veröffentlicht.",
   "ClefGlide home": "ClefGlide Startseite",
   "Read ahead. Play naturally.": "Vorauslesen. Natürlich spielen.",
-  "Private, non-commercial project for personal use.":
-    "Privates, nicht kommerzielles Projekt zur persönlichen Nutzung.",
+  "MIT-licensed": "MIT-lizenziert",
   "Main navigation": "Hauptnavigation",
   "Made for your own pace": "In deinem eigenen Tempo",
   "Private by design.": "Privatsphäre von Anfang an.",

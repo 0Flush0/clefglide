@@ -1238,7 +1238,7 @@ export function App() {
               {tr("Local-first · Generator v")}
               {tr(VERSION)}
               {" · "}
-              {tr("Private, non-commercial project for personal use.")}
+              {tr("MIT-licensed")}
             </span>
           </footer>
         </main>

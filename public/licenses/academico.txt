@@ -1,5 +1,12 @@
+Academico Regular and Bold, version 0.902, embedded in VexFlow 5.0.0
+Bundled Regular source: https://github.com/vexflow/vexflow/blob/5.0.0/src/fonts/academico.ts
+Bundled Bold source: https://github.com/vexflow/vexflow/blob/5.0.0/src/fonts/academicobold.ts
+Font project: https://github.com/vexflow/vexflow-fonts/tree/main/academico
+
+Copyright © 2020, Steinberg Media Technologies GmbH (http://www.steinberg.net/),
+with Reserved Font Name "Academico" (embedded Bold copyright field).
 Copyright © 2022, Steinberg Media Technologies GmbH (http://www.steinberg.net/),
-with Reserved Font Name "Academico".
+with Reserved Font Name "Academico" (embedded license description for both styles).
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:

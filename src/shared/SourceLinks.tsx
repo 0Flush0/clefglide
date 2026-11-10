@@ -1,15 +1,7 @@
 import { useRef, useState } from "react";
-import { Github, X } from "lucide-react";
+import { CodeXml, X } from "lucide-react";
 import { useTranslation } from "./i18n";
-
-type LicenseEntry = {
-  name: string;
-  version: string | null;
-  license: string;
-  repository?: string;
-  notices: { file: string; text: string }[];
-  issues: string[];
-};
+import { licenseReportSchema, type LicenseEntry } from "./licenseReport";
 
 export function GitHubLink() {
   const tr = useTranslation();
@@ -22,7 +14,7 @@ export function GitHubLink() {
       aria-label={tr("View source code on GitHub")}
       title={tr("View source code on GitHub")}
     >
-      <Github size={18} aria-hidden="true" />
+      <CodeXml size={18} aria-hidden="true" />
     </a>
   );
 }
@@ -42,9 +34,7 @@ export function SourceLinks() {
     try {
       const response = await fetch(`${base}licenses/dependencies.json`);
       if (!response.ok) throw new Error("License report unavailable");
-      const report = await response.json();
-      if (report.schemaVersion !== 1 || !Array.isArray(report.packages))
-        throw new Error("Invalid license report");
+      const report = licenseReportSchema.parse(await response.json());
       setPackages(report.packages);
     } catch {
       setFailed(true);
@@ -93,8 +83,17 @@ export function SourceLinks() {
           </div>
           <p id="licenses-description">
             {tr(
-              "Third-party libraries, build tools and fonts used by ClefGlide. Original notices are shown in their published language.",
+              "Third-party libraries, build tools and fonts have their own licenses. Original notices appear in their published language.",
             )}
+          </p>
+          <p>
+            <a
+              href={`${base}licenses/LICENSE.txt`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {tr("Read ClefGlide’s MIT License")}
+            </a>
           </p>
           <a
             href={`${base}licenses/THIRD_PARTY_NOTICES.txt`}
@@ -130,10 +129,7 @@ export function SourceLinks() {
                     key={`${entry.name}@${entry.version}`}
                   >
                     <summary>
-                      <strong>{entry.name}</strong>{" "}
-                      <span>
-                        {entry.version ?? tr("Version not specified")}
-                      </span>
+                      <strong>{entry.name}</strong> <span>{entry.version}</span>
                       {" · "}
                       <span>{entry.license}</span>
                     </summary>

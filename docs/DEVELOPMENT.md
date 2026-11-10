@@ -10,11 +10,13 @@ The internal package name, IndexedDB database, `sightflow-language` preference k
 
 ## Third-party notices
 
-`npm run licenses` scans installed packages with `license-checker-rseidelsohn` and checks their versions against the lockfile. Both `npm run dev` and `npm run build` generate the ignored files `public/licenses/dependencies.json` and `public/licenses/THIRD_PARTY_NOTICES.txt`. A build copies them, along with the Academico and Bravura font notices, to `dist/licenses/`. Vite also emits `dist/THIRD_PARTY_LICENSES.md` for bundled code.
+`npm run licenses` scans installed packages with `license-checker-rseidelsohn` and checks their versions and license declarations against the lockfile. Both `npm run dev` and `npm run build` prepare the license viewer and its plain-text download under `public/licenses/`. The production build serves the same files under `dist/licenses/`, including a copy of ClefGlide’s [MIT License](../LICENSE) at `LICENSE.txt`. The third-party inventory is in `dependencies.json` and `THIRD_PARTY_NOTICES.txt`. Use that inventory for supplemental notices that Vite’s bundled-code list in `dist/THIRD_PARTY_LICENSES.md` may omit.
 
-The generated inventory includes installed production and development packages. Optional packages absent on the build platform are omitted. Missing notice text or unknown license metadata fails generation. The checker is pinned, and the manifest scopes a `glob` override to its `read-package-json` dependency.
+The inventory covers installed production and development packages. Optional packages are included when installed on the build platform. Review notices on the release platform. The checker is pinned, and the manifest scopes a `glob` override to its `read-package-json` dependency.
 
-The package for `@napi-rs/wasm-runtime@1.2.2` omits its license text. The [version-specific override](../scripts/license-overrides/napi-rs-wasm-runtime-1.2.2.txt) preserves the notice from the [upstream revision recorded by npm](https://github.com/napi-rs/napi-rs/blob/5b344c367eeed81d1917f7c4d8e65b1adc16de12/LICENSE). Review the override when updating that package.
+[Notice checks](../scripts/license-notices.mjs) require review for new compound SPDX expressions and check the hashes of the three embedded VexFlow WOFF2 files. When updating VexFlow, review each font’s version, copyright, reserved names and full OFL text against the new binaries. Package tarballs that omit license files use [version-specific sources](../scripts/license-sources.mjs). An unreviewed missing notice fails generation. The inventory flags the unverified `jazz-midi@1.7.9` copyright and identifies the later upstream notice available for `@tybys/wasm-util@0.10.3`.
+
+The app uses Lucide’s generic code icon to link to its GitHub repository. The Lucide entry preserves the release’s ISC text and Feather’s MIT notice. See [Lucide’s original icon metadata](https://github.com/lucide-icons/lucide/blob/0.511.0/icons/github.json) and [GitHub’s logo usage terms](https://brand.github.com/foundations/logo).
 
 ## Windows workspace fallback
 

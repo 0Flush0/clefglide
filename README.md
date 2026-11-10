@@ -60,4 +60,4 @@ OpenAI Codex assists with implementation, tests and documentation. The trainer g
 
 ## Licensing
 
-A project license is pending. Third-party notices are available from **Open-source licenses** in the app footer and in the production build. See the [notice generation notes](docs/DEVELOPMENT.md#third-party-notices).
+ClefGlide’s own code is available under the [MIT License](LICENSE), which permits commercial use. Third-party libraries and bundled fonts retain their own licenses. Their notices are available from **Open-source licenses** in the app footer and in the production build. See the [notice generation notes](docs/DEVELOPMENT.md#third-party-notices).

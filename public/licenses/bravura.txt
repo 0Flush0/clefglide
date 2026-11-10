@@ -1,4 +1,8 @@
-Copyright © 2026, Steinberg Media Technologies GmbH (http://www.steinberg.net/),
+Bravura Regular, version 1.392, embedded in VexFlow 5.0.0
+Bundled source: https://github.com/vexflow/vexflow/blob/5.0.0/src/fonts/bravura.ts
+Font project: https://github.com/steinbergmedia/bravura
+
+Copyright © 2021, Steinberg Media Technologies GmbH (http://www.steinberg.net/),
 with Reserved Font Name "Bravura".
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.

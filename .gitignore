@@ -11,6 +11,7 @@ playwright/.cache/
 *.tsbuildinfo
 /public/licenses/dependencies.json
 /public/licenses/THIRD_PARTY_NOTICES.txt
+/public/licenses/LICENSE.txt
 
 # Local release audit
 /OPEN_SOURCE_AUDIT.md
