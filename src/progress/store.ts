@@ -154,7 +154,7 @@ export function csv(sessions: Session[]) {
         m.wrong,
         m.missed,
         m.skipped,
-        m.accuracy.toFixed(2),
+        s.results.length ? m.accuracy.toFixed(2) : "",
         m.npm.toFixed(2),
         "noteJumps" in s.settings
           ? difficultySummary(s.settings)

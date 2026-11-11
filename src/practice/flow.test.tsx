@@ -40,6 +40,123 @@ function setupNotationDom() {
   });
 }
 
+it("counts down only during active practice and expires on the session clock", async () => {
+  setupNotationDom();
+  await db.sessions.clear();
+  await db.preferences.clear();
+  let clock = 1000;
+  vi.spyOn(performance, "now").mockImplementation(() => clock);
+  const ui = render(<App />);
+  const duration = within(ui.getByRole("group", { name: "Practice duration" }));
+  expect(
+    duration
+      .getByRole("button", { name: "Unlimited" })
+      .getAttribute("aria-pressed"),
+  ).toBe("true");
+  expect(ui.queryByRole("timer")).toBeNull();
+
+  fireEvent.click(duration.getByRole("button", { name: "5 min" }));
+  clock += 5000;
+  ui.rerender(<App />);
+  expect(ui.getByRole("timer").textContent).toBe("05:00");
+  fireEvent.click(ui.getByRole("button", { name: "Start practice" }));
+  clock += 61_250;
+  await waitFor(() => expect(ui.getByRole("timer").textContent).toBe("03:59"));
+  fireEvent.click(ui.getByRole("button", { name: "Pause" }));
+  clock += 300_000;
+  ui.rerender(<App />);
+  expect(ui.getByRole("timer").textContent).toBe("03:59");
+
+  fireEvent.click(ui.getByRole("button", { name: "Start practice" }));
+  clock += 237_751;
+  await waitFor(() => expect(ui.getByRole("timer").textContent).toBe("00:01"));
+  clock += 999;
+  await waitFor(() =>
+    expect(ui.getByTestId("target").textContent).toBe("Session complete"),
+  );
+  expect(ui.getByRole("timer").textContent).toBe("00:00");
+  await waitFor(async () =>
+    expect(await db.sessions.toArray()).toMatchObject([
+      { ms: 300_000, results: [] },
+    ]),
+  );
+});
+
+it("saves played notes at expiry, rejects late input and starts a fresh session", async () => {
+  setupNotationDom();
+  await db.sessions.clear();
+  await db.preferences.clear();
+  let clock = 1000;
+  vi.spyOn(performance, "now").mockImplementation(() => clock);
+  const ui = render(<App />);
+  const playTarget = () => {
+    const pitch = ui.getByTestId("target").getAttribute("data-pitches");
+    const key = ui.container.querySelector(`[data-midi="${pitch}"]`)!;
+    fireEvent.pointerDown(key, { pointerId: 1 });
+    fireEvent.pointerUp(key, { pointerId: 1 });
+  };
+  fireEvent.click(ui.container.querySelector(".piano-card summary")!);
+  fireEvent.click(ui.getByRole("button", { name: "3 min" }));
+  fireEvent.click(ui.getByRole("button", { name: "Start practice" }));
+  clock += 500;
+  playTarget();
+  clock += 180_000;
+  playTarget();
+  expect(ui.getByTestId("target").textContent).toBe("Session complete");
+  expect(ui.container.querySelector(".stat strong")?.textContent).toBe("1");
+  await waitFor(async () =>
+    expect(await db.sessions.toArray()).toMatchObject([
+      { ms: 180_000, results: [{ kind: "correct", first: true }] },
+    ]),
+  );
+
+  fireEvent.click(ui.getByRole("button", { name: "Start another session" }));
+  await waitFor(() =>
+    expect(ui.getByRole("button", { name: "Pause" })).toBeTruthy(),
+  );
+  expect(ui.getByRole("timer").textContent).toBe("03:00");
+  expect(ui.container.querySelector(".stat strong")?.textContent).toBe("0");
+  expect(ui.getByTestId("target").getAttribute("data-bar")).toBe("0");
+});
+
+it("excludes the rhythm count-in and pauses when the page is left", async () => {
+  setupNotationDom();
+  await db.sessions.clear();
+  await db.preferences.clear();
+  let clock = 1000;
+  vi.spyOn(performance, "now").mockImplementation(() => clock);
+  const ui = render(<App />);
+  fireEvent.click(ui.getByRole("button", { name: "3 min" }));
+  fireEvent.change(ui.getByLabelText("Practice mode"), {
+    target: { value: "timed" },
+  });
+  fireEvent.click(ui.getByRole("button", { name: "Apply & play" }));
+  await waitFor(() =>
+    expect(ui.getByRole("button", { name: "Pause" })).toBeTruthy(),
+  );
+
+  const countIn = (defaults.beats * 60_000) / defaults.bpm;
+  clock += countIn - 1000;
+  ui.rerender(<App />);
+  expect(ui.getByRole("timer").textContent).toBe("03:00");
+  fireEvent(window, new Event("pagehide"));
+  clock += 60_000;
+  fireEvent.click(ui.getByRole("button", { name: "Start practice" }));
+  clock += 1500;
+  ui.rerender(<App />);
+  expect(ui.getByRole("timer").textContent).toBe("03:00");
+  clock += 500;
+  await waitFor(() => expect(ui.getByRole("timer").textContent).toBe("02:59"));
+
+  vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {});
+  fireEvent.change(ui.getByLabelText("Language"), { target: { value: "de" } });
+  const duration = within(ui.getByRole("group", { name: "Übungsdauer" }));
+  expect(duration.getByRole("button", { name: "Unbegrenzt" })).toBeTruthy();
+  expect(ui.getByRole("timer", { name: "Verbleibende Zeit" }).textContent).toBe(
+    "02:59",
+  );
+});
+
 it("ClefGlide restores existing SightFlow settings and progress without migration", async () => {
   setupNotationDom();
   await db.sessions.clear();

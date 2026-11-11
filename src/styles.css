@@ -1536,6 +1536,27 @@ footer span:last-child {
 .transport .next {
   margin-left: 0;
 }
+.session-timer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px 10px;
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 11px;
+}
+.session-duration {
+  grid-template-columns: repeat(3, auto);
+}
+.session-duration button {
+  padding-inline: 8px;
+  white-space: nowrap;
+}
+.session-countdown {
+  margin-inline-start: auto;
+  font-variant-numeric: tabular-nums;
+}
 .feedback {
   min-height: 33px;
   padding: 7px 2px;

@@ -77,6 +77,12 @@ import {
 
 const bus = new MidiBus();
 const initialSeed = "first-light";
+const sessionDurations = [
+  { minutes: 3, label: "3 min" },
+  { minutes: 5, label: "5 min" },
+  { minutes: 0, label: "Unlimited" },
+] as const;
+type SessionDuration = (typeof sessionDurations)[number]["minutes"];
 type Runtime = {
   phrases: Phrase[];
   engine: Scorer;
@@ -84,7 +90,15 @@ type Runtime = {
   id: string;
   initialHands: HandState[];
   assistanceUsed: boolean;
+  duration?: SessionDuration;
+  complete?: boolean;
 };
+function formatCountdown(ms: number) {
+  const seconds = Math.ceil(Math.max(0, ms) / 1000);
+  return [Math.floor(seconds / 60), seconds % 60]
+    .map((part) => String(part).padStart(2, "0"))
+    .join(":");
+}
 function runtime(settings: Settings, seed: string): Runtime {
   const first = generate(settings, seed),
     next = generate(settings, seed, first.final);
@@ -149,6 +163,7 @@ export function App() {
     [draft, setDraft] = useState(defaults),
     [seed, setSeed] = useState(initialSeed),
     [run, setRun] = useState(() => runtime(defaults, initialSeed));
+  const [duration, setDuration] = useState<SessionDuration>(0);
   const ref = useRef(run);
   ref.current = run;
   const [, render] = useState(0),
@@ -187,7 +202,7 @@ export function App() {
     useLiveQuery(() => db.sessions.orderBy("date").reverse().toArray(), []) ??
     [];
   const persist = useCallback(async (r: Runtime) => {
-    if (!r.engine.results.length) return;
+    if (!r.engine.results.length && !r.complete) return;
     try {
       await db.sessions.put(
         record(
@@ -203,6 +218,34 @@ export function App() {
       setError(`Could not save local progress: ${String(e)}`);
     }
   }, []);
+  const expireIfDue = useCallback(
+    (r: Runtime, now: number) => {
+      if (r.complete) return true;
+      if (!r.duration || !r.engine.running) return false;
+      const overrun = r.engine.activeMs(now) - r.duration * 60_000;
+      if (overrun < 0) return false;
+
+      // A delayed callback must finalize scoring and elapsed time at the deadline.
+      const deadline = now - overrun;
+      r.engine.tick(deadline);
+      r.engine.pause(deadline);
+      r.complete = true;
+      void persist(r);
+      render((x) => x + 1);
+      return true;
+    },
+    [persist],
+  );
+  const pausePractice = useCallback(
+    (r: Runtime) => {
+      const now = performance.now();
+      if (expireIfDue(r, now)) return;
+      r.engine.pause(now);
+      render((x) => x + 1);
+      return persist(r);
+    },
+    [expireIfDue, persist],
+  );
   useEffect(() => {
     db.preferences
       .get("settings")
@@ -238,17 +281,16 @@ export function App() {
         setStatus(message);
       },
       () => {
-        ref.current.engine.pause(performance.now());
+        void pausePractice(ref.current);
         setDevice("");
         setFeedback(
           "Piano disconnected. Practice paused; reconnect and press Start.",
         );
-        void persist(ref.current);
       },
     );
     hardware.current = adapter;
     return () => adapter.dispose();
-  }, [persist]);
+  }, [pausePractice]);
   useEffect(
     () =>
       bus.subscribe((e) => {
@@ -259,6 +301,7 @@ export function App() {
         )
           return;
         const r = ref.current;
+        if (expireIfDue(r, performance.now())) return;
         const before = r.engine.results.length;
         r.engine.input(e);
         const result = r.engine.results.at(-1);
@@ -273,30 +316,36 @@ export function App() {
         }
         render((x) => x + 1);
       }),
-    [sim, channel],
+    [sim, channel, expireIfDue],
   );
+  const running = run.engine.running;
   useEffect(() => {
+    if (!running) return;
     const timer = setInterval(() => {
-      const r = ref.current,
-        engine = r.engine;
-      if (!engine.running) return;
+      const engine = run.engine;
+      if (ref.current !== run || !engine.running) return;
       const now = performance.now();
+      if (expireIfDue(run, now)) return;
       engine.tick(now);
-      const targetBar = engine.target?.bar ?? r.phrases.at(-1)!.final.bar;
-      if (targetBar + 4 >= r.phrases.at(-1)!.final.bar) {
-        const p = generate(engine.settings, r.seed, r.phrases.at(-1)!.final);
-        r.phrases.push(p);
+      const targetBar = engine.target?.bar ?? run.phrases.at(-1)!.final.bar;
+      if (targetBar + 4 >= run.phrases.at(-1)!.final.bar) {
+        const p = generate(
+          engine.settings,
+          run.seed,
+          run.phrases.at(-1)!.final,
+        );
+        run.phrases.push(p);
         engine.notes.push(
           ...p.events
             .filter((e) => e.kind === "note")
             .sort((a, b) => a.bar - b.bar || a.onset - b.onset),
         );
-        if (r.phrases.length > 4) r.phrases.shift();
+        if (run.phrases.length > 4) run.phrases.shift();
       }
       const phrase = Math.floor(targetBar / 4);
       if (phrase !== savedPhrase.current) {
         savedPhrase.current = phrase;
-        void persist(r);
+        void persist(run);
       }
       const beat = Math.floor(
         (now - engine.origin) / (60000 / engine.settings.bpm),
@@ -320,11 +369,10 @@ export function App() {
       render((x) => x + 1);
     }, 30);
     return () => clearInterval(timer);
-  }, [click, persist]);
+  }, [click, expireIfDue, persist, run, running]);
   useEffect(() => {
     const fn = () => {
-      ref.current.engine.pause(performance.now());
-      void persist(ref.current);
+      void pausePractice(ref.current);
     };
     const hidden = () => {
       if (document.hidden) fn();
@@ -335,7 +383,7 @@ export function App() {
       window.removeEventListener("pagehide", fn);
       document.removeEventListener("visibilitychange", hidden);
     };
-  }, [persist]);
+  }, [pausePractice]);
   const change = async (s: Settings, newSeed: string) => {
     try {
       const parsed = settingsSchema.parse(s);
@@ -344,8 +392,7 @@ export function App() {
         hints: parsed.hints === "reveal" ? ("smart" as const) : parsed.hints,
       };
       const next = runtime(checked, newSeed);
-      ref.current.engine.pause(performance.now());
-      await persist(ref.current);
+      await pausePractice(ref.current);
       setRun(next);
       setSettings(checked);
       setDraft(checked);
@@ -363,9 +410,11 @@ export function App() {
   };
   const engine = run.engine,
     now = performance.now(),
-    m = metrics(engine.results, engine.activeMs(now), settings.tolerance),
+    activeMs = engine.activeMs(now),
+    m = metrics(engine.results, activeMs, settings.tolerance),
     target = engine.target,
     startBar = target?.bar ?? 0;
+  const displayedDuration = run.duration ?? duration;
   const shownBars = compactScore
     ? (Math.min(settings.bars, 2) as 2)
     : settings.bars;
@@ -514,10 +563,12 @@ export function App() {
     const updated = { ...settings, hints };
     setSettings(updated);
     setDraft((s) => ({ ...s, hints }));
-    engine.settings = { ...engine.settings, hints };
-    run.assistanceUsed ||= automaticAssistance(updated);
+    if (!expireIfDue(run, performance.now())) {
+      engine.settings = { ...engine.settings, hints };
+      run.assistanceUsed ||= automaticAssistance(updated);
+      void persist(run);
+    }
     setReveal(false);
-    void persist(run);
     void db.preferences
       .put({ id: "settings", settings: updated })
       .catch((e) => setError(String(e)));
@@ -525,29 +576,27 @@ export function App() {
   const apply = () =>
     change(draft, seed !== run.seed ? seed : createLocalId("exercise"));
   const toggle = async () => {
-    if (pending && !engine.running) {
-      const next = await apply();
-      if (next) {
-        next.engine.start(performance.now());
-        render((x) => x + 1);
-      }
+    if (engine.running) {
+      void pausePractice(run);
       return;
     }
-    if (engine.running) {
-      engine.pause(performance.now());
-      void persist(run);
-    } else {
-      engine.start(performance.now());
-      if (click) {
-        audio.current ??= new AudioContext();
-        void audio.current.resume();
-      }
-      setFeedback(
-        settings.mode === "timed"
-          ? "Count in, then follow the pulse."
-          : "Play the highlighted note.",
-      );
+    if (click) {
+      audio.current ??= new AudioContext();
+      void audio.current.resume();
     }
+    const next = pending
+      ? await apply()
+      : run.complete
+        ? await change(settings, createLocalId("exercise"))
+        : run;
+    if (!next) return;
+    next.duration ??= duration;
+    next.engine.start(performance.now());
+    setFeedback(
+      next.engine.settings.mode === "timed"
+        ? "Count in, then follow the pulse."
+        : "Play the highlighted note.",
+    );
     render((x) => x + 1);
   };
   const connect = async () => {
@@ -564,8 +613,7 @@ export function App() {
     }
   };
   const selectDevice = (id: string) => {
-    engine.pause(performance.now());
-    void persist(run);
+    void pausePractice(ref.current);
     hardware.current?.select(id);
     setDevice(id);
     setSim(!id);
@@ -579,6 +627,7 @@ export function App() {
         fingerprint({ ...settings, bars: shownBars }, run.assistanceUsed),
   );
   const chart = filtered
+    .filter((s) => s.results.length > 0)
     .slice(0, 30)
     .reverse()
     .map((s, i) => ({
@@ -593,10 +642,7 @@ export function App() {
       <Tabs.Root
         value={tab}
         onValueChange={(value) => {
-          if (value !== "practice") {
-            engine.pause(performance.now());
-            void persist(run);
-          }
+          if (value !== "practice") void pausePractice(run);
           setTab(value);
         }}
         className="app-shell"
@@ -783,19 +829,28 @@ export function App() {
                   />
                   <div className="score-foot">
                     <span>
-                      <span
-                        className={`pulse-dot ${engine.running ? "live" : ""}`}
-                      />
-                      {tr(
-                        engine.running
-                          ? now < engine.origin
-                            ? `Count in: ${Math.ceil((engine.origin - now) / (60000 / settings.bpm))}`
-                            : "Listening to your playing"
-                          : "Ready · place your hand, then start",
+                      {!run.complete && (
+                        <>
+                          <span
+                            className={`pulse-dot ${running ? "live" : ""}`}
+                          />
+                          {tr(
+                            running
+                              ? now < engine.origin
+                                ? `Count in: ${Math.ceil((engine.origin - now) / (60000 / settings.bpm))}`
+                                : "Listening to your playing"
+                              : "Ready · place your hand, then start",
+                          )}
+                        </>
                       )}
                     </span>
                     <span>
-                      {shownBars} {tr("bars in view · endless music")}
+                      {shownBars}{" "}
+                      {tr(
+                        displayedDuration
+                          ? "bars in view"
+                          : "bars in view · endless music",
+                      )}
                     </span>
                   </div>
                   <div className="transport">
@@ -810,7 +865,9 @@ export function App() {
                           ? t.pause
                           : pending
                             ? "Apply & play"
-                            : t.start,
+                            : run.complete
+                              ? "Start another session"
+                              : t.start,
                       )}
                     </button>
                     <button
@@ -824,7 +881,12 @@ export function App() {
                       title={tr("Skip current target")}
                       aria-label={tr("Skip")}
                       onClick={() => {
-                        if (engine.running && now >= engine.origin) {
+                        const now = performance.now();
+                        if (
+                          !expireIfDue(run, now) &&
+                          engine.running &&
+                          now >= engine.origin
+                        ) {
                           engine.skip(now);
                           setFeedback("Target skipped. Continue reading.");
                           render((x) => x + 1);
@@ -839,7 +901,7 @@ export function App() {
                       <button
                         aria-label={tr(reveal ? "Hide hint" : "Reveal hint")}
                         onClick={() => {
-                          if (!reveal) {
+                          if (!reveal && !expireIfDue(run, performance.now())) {
                             run.assistanceUsed = true;
                             void persist(run);
                           }
@@ -866,14 +928,42 @@ export function App() {
                       className="finish"
                       title={tr("Save & finish")}
                       onClick={() => {
-                        engine.pause(performance.now());
-                        void persist(run);
+                        void pausePractice(run);
                         setTab("progress");
                       }}
                     >
                       {tr(t.save)}
                       <Check size={16} />
                     </button>
+                  </div>
+                  <div className="session-timer">
+                    <span aria-hidden="true">{tr("Practice duration")}</span>
+                    <div
+                      className="segmented session-duration"
+                      role="group"
+                      aria-label={tr("Practice duration")}
+                    >
+                      {sessionDurations.map(({ minutes, label }) => (
+                        <button
+                          key={minutes}
+                          type="button"
+                          aria-pressed={duration === minutes}
+                          disabled={run.duration !== undefined && !run.complete}
+                          onClick={() => setDuration(minutes)}
+                        >
+                          {tr(label)}
+                        </button>
+                      ))}
+                    </div>
+                    {displayedDuration > 0 && (
+                      <span
+                        className="session-countdown"
+                        role="timer"
+                        aria-label={tr("Time remaining")}
+                      >
+                        {formatCountdown(displayedDuration * 60_000 - activeMs)}
+                      </span>
+                    )}
                   </div>
                 </div>
                 <div
@@ -886,12 +976,12 @@ export function App() {
                   <Activity size={17} />
                   <span
                     className={
-                      feedback.startsWith("Try again")
+                      !run.complete && feedback.startsWith("Try again")
                         ? "feedback-error"
                         : undefined
                     }
                   >
-                    {tr(feedback)}
+                    {tr(run.complete ? "Session complete" : feedback)}
                   </span>
                 </div>
                 <div className="stats">
@@ -954,8 +1044,7 @@ export function App() {
                       type="checkbox"
                       checked={sim}
                       onChange={(e) => {
-                        engine.pause(performance.now());
-                        void persist(run);
+                        void pausePractice(run);
                         setSim(e.target.checked);
                       }}
                     />
@@ -1289,8 +1378,14 @@ function SessionRow({
           {m.correct} {tr("notes")}
         </strong>
         <span>
-          {Math.round(m.accuracy)}
-          {tr("% first attempt")}
+          {s.results.length ? (
+            <>
+              {Math.round(m.accuracy)}
+              {tr("% first attempt")}
+            </>
+          ) : (
+            "—"
+          )}
         </span>
       </summary>
       <p>
