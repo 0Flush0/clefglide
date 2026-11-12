@@ -70,11 +70,15 @@ export function spacedPhrase(
   hand: Settings["hand"] = "right",
   pattern = "thumbGap",
 ): Phrase {
+  const max = pattern === "thumbGap" ? 69 : 84;
   const settings: Settings = {
     ...defaults,
     hand,
-    max: pattern === "thumbGap" ? 69 : 84,
-    leftMax: 57,
+    max,
+    // These hint fixtures intentionally use C4-based maps for either solo hand.
+    // Single-hand LH now needs its own bounds rather than inheriting min/max.
+    leftMin: hand === "left" ? defaults.min : defaults.leftMin,
+    leftMax: hand === "left" ? max : 57,
     fingerSpacing: pattern === "thumbGap" ? "easy" : "hard",
     rhythm: "quarters",
     noteJumps: "large",
@@ -89,7 +93,9 @@ export function spacedPhrase(
     }
   }
   if (!p)
-    throw new Error("Expected the spacing library to generate thumb gaps.");
+    throw new Error(
+      `Expected the spacing library to generate ${pattern} for ${hand}.`,
+    );
   for (const h of p.initial.hands) {
     let previous: string | undefined;
     const notes = p.events.filter(

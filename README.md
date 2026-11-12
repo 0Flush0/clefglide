@@ -15,6 +15,8 @@ ClefGlide is a browser-based piano sight-reading trainer that generates new shee
 - Local progress comparisons by difficulty and assistance, with JSON backup import/export and CSV summaries.
 - Responsive practice controls, light and dark themes, and English and German UI options.
 
+Feature ideas and enhancement requests are welcome through [GitHub issues](https://github.com/0Flush0/clefglide/issues).
+
 Fingering suggestions follow the generator’s rules. MIDI input provides pitch and timing data, and physical playability still needs hands-on review. Adaptive scheduling, MusicXML support and hand-size calibration are future scope.
 
 ## Privacy
