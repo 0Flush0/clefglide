@@ -9,8 +9,34 @@ import {
   v2SettingsSchema,
   v3SettingsSchema,
   v4SettingsSchema,
+  VERSION,
 } from "../score/model";
 import { applyHandMovements } from "../practice/presets";
+it("retains v5 history and fingerprints separately from coverage-guided results", async () => {
+  const current = record("coverage-current", "coverage-seed", defaults, 0, []);
+  const legacy = {
+    ...current,
+    id: "before-coverage",
+    generatorVersion: "5.0.0",
+    fingerprint: current.fingerprint.replace(VERSION + ":", "5.0.0:"),
+  };
+  await expect(
+    importSessions(
+      JSON.stringify({ format: "sightflow-1", sessions: [legacy, current] }),
+    ),
+  ).resolves.toBe(2);
+  expect(await db.sessions.get(legacy.id)).toEqual(legacy);
+  expect(await db.sessions.get(current.id)).toEqual(current);
+  expect(legacy.fingerprint).not.toBe(current.fingerprint);
+  await expect(
+    importSessions(
+      JSON.stringify({
+        format: "sightflow-1",
+        sessions: [{ ...legacy, settings: { ...legacy.settings, max: 84 } }],
+      }),
+    ),
+  ).rejects.toThrow(/fingerprint/);
+});
 it("persists and reloads each hand range independently", async () => {
   const settings = { ...defaults, min: 72, max: 84, leftMin: 33, leftMax: 52 };
   await db.preferences.put({ id: "range-settings", settings });

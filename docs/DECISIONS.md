@@ -1,5 +1,14 @@
 # Implementation decisions
 
+## Generator v5.1: coverage-guided range exploration
+
+- Each moving hand keeps five coarse pitch-region counts in ephemeral `StreamState.coverage`. Actual generated noteheads, including chord tones and excluding rests, update a normalized per-phrase histogram with 0.95 decay (roughly a fourteen-phrase half-life). No settings, dependencies, database migration or persisted coverage are added.
+- `src/generation/rangeCoverage.ts` selects underused regions with seeded weighted randomness, keeping every region eligible. A target is the nearest approved same-shape position center. It persists until reached or for a randomized 32–64 phrase planning horizon, allowing sparse Easy movement opportunities to accumulate progress. Blocked targets expire; configured ranges need not be covered within any one phrase or session.
+- At the phrase boundary, a seeded 75% chance permits a one-index contour-register offset toward the target. The existing motif, harmony, cadence and note-level constraints still determine the melody. At existing rested relocation opportunities, legal candidates retain their small-move weights and receive bounded 0.1–1 acceptance weights according to progress toward the target. Unused weight defers the move, which matters when only the opposite direction has a legal landing. Neither movement frequency nor distance/interval/spacing/collision limits can increase. Movements Off, zero frequency and zero distance bypass coverage guidance entirely.
+- Hands retain independent counts/targets through chunk continuation. New exercises start fresh. Generation-context changes reset coverage; assistance, tempo and presentation changes do not alter it. Structural settings still start a new exercise through the practice controller, preserving the existing hand-continuity contract.
+- Generator version **5.1.0** separates the changed seeded content and comparisons from 5.0.0. The existing v5 session shape accepts both version tags; old backups keep their original fingerprints and are not offered current-version exact replay.
+- Statistical tests compare 24 seeded 96-phrase sessions against an ablation restoring the previous sampler and RNG consumption, over C3–C5 and C3–C6. Additional tests cover bounded memory, target persistence/reset, short-phrase variety, movement reversals, difficulty limits and independently validated two-hand/chromatic/chord continuations. These model checks do not establish human comfort or hardware MIDI compatibility.
+
 ## Generator v5: independent hand ranges
 
 - Active settings retain `min`/`max` as right-hand bounds and `leftMin`/`leftMax` as left-hand bounds, regardless of which hands are enabled. `rangeVersion: 2` identifies the independent interpretation. Switching hands or difficulty preserves both ranges. Both support A0–C8 (MIDI 21–108); a usable five-note position in the selected key is still required.

@@ -58,7 +58,7 @@ export const sessionSchema = z.preprocess(
       settings: v4SettingsSchema,
     }),
     sessionBase.extend({
-      generatorVersion: z.literal("5.0.0"),
+      generatorVersion: z.enum(["5.0.0", "5.1.0"]),
       settings: settingsValuesSchema,
     }),
   ]),
@@ -110,31 +110,36 @@ export async function importSessions(text: string) {
       s.generatorVersion === VERSION
         ? s.fingerprint ===
           fingerprint(settingsSchema.parse(s.settings), s.assistanceUsed)
-        : s.generatorVersion === "4.0.0"
+        : s.generatorVersion === "5.0.0"
           ? s.fingerprint ===
-            "4.0.0:" +
-              JSON.stringify(v4SettingsSchema.parse(s.settings)) +
+            "5.0.0:" +
+              JSON.stringify(settingsValuesSchema.parse(s.settings)) +
               `|assistance:${s.assistanceUsed ? "assisted" : "unassisted"}`
-          : s.generatorVersion === "3.0.0"
+          : s.generatorVersion === "4.0.0"
             ? s.fingerprint ===
-              "3.0.0:" +
-                JSON.stringify(v3SettingsSchema.parse(s.settings)) +
+              "4.0.0:" +
+                JSON.stringify(v4SettingsSchema.parse(s.settings)) +
                 `|assistance:${s.assistanceUsed ? "assisted" : "unassisted"}`
-            : s.generatorVersion === "2.0.0"
+            : s.generatorVersion === "3.0.0"
               ? s.fingerprint ===
-                "2.0.0:" +
-                  JSON.stringify(v2SettingsSchema.parse(s.settings)) +
+                "3.0.0:" +
+                  JSON.stringify(v3SettingsSchema.parse(s.settings)) +
                   `|assistance:${s.assistanceUsed ? "assisted" : "unassisted"}`
-              : legacyHints.some((hints) => {
-                  const legacy = legacySettingsSchema.safeParse({
-                    ...s.settings,
-                    hints,
+              : s.generatorVersion === "2.0.0"
+                ? s.fingerprint ===
+                  "2.0.0:" +
+                    JSON.stringify(v2SettingsSchema.parse(s.settings)) +
+                    `|assistance:${s.assistanceUsed ? "assisted" : "unassisted"}`
+                : legacyHints.some((hints) => {
+                    const legacy = legacySettingsSchema.safeParse({
+                      ...s.settings,
+                      hints,
+                    });
+                    return (
+                      legacy.success &&
+                      s.fingerprint === "1.0.0:" + JSON.stringify(legacy.data)
+                    );
                   });
-                  return (
-                    legacy.success &&
-                    s.fingerprint === "1.0.0:" + JSON.stringify(legacy.data)
-                  );
-                });
     if (!valid) throw new Error("Difficulty fingerprint mismatch.");
   }
   await db.sessions.bulkPut(data.sessions);

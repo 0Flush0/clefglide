@@ -1,5 +1,6 @@
 import { z } from "zod";
-export const VERSION = "5.0.0";
+import type { RangeCoverage } from "../generation/rangeCoverage";
+export const VERSION = "5.1.0";
 export const TPQ = 480;
 export const legacySettingsSchema = z.object({
   hand: z.enum(["right", "left", "both"]).default("right"),
@@ -146,6 +147,7 @@ export interface StreamState {
   bar: number;
   hands: HandState[];
   hints?: HintMemory;
+  coverage?: Partial<Record<Hand, RangeCoverage>>;
 }
 export interface Phrase {
   seed: string;

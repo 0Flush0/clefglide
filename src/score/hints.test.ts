@@ -159,7 +159,14 @@ describe("plan-driven Smart hints", () => {
       ),
       shiftFrequency: 1,
     };
-    const p = generate(s, "future-manual");
+    // Coverage may defer any particular relocation, even at full opportunity
+    // frequency. Select the required scenario independently of one seed's plan.
+    const p = Array.from({ length: 20 }, (_, i) =>
+      generate(s, `future-manual-${i}`),
+    ).find((phrase) =>
+      phrase.movements.some((m) => m.landingTick >= 3 * s.beats * 480),
+    )!;
+    expect(p).toBeDefined();
     const later = p.movements.filter((m) => m.landingTick >= 3 * s.beats * 480);
     expect(later.length).toBeGreaterThan(0);
     expect(visibleMovements(later, 0, 2, s.beats)).toEqual([]);

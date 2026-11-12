@@ -2,6 +2,7 @@ import { Note, Chord, Scale } from "tonal";
 import {
   TPQ,
   VERSION,
+  noteheads,
   type Settings,
   type Hand,
   type HandState,
@@ -23,6 +24,15 @@ import { jumpLevels, spacingLevels } from "./difficulty";
 import { inferFingeringHints } from "../score/hints";
 import { writtenPitch } from "../score/pitch";
 import { chordCandidates } from "./chords";
+import {
+  planRangeCoverage,
+  coverageMoveWeight,
+  recordRangeCoverage,
+  coveragePhraseShape,
+} from "./rangeCoverage";
+function positionCenter(h: HandState): number {
+  return (Math.min(...h.fingerToMidi) + Math.max(...h.fingerToMidi)) / 2;
+}
 function choose<T>(items: T[], state: { rng: number }): T {
   return items[Math.floor(random(state) * items.length)];
 }
@@ -95,6 +105,46 @@ export function generate(
     events: ScoreEvent[] = [],
     positions = structuredClone(state.hands),
     movements: MovementPlan[] = [];
+  const available = new Map(
+    state.hands.map((h) => [h.hand, positionsFor(s, h.hand)]),
+  );
+  const usePreparation =
+    s.handMovements !== "off" && s.shiftFrequency > 0 && s.maxShift > 0;
+  if (!usePreparation) delete state.coverage;
+  else state.coverage ??= {};
+  for (const h of usePreparation ? state.hands : []) {
+    state.coverage![h.hand] = planRangeCoverage(
+      state.coverage![h.hand],
+      {
+        min: h.hand === "left" ? s.leftMin : s.min,
+        max: h.hand === "left" ? s.leftMax : s.max,
+        context: JSON.stringify([
+          s.hand,
+          s.key,
+          s.min,
+          s.max,
+          s.leftMin,
+          s.leftMax,
+          s.handMovements,
+          s.shiftFrequency,
+          s.maxShift,
+          s.noteJumps,
+          s.interval,
+          s.fingerSpacing,
+          s.accidentals,
+          s.chords,
+          s.rhythm,
+          s.beats,
+        ]),
+        position: positionCenter(h),
+        destinations: available
+          .get(h.hand)!
+          .filter((to) => spacingSignature(to) === spacingSignature(h))
+          .map(positionCenter),
+      },
+      state,
+    );
+  }
   const harmony = choose(
       [
         [1, 4, 5, 1],
@@ -118,6 +168,19 @@ export function generate(
     ],
     state,
   );
+  const shapes = new Map(
+    state.hands.map((h) => [
+      h.hand,
+      usePreparation
+        ? coveragePhraseShape(
+            state.coverage![h.hand]!,
+            positionCenter(h),
+            shape,
+            state,
+          )
+        : shape,
+    ]),
+  );
   const notesInKey = Scale.get(`${s.key} major`).notes;
   const chords = harmony.map(
     (degree) =>
@@ -125,8 +188,6 @@ export function generate(
         `${notesInKey[degree - 1]}${degree === 2 || degree === 6 ? "m" : ""}`,
       ).notes,
   );
-  const usePreparation =
-    s.handMovements !== "off" && s.shiftFrequency > 0 && s.maxShift > 0;
   for (let b = 0; b < 4; b++) {
     const bar = state.bar + b,
       landings = new Map<Hand, number>();
@@ -136,7 +197,7 @@ export function generate(
         if (random(state) >= s.shiftFrequency || !from.lastPitch) continue;
         const other = state.hands.find((h) => h.hand !== from.hand);
         // Only move when the old position cannot reach the landing pitch.
-        const options = positionsFor(s, from.hand).flatMap((to) => {
+        const options = available.get(from.hand)!.flatMap((to) => {
           const distance =
             diatonicIndex(to.pitches[0]) - diatonicIndex(from.pitches[0]);
           if (
@@ -158,10 +219,23 @@ export function generate(
         if (!options.length) continue;
         // Small moves remain more likely, while higher distance limits genuinely
         // admit larger, rested relocations rather than merely changing a label.
-        const weightedMoves = options.flatMap((o) =>
-          Array.from({ length: 5 - Math.abs(o.distance) }, () => o),
+        const weights = options.map(
+          (o) =>
+            (5 - Math.abs(o.distance)) *
+            coverageMoveWeight(
+              state.coverage![from.hand]!,
+              positionCenter(from),
+              positionCenter(o.to),
+            ),
         );
-        const { to, index, distance } = choose(weightedMoves, state);
+        // Unused weight defers the relocation. This matters when the landing
+        // constraints permit only an away-from-target direction at this rest.
+        let draw =
+          random(state) *
+          options.reduce((sum, o) => sum + 5 - Math.abs(o.distance), 0);
+        const selected = options.findIndex((_, i) => (draw -= weights[i]) < 0);
+        if (selected < 0) continue;
+        const { to, index, distance } = options[selected];
         const tick = bar * s.beats * TPQ,
           pitch = to.pitches[index],
           midi = Note.midi(pitch)!;
@@ -229,7 +303,7 @@ export function generate(
         }
         const goal = Math.max(
           0,
-          Math.min(4, shape[b] + motif[j % motif.length] - 1),
+          Math.min(4, shapes.get(h.hand)![b] + motif[j % motif.length] - 1),
         );
         const weighted = choices.flatMap((i) =>
           Array.from(
@@ -366,6 +440,14 @@ export function generate(
     }
   }
   state.bar += 4;
+  for (const h of usePreparation ? state.hands : [])
+    recordRangeCoverage(
+      state.coverage![h.hand]!,
+      events
+        .filter((e) => e.hand === h.hand)
+        .flatMap(noteheads)
+        .map((n) => n.midi),
+    );
   state.hints = inferFingeringHints(
     events,
     positions,
