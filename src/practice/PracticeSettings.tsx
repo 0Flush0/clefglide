@@ -1,6 +1,4 @@
 import { useTranslation } from "../shared/i18n";
-import { Note } from "tonal";
-import { useMemo } from "react";
 import { Settings2, ArrowRight, Info } from "lucide-react";
 import { settingsSchema, type Settings } from "../score/model";
 import {
@@ -12,121 +10,11 @@ import {
   applyHandMovements,
 } from "./presets";
 import {
-  positionsFor,
-  separated,
   movementRules,
   rangeSummary,
+  rangeError,
 } from "../generation/positions";
-export function playableRangeOption(
-  s: Settings,
-  left: boolean,
-  edge: "low" | "high",
-  value: number,
-) {
-  const proposed = {
-    ...s,
-    [left
-      ? edge === "low"
-        ? "leftMin"
-        : "leftMax"
-      : edge === "low"
-        ? "min"
-        : "max"]: value,
-  };
-  const hand = left ? "left" : s.hand === "left" ? "left" : "right";
-  const positions = positionsFor(proposed, hand);
-  if (!positions.length) return false;
-  if (s.hand !== "both") return true;
-  const other = positionsFor(proposed, left ? "right" : "left");
-  return positions.some((a) => other.some((b) => separated(a, b)));
-}
-function RangeEditor({
-  settings,
-  left = false,
-  onChange,
-}: {
-  settings: Settings;
-  left?: boolean;
-  onChange: (s: Settings) => void;
-}) {
-  const tr = useTranslation();
-  const options = useMemo(
-    () =>
-      Array.from(
-        { length: (left ? 84 : 96) - (left ? 24 : 36) + 1 },
-        (_, i) => i + (left ? 24 : 36),
-      ).map((midi) => ({
-        midi,
-        low: playableRangeOption(settings, left, "low", midi),
-        high: playableRangeOption(settings, left, "high", midi),
-      })),
-    [settings, left],
-  );
-  return (
-    <fieldset className="range-editor">
-      <legend>
-        {tr(
-          settings.hand === "both"
-            ? left
-              ? "Left hand range"
-              : "Right hand range"
-            : "Keyboard range",
-        )}
-      </legend>
-      <div className="control-grid">
-        {(["low", "high"] as const).map((edge) => {
-          const key = left
-            ? edge === "low"
-              ? "leftMin"
-              : "leftMax"
-            : edge === "low"
-              ? "min"
-              : "max";
-          const minAllowed = left ? (edge === "low" ? 24 : 24) : 36,
-            maxAllowed = left
-              ? edge === "low"
-                ? 72
-                : 84
-              : edge === "low"
-                ? 84
-                : 96;
-          return (
-            <label key={edge}>
-              {tr(edge === "low" ? "Lowest note" : "Highest note")}
-              <select
-                aria-label={tr(
-                  `${left ? "Left hand " : ""}${edge === "low" ? "Lowest note" : "Highest note"}`,
-                )}
-                value={settings[key]}
-                onChange={(e) => {
-                  const midi = +e.target.value;
-                  if (
-                    midi >= minAllowed &&
-                    midi <= maxAllowed &&
-                    playableRangeOption(settings, left, edge, midi)
-                  )
-                    onChange({ ...settings, [key]: midi });
-                }}
-              >
-                {options.map(({ midi, ...valid }) => (
-                  <option
-                    key={midi}
-                    value={midi}
-                    disabled={
-                      midi < minAllowed || midi > maxAllowed || !valid[edge]
-                    }
-                  >
-                    {tr(Note.fromMidi(midi))}
-                  </option>
-                ))}
-              </select>
-            </label>
-          );
-        })}
-      </div>
-    </fieldset>
-  );
-}
+import { KeyboardRange } from "./KeyboardRange";
 function DifficultyButtons<T extends string>({
   label,
   help,
@@ -190,12 +78,8 @@ export function PracticeSettings({
   assistanceUsed: boolean;
 }) {
   const tr = useTranslation();
-  const feasible =
-    draft.hand !== "both" ||
-    positionsFor(draft, "right").some((r) =>
-      positionsFor(draft, "left").some((l) => separated(r, l)),
-    );
-  const valid = settingsSchema.safeParse(draft).success && feasible;
+  const error = rangeError(draft);
+  const valid = settingsSchema.safeParse(draft).success && !error;
   const field = <K extends keyof Settings>(key: K, value: Settings[K]) =>
     onChange({ ...draft, [key]: value });
   return (
@@ -317,30 +201,14 @@ export function PracticeSettings({
             </select>
           </label>
         </div>
-        <details className="keyboard-range">
-          <summary>
-            {tr("Keyboard range ·")}
-            {tr(Note.fromMidi(draft.min))}–{tr(Note.fromMidi(draft.max))}
-            {tr(
-              draft.hand === "both"
-                ? ` / LH ${Note.fromMidi(draft.leftMin)}–${Note.fromMidi(draft.leftMax)}`
-                : "",
-            )}
-          </summary>
-          <RangeEditor settings={draft} onChange={onChange} />
-          {draft.hand === "both" && (
-            <RangeEditor settings={draft} left onChange={onChange} />
-          )}
-        </details>
+        <KeyboardRange settings={draft} onChange={onChange} />
         <p className="range-explanation">
           {tr("Music stays inside this range.")}
           {tr(rangeSummary(draft))}
         </p>
-        {!feasible && (
+        {error && (
           <p role="alert" className="settings-help">
-            {tr(
-              "These hand ranges overlap. Lower the left-hand range or raise the right-hand range.",
-            )}
+            {tr(error)}
           </p>
         )}
         <label>

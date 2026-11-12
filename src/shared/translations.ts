@@ -1,5 +1,23 @@
 ﻿// English message keys remain stable across saved practice sessions.
 export const german: Record<string, string> = {
+  "Edit range": "Bereich bearbeiten",
+  "Edit keyboard range": "Tastaturbereich bearbeiten",
+  "Cancel range editing": "Bereichsbearbeitung abbrechen",
+  "Hand to edit": "Hand zum Bearbeiten",
+  "Endpoint to edit": "Grenznote zum Bearbeiten",
+  "Piano keyboard": "Klaviertastatur",
+  "Tap the lowest key, then the highest key. Select an endpoint to adjust it.":
+    "Tippe zuerst auf die tiefste, dann auf die höchste Taste. Wähle eine Grenznote, um sie anzupassen.",
+  "Scroll to explore A0–C8. Use arrow keys to move, Home/End for the ends, and Enter or Space to select.":
+    "Scrolle durch A0–C8. Nutze die Pfeiltasten zum Navigieren, Pos1/Ende für die Randtasten und Eingabe oder Leertaste zum Auswählen.",
+  "Left hand: choose a range containing five consecutive notes in the selected key.":
+    "Linke Hand: Wähle einen Bereich mit fünf aufeinanderfolgenden Tönen der gewählten Tonart.",
+  "Right hand: choose a range containing five consecutive notes in the selected key.":
+    "Rechte Hand: Wähle einen Bereich mit fünf aufeinanderfolgenden Tönen der gewählten Tonart.",
+  "No separate hand positions fit. Widen the ranges, lower the left range or raise the right range. Overlapping ranges are allowed.":
+    "Es passen keine getrennten Handpositionen hinein. Erweitere die Bereiche, verschiebe den linken nach unten oder den rechten nach oben. Die Bereiche dürfen sich überlappen.",
+  Apply: "Übernehmen",
+  Cancel: "Abbrechen",
   "GET CONNECTED, GET PLAYING": "VERBINDEN UND LOSSPIELEN",
   "Connect your keyboard, find your starting position, and play your first notes.":
     "Verbinde dein Keyboard, finde deine Ausgangsposition und spiele deine ersten Noten.",
@@ -82,8 +100,8 @@ export const german: Record<string, string> = {
     "Aus folgt den Vorzeichen deiner Tonart. Höhere Stufen ergänzen tonartfremde Töne.",
   "Off plays one note per hand. Easy adds two-note shapes, Medium adds triads and inversions, and Hard allows selected four-note shapes. Your ranges can limit the available shapes.":
     "Aus spielt eine Note pro Hand. Leicht ergänzt Zweiklänge, Mittel Dreiklänge und Umkehrungen, Schwer ausgewählte Vierklänge. Deine Tonumfänge können die verfügbaren Formen begrenzen.",
-  "Expand Keyboard range to set note names and octaves; middle C is C4. Clefs, key, meter, rhythm, timing calibration and MIDI diagnostics are in Advanced settings.":
-    "Öffne Tonumfang, um Notennamen und Oktaven festzulegen; das mittlere C heißt C4. Notenschlüssel, Tonart, Taktart, Rhythmus, Timing-Kalibrierung und MIDI-Diagnose findest du in Erweiterte Einstellungen.",
+  "Choose Edit range to select the lowest and highest piano keys for each hand; middle C is C4. Apply saves the range for your next exercise. Clefs, key, meter, rhythm, timing calibration and MIDI diagnostics are in Advanced settings.":
+    "Wähle „Bereich bearbeiten“ und bestimme für jede Hand die tiefste und höchste Klaviertaste; das mittlere C ist C4. „Übernehmen“ merkt den Bereich für die nächste Übung vor. Notenschlüssel, Tonart, Taktart, Rhythmus, Timing-Kalibrierung und MIDI-Diagnose findest du in den erweiterten Einstellungen.",
   "Use Apply & generate, Apply & play or New exercise to apply exercise changes. Hint changes take effect immediately, keeping the same notes and score.":
     "Übernimm Übungsänderungen mit Übernehmen & erzeugen, Übernehmen & spielen oder Neue Übung. Änderungen der Hinweise gelten sofort; Noten und Bewertung bleiben erhalten.",
   "Shows every planned finger.": "Zeigt jeden geplanten Finger.",

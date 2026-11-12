@@ -476,13 +476,17 @@ export function App() {
       Math.floor(
         (settings.hand === "both"
           ? Math.min(settings.min, settings.leftMin)
-          : settings.min) / 12,
+          : settings.hand === "left"
+            ? settings.leftMin
+            : settings.min) / 12,
       ) * 12,
     pianoHigh =
       Math.floor(
         (settings.hand === "both"
           ? Math.max(settings.max, settings.leftMax)
-          : settings.max) / 12,
+          : settings.hand === "left"
+            ? settings.leftMax
+            : settings.max) / 12,
       ) *
         12 +
       12,

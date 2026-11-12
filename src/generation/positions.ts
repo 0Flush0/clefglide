@@ -24,8 +24,8 @@ export function diatonicIndex(pitch: string): number {
   return n.oct! * 7 + "CDEFGAB".indexOf(n.letter);
 }
 export function positionsFor(s: Settings, hand: Hand): HandState[] {
-  const min = hand === "left" && s.hand === "both" ? s.leftMin : s.min,
-    max = hand === "left" && s.hand === "both" ? s.leftMax : s.max;
+  const min = hand === "left" ? s.leftMin : s.min,
+    max = hand === "left" ? s.leftMax : s.max;
   // Also called on uncommitted form input, before Apply validates settings.
   if (
     !Number.isInteger(min) ||
@@ -89,6 +89,23 @@ export function separated(a: HandState, b: HandState): boolean {
   const rh = a.hand === "right" ? a : b,
     lh = a.hand === "left" ? a : b;
   return Math.min(...rh.fingerToMidi) > Math.max(...lh.fingerToMidi);
+}
+/** Form feedback uses the same position candidates as the existing planner. */
+export function rangeError(s: Settings): string | undefined {
+  const hands: Hand[] = s.hand === "both" ? ["left", "right"] : [s.hand];
+  for (const hand of hands) {
+    if (!positionsFor(s, hand).length)
+      return hand === "left"
+        ? "Left hand: choose a range containing five consecutive notes in the selected key."
+        : "Right hand: choose a range containing five consecutive notes in the selected key.";
+  }
+  if (
+    s.hand === "both" &&
+    !positionsFor(s, "right").some((r) =>
+      positionsFor(s, "left").some((l) => separated(r, l)),
+    )
+  )
+    return "No separate hand positions fit. Widen the ranges, lower the left range or raise the right range. Overlapping ranges are allowed.";
 }
 export function rangeSummary(s: Settings): string {
   const hands: Hand[] = s.hand === "both" ? ["right", "left"] : [s.hand];

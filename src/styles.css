@@ -24,8 +24,8 @@
   content: "";
   width: 18px;
   height: 18px;
-  background: url("./shared/assets/GitHub_Invertocat_Black.svg") center / contain
-    no-repeat;
+  background: url("./shared/assets/GitHub_Invertocat_Black.svg") center /
+    contain no-repeat;
 }
 [data-theme="dark"] .github-link::before {
   background-image: url("./shared/assets/GitHub_Invertocat_White.svg");
@@ -1436,6 +1436,174 @@ footer span:last-child {
 .keyboard-range {
   grid-column: 1/-1;
 }
+.range-overview,
+.range-label,
+.range-dialog-heading,
+.range-dialog-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.range-overview {
+  margin-bottom: 8px;
+}
+.range-overview > span {
+  font-size: 12px;
+  font-weight: 600;
+}
+.range-label {
+  font-size: 12px;
+  padding: 6px 10px;
+  border-left: 4px solid var(--range-color);
+}
+.range-left {
+  --range-color: #325eb1;
+  --range-fill: #d8e5ff;
+}
+.range-right {
+  --range-color: #a24b17;
+  --range-fill: #ffe3c5;
+}
+.range-dialog {
+  inset: 0;
+  margin: 0;
+  width: 100%;
+  height: 100dvh;
+  max-width: none;
+  max-height: none;
+  padding: 0;
+  border: 0;
+  background: var(--paper);
+  color: var(--ink);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+body:has(.range-dialog[open]) {
+  overflow: hidden;
+}
+.range-dialog-content {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: max(20px, env(safe-area-inset-top))
+    max(20px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom))
+    max(20px, env(safe-area-inset-left));
+}
+.range-dialog-heading h2 {
+  font-size: 22px;
+}
+.range-dialog-content > p {
+  margin: 0;
+}
+.range-dialog .settings-help {
+  font-size: 12px;
+}
+.range-hand-switch,
+.range-endpoints {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.range-hand-switch button {
+  border-left: 5px solid var(--range-color);
+}
+.range-hand-switch button[aria-pressed="true"],
+.range-endpoints button[aria-pressed="true"] {
+  background: var(--soft);
+  box-shadow: inset 0 -3px var(--green);
+  font-weight: 700;
+}
+.range-keyboard-scroll {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  padding: 8px 4px 18px;
+  flex-shrink: 0;
+}
+.range-keyboard {
+  position: relative;
+  height: clamp(150px, 26dvh, 240px);
+  min-width: 1872px;
+}
+.range-keyboard .range-key {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 0 0 10px;
+  border: 1px solid #7c8582;
+  border-radius: 0 0 5px 5px;
+  font-size: 10px;
+  color: #263d38;
+  background: #fff;
+  touch-action: manipulation;
+}
+.range-keyboard .black-key {
+  height: 62%;
+  z-index: 1;
+  color: #fff;
+  background: #202826;
+  border-color: #111;
+}
+.range-keyboard .range-key[aria-pressed="true"] {
+  background: var(--range-fill);
+  color: #172a25;
+}
+.range-keyboard .black-key[aria-pressed="true"] {
+  background: var(--range-color);
+  color: #fff;
+}
+.range-keyboard .range-key-endpoint {
+  box-shadow: inset 0 0 0 3px var(--range-color);
+}
+.range-keyboard .black-key.range-key-endpoint {
+  box-shadow: inset 0 0 0 3px #fff;
+}
+.range-keyboard .range-key:focus-visible {
+  z-index: 2;
+  outline: 3px solid #ac32bc;
+  outline-offset: -4px;
+}
+.range-key-marker {
+  font-size: 14px;
+}
+.range-feedback {
+  min-height: 32px;
+  font-size: 13px;
+}
+.range-feedback p {
+  margin: 0;
+}
+.range-dialog-actions {
+  justify-content: flex-end;
+  margin-top: auto;
+  padding: 0;
+  letter-spacing: 0;
+}
+.range-dialog-actions button {
+  min-width: 110px;
+  min-height: 44px;
+}
+@media (max-width: 600px) {
+  .range-dialog-content {
+    gap: 14px;
+    padding: 16px;
+  }
+  .range-dialog-heading h2 {
+    font-size: 19px;
+  }
+  .range-endpoints button {
+    flex: 1;
+  }
+  .range-keyboard {
+    min-width: 2288px;
+  }
+}
 .rail {
   width: 176px;
   padding: 24px 16px;
@@ -1647,21 +1815,6 @@ footer {
 .controls .control-grid {
   gap: 8px;
 }
-.range-editor {
-  border: 0;
-  padding: 0;
-  margin: 0;
-  min-width: 0;
-}
-.range-editor legend {
-  font-size: 11px;
-  color: var(--muted);
-  padding: 0;
-  margin-bottom: 5px;
-}
-.range-editor label {
-  font-size: 10px;
-}
 .range-explanation,
 .settings-help {
   font-size: 10px;
@@ -1849,9 +2002,6 @@ footer {
   }
   .settings-scroll > .control-grid {
     align-items: start;
-  }
-  .settings-scroll > .range-editor {
-    grid-column: 1/-1;
   }
   .settings-apply {
     padding-bottom: 0;

@@ -1,4 +1,112 @@
 import { test, expect } from "@playwright/test";
+
+test("keyboard range dialog supports independent ranges, keyboard access and narrow screens", async ({
+  page,
+}, testInfo) => {
+  await page.goto("/");
+  await page.getByLabel("Hands", { exact: true }).selectOption("both");
+  const edit = page.getByRole("button", { name: "Edit range" });
+  await edit.click();
+  const dialog = page.getByRole("dialog", { name: "Edit keyboard range" });
+  await expect(dialog).toBeVisible();
+  const piano = dialog.getByRole("group", { name: "Piano keyboard" });
+  await expect(piano.getByRole("button")).toHaveCount(88);
+  await expect(
+    dialog.getByRole("button", { name: "Lowest note · C4" }),
+  ).toBeFocused();
+  const choose = async (name: string) => {
+    const key = piano.getByRole("button", { name, exact: true });
+    if (testInfo.project.name === "tablet") await key.tap();
+    else await key.click();
+  };
+  const c4 = piano.getByRole("button", { name: "C4", exact: true });
+  await c4.focus();
+  await c4.press("ArrowRight");
+  const db4 = piano.getByRole("button", { name: "Db4", exact: true });
+  await expect(db4).toBeFocused();
+  await db4.press("Enter");
+  await expect(
+    dialog.getByRole("button", { name: "Lowest note · Db4" }),
+  ).toHaveAttribute("aria-pressed", "false");
+  await choose("C5");
+  await dialog.getByRole("button", { name: "Left hand · C3–G3" }).click();
+  await choose("C3");
+  await choose("C5");
+  await expect(
+    dialog.getByRole("button", { name: "Apply", exact: true }),
+  ).toBeEnabled();
+  await page.screenshot({
+    path: `.tools/range-dialog-${testInfo.project.name}.png`,
+  });
+  for (const viewport of [
+    { width: 1024, height: 768 },
+    { width: 390, height: 700 },
+  ]) {
+    await page.setViewportSize(viewport);
+    expect(
+      await dialog.evaluate((node) => {
+        const rect = node.getBoundingClientRect();
+        return (
+          rect.width <= innerWidth &&
+          rect.height <= innerHeight &&
+          node.scrollWidth <= innerWidth
+        );
+      }),
+    ).toBe(true);
+    expect(
+      await page
+        .locator(".range-keyboard-scroll")
+        .evaluate((node) => node.scrollWidth > node.clientWidth),
+    ).toBe(true);
+    await expect(
+      piano.getByRole("button", { name: "C5", exact: true }),
+    ).toBeInViewport();
+    await expect(
+      dialog.getByRole("button", { name: "Apply", exact: true }),
+    ).toBeInViewport();
+  }
+  await page.screenshot({
+    path: `.tools/range-dialog-phone-${testInfo.project.name}.png`,
+  });
+  await dialog.getByRole("button", { name: "Apply", exact: true }).click();
+  await expect(dialog).not.toBeVisible();
+  await expect(edit).toBeFocused();
+  await expect(page.locator(".keyboard-range")).toContainText("C3–C5");
+  await expect(page.locator(".keyboard-range")).toContainText("Db4–C5");
+  await page.getByRole("button", { name: "Apply & generate" }).click();
+  await page.reload();
+  await expect(page.getByLabel("Hands", { exact: true })).toHaveValue("both");
+  await expect(page.locator(".keyboard-range")).toContainText("Db4–C5");
+  await edit.click();
+  await choose("A0");
+  await dialog.press("Escape");
+  await expect(dialog).not.toBeVisible();
+  await expect(edit).toBeFocused();
+  await expect(page.locator(".keyboard-range")).toContainText("Db4–C5");
+  await page.evaluate(() => {
+    localStorage.setItem("sightflow-language", "de");
+  });
+  await page.reload();
+  await page.evaluate(() => {
+    document.documentElement.dataset.theme = "dark";
+  });
+  await page.getByRole("button", { name: "Bereich bearbeiten" }).click();
+  const germanDialog = page.getByRole("dialog", {
+    name: "Tastaturbereich bearbeiten",
+  });
+  await expect(
+    germanDialog.getByRole("button", { name: "Tiefste Note · Db4" }),
+  ).toBeFocused();
+  await expect(
+    germanDialog.getByRole("button", { name: "Übernehmen", exact: true }),
+  ).toBeVisible();
+  await page.screenshot({
+    path: `.tools/range-dialog-dark-de-${testInfo.project.name}.png`,
+  });
+  await germanDialog
+    .getByRole("button", { name: "Abbrechen", exact: true })
+    .click();
+});
 test("slow tempo and responsive menus remain accessible", async ({ page }) => {
   await page.goto("/");
   const tempo = page.getByRole("slider", { name: "Tempo", exact: true });
@@ -79,9 +187,11 @@ test("hints disappear while pitch expectations remain, range and clef apply", as
   await page.goto("/");
   await page.locator(".piano-card summary").click();
   await page.getByText("Advanced settings", { exact: true }).click();
-  await page.locator(".keyboard-range summary").click();
-  await page.getByLabel("Lowest note").selectOption("48");
-  await page.getByLabel("Highest note").selectOption("55");
+  await page.getByRole("button", { name: "Edit range" }).click();
+  const range = page.getByRole("dialog", { name: "Edit keyboard range" });
+  await range.getByRole("button", { name: "C3", exact: true }).click();
+  await range.getByRole("button", { name: "G3", exact: true }).click();
+  await range.getByRole("button", { name: "Apply", exact: true }).click();
   await page.getByRole("combobox", { name: /^Clef/ }).selectOption("bass");
   await page.getByLabel("Fingering assistance").selectOption("all");
   await page.getByRole("button", { name: "Apply & generate" }).click();
@@ -107,8 +217,11 @@ test("independent difficulty buttons apply a spaced exercise without page overfl
   await expect(
     page.getByText(/No approved spacing pattern fits/),
   ).toBeVisible();
-  await page.locator(".keyboard-range summary").click();
-  await page.getByLabel("Highest note").selectOption("84");
+  await page.getByRole("button", { name: "Edit range" }).click();
+  const range = page.getByRole("dialog", { name: "Edit keyboard range" });
+  await range.getByRole("button", { name: "Highest note · G4" }).click();
+  await range.getByRole("button", { name: "C6", exact: true }).click();
+  await range.getByRole("button", { name: "Apply", exact: true }).click();
   await page
     .getByRole("group", { name: "Note jumps" })
     .getByRole("button", { name: "Large" })

@@ -61,8 +61,8 @@ export function validatePhrase(p: Phrase): string[] {
   )
     errors.push("Missing or unexpected hand state.");
   for (const pos of [...p.positions, ...p.initial.hands, ...p.final.hands]) {
-    const min = pos.hand === "left" && s.hand === "both" ? s.leftMin : s.min,
-      max = pos.hand === "left" && s.hand === "both" ? s.leftMax : s.max;
+    const min = pos.hand === "left" ? s.leftMin : s.min,
+      max = pos.hand === "left" ? s.leftMax : s.max;
     const midis = pos.pitches.map((x) => Note.midi(x) ?? -1),
       scale = Scale.get(`${s.key} major`).notes;
     // Independently reconstruct allowed finger-order patterns and safety caps.

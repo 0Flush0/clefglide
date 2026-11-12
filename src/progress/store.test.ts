@@ -8,8 +8,111 @@ import {
   settingsSchema,
   v2SettingsSchema,
   v3SettingsSchema,
+  v4SettingsSchema,
 } from "../score/model";
 import { applyHandMovements } from "../practice/presets";
+it("persists and reloads each hand range independently", async () => {
+  const settings = { ...defaults, min: 72, max: 84, leftMin: 33, leftMax: 52 };
+  await db.preferences.put({ id: "range-settings", settings });
+  const saved = (await db.preferences.get("range-settings"))!;
+  expect(settingsSchema.parse(saved.settings)).toEqual(settings);
+  const updated = { ...saved.settings, leftMin: 36, leftMax: 57 };
+  await db.preferences.put({ id: "range-settings", settings: updated });
+  expect(
+    settingsSchema.parse(
+      (await db.preferences.get("range-settings"))!.settings,
+    ),
+  ).toEqual(updated);
+  expect(fingerprint(settings)).not.toBe(fingerprint(updated));
+  const session = record("range-session", "range-seed", updated, 0, []);
+  await importSessions(
+    JSON.stringify({ format: "sightflow-1", sessions: [session] }),
+  );
+  expect((await db.sessions.get(session.id))!.settings).toEqual(updated);
+});
+
+it("migrates shared left-only preferences once and preserves right/both preferences", () => {
+  for (const schema of [
+    legacySettingsSchema,
+    v2SettingsSchema,
+    v3SettingsSchema,
+    v4SettingsSchema,
+  ]) {
+    const old = schema.parse({
+      ...defaults,
+      hints: "all",
+      hand: "left",
+      min: 57,
+      max: 76,
+      leftMin: 36,
+      leftMax: 55,
+    });
+    const migrated = settingsSchema.parse(old);
+    expect(migrated).toMatchObject({
+      rangeVersion: 2,
+      min: 57,
+      max: 76,
+      leftMin: 57,
+      leftMax: 76,
+    });
+    const edited = { ...migrated, leftMin: 45, leftMax: 64 };
+    expect(settingsSchema.parse(edited)).toEqual(edited);
+    for (const hand of ["right", "both"]) {
+      expect(settingsSchema.parse({ ...old, hand })).toMatchObject({
+        min: 57,
+        max: 76,
+        leftMin: 36,
+        leftMax: 55,
+      });
+    }
+  }
+  expect(
+    settingsSchema.parse({ hand: "left", min: 48, max: 55 }),
+  ).toMatchObject({ leftMin: 48, leftMax: 55 });
+  expect(settingsSchema.safeParse({ ...defaults, min: 20 }).success).toBe(
+    false,
+  );
+  expect(settingsSchema.safeParse({ ...defaults, leftMax: 109 }).success).toBe(
+    false,
+  );
+});
+
+it("retains v4 backups and fingerprints without migrating historical left-only bounds", async () => {
+  const settings = v4SettingsSchema.parse({
+    ...defaults,
+    hand: "left",
+    min: 60,
+    max: 79,
+    leftMin: 36,
+    leftMax: 55,
+  });
+  const session = {
+    id: "v4-ranges",
+    date: 100,
+    seed: "old-left",
+    settings,
+    fingerprint: "4.0.0:" + JSON.stringify(settings) + "|assistance:assisted",
+    ms: 0,
+    results: [],
+    assistanceUsed: true,
+    generatorVersion: "4.0.0",
+  };
+  await importSessions(
+    JSON.stringify({ format: "sightflow-1", sessions: [session] }),
+  );
+  expect(await db.sessions.get(session.id)).toEqual(session);
+  expect(fingerprint(settingsSchema.parse(settings))).not.toBe(
+    session.fingerprint,
+  );
+  await expect(
+    importSessions(
+      JSON.stringify({
+        format: "sightflow-1",
+        sessions: [{ ...session, settings: { ...settings, leftMin: 37 } }],
+      }),
+    ),
+  ).rejects.toThrow(/fingerprint/);
+});
 it("roundtrips validated IndexedDB sessions and exports real metrics", async () => {
   const s = record("fixture", "seed", defaults, 1000, [
     { id: "a", pitch: 60, hand: "right", kind: "correct", first: true },

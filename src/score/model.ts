@@ -1,5 +1,5 @@
 import { z } from "zod";
-export const VERSION = "4.0.0";
+export const VERSION = "5.0.0";
 export const TPQ = 480;
 export const legacySettingsSchema = z.object({
   hand: z.enum(["right", "left", "both"]).default("right"),
@@ -39,9 +39,17 @@ export const v3SettingsSchema = v2SettingsSchema
     handMovements: z.enum(["off", "easy", "medium", "hard"]),
     fingerSpacing: z.enum(["off", "easy", "medium", "hard"]),
   });
-export const settingsValuesSchema = v3SettingsSchema.extend({
+export const v4SettingsSchema = v3SettingsSchema.extend({
   accidentals: z.enum(["off", "easy", "medium", "hard"]).default("off"),
   chords: z.enum(["off", "easy", "medium", "hard"]).default("off"),
+});
+export const settingsValuesSchema = v4SettingsSchema.extend({
+  // min/max remain the right-hand bounds for saved-configuration compatibility.
+  min: z.number().int().min(21).max(108).default(60),
+  max: z.number().int().min(21).max(108).default(67),
+  leftMin: z.number().int().min(21).max(108).default(48),
+  leftMax: z.number().int().min(21).max(108).default(55),
+  rangeVersion: z.literal(2).default(2),
 });
 /** Migrate active preferences only. Historical records retain their old schema. */
 export const settingsSchema = z.preprocess((input) => {
@@ -51,6 +59,11 @@ export const settingsSchema = z.preprocess((input) => {
   const interval = typeof s.interval === "number" ? s.interval : 2;
   return {
     ...s,
+    // Old left-only practice used the shared bounds, even when LH bounds existed.
+    // Preserve that active preference; right/both settings already have two ranges.
+    ...(s.rangeVersion === undefined && s.hand === "left"
+      ? { leftMin: s.min ?? 60, leftMax: s.max ?? 67 }
+      : {}),
     noteJumps:
       s.noteJumps ??
       (old === "hard" || interval > 4

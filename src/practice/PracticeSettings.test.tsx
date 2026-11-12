@@ -77,9 +77,8 @@ it("offers five independent four-button groups with details collapsed", () => {
   expect(ui.container.querySelector(".advanced")?.hasAttribute("open")).toBe(
     false,
   );
-  expect(
-    ui.container.querySelector(".keyboard-range")?.hasAttribute("open"),
-  ).toBe(false);
+  expect(ui.queryByRole("dialog")).toBeNull();
+  expect(ui.getByRole("button", { name: "Edit range" })).toBeTruthy();
   const before = latest;
   choose("Accidentals", "Hard");
   expect(latest).toEqual({ ...before, accidentals: "hard" });

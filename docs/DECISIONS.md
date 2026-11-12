@@ -1,5 +1,12 @@
 # Implementation decisions
 
+## Generator v5: independent hand ranges
+
+- Active settings retain `min`/`max` as right-hand bounds and `leftMin`/`leftMax` as left-hand bounds, regardless of which hands are enabled. `rangeVersion: 2` identifies the independent interpretation. Switching hands or difficulty preserves both ranges. Both support A0–C8 (MIDI 21–108); a usable five-note position in the selected key is still required.
+- Legacy left-only preferences used `min`/`max` for the active left hand. Migration copies those bounds into the left range and retains the shared values for the right hand. Legacy right/both preferences retain both stored ranges. Migration applies only to active preferences, once; historical settings and fingerprints are unchanged.
+- The compact Edit range action opens a full-screen native dialog with an 88-key piano, horizontal scrolling, hand switches, endpoint controls, keyboard navigation and staged Apply/Cancel. Invalid narrow ranges receive feedback before Apply. Overlapping configured ranges are allowed when separate playable positions fit; generation and independent validation retain the existing collision rules.
+- Positions, chromatic alternatives, chords and explicit rested relocations use the bound pair for their own hand, including in single-hand practice and continuous chunks. The range interpretation changes the generator version to **5.0.0**. V1–v4 history/backups retain their original schemas and comparison series; exact replay remains limited to the current generator.
+
 ## Generator v4: chromatic pitch plans and simultaneous events
 
 These rules extend v3. The five independent controls are Note jumps, Hand movements, Finger spacing, Accidentals and Chords. The latter two default to Off when migrating active preferences. Ranges, rest preparation, movement caps, explicit landing cues and exact integer ticks remain authoritative.

@@ -10,7 +10,13 @@ import {
 import { createCanvas } from "@napi-rs/canvas";
 import { App } from "./App";
 import { db, record } from "../progress/store";
-import { defaults, fingerprint, VERSION, noteheads } from "../score/model";
+import {
+  defaults,
+  fingerprint,
+  VERSION,
+  noteheads,
+  v4SettingsSchema,
+} from "../score/model";
 import { metrics } from "../scoring/engine";
 import { generate } from "../generation/planner";
 import { applyHandMovements } from "./presets";
@@ -22,6 +28,21 @@ afterEach(() => {
 });
 
 function setupNotationDom() {
+  Object.defineProperties(HTMLDialogElement.prototype, {
+    showModal: {
+      configurable: true,
+      value() {
+        this.setAttribute("open", "");
+      },
+    },
+    close: {
+      configurable: true,
+      value() {
+        this.removeAttribute("open");
+        this.dispatchEvent(new Event("close"));
+      },
+    },
+  });
   vi.stubGlobal(
     "ResizeObserver",
     class {
@@ -39,6 +60,74 @@ function setupNotationDom() {
     value: () => {},
   });
 }
+
+it("restores old left-only preferences and persists both ranges through hand switches and reload", async () => {
+  setupNotationDom();
+  await db.sessions.clear();
+  await db.preferences.clear();
+  await db.table("preferences").put({
+    id: "settings",
+    settings: v4SettingsSchema.parse({
+      ...defaults,
+      hand: "left",
+      min: 48,
+      max: 55,
+      leftMin: 36,
+      leftMax: 43,
+    }),
+  });
+  const ui = render(<App />);
+  await waitFor(() =>
+    expect((ui.getByLabelText("Hands") as HTMLSelectElement).value).toBe(
+      "left",
+    ),
+  );
+  expect(ui.container.querySelector(".keyboard-range")?.textContent).toContain(
+    "C3–G3",
+  );
+  expect(
+    ui
+      .getByTestId("target")
+      .getAttribute("data-pitches")
+      ?.split(",")
+      .map(Number)
+      .every((n) => n >= 48 && n <= 55),
+  ).toBe(true);
+  fireEvent.change(ui.getByLabelText("Hands"), { target: { value: "right" } });
+  fireEvent.click(ui.getByRole("button", { name: "Edit range" }));
+  const dialog = within(ui.getByRole("dialog"));
+  fireEvent.click(dialog.getByRole("button", { name: "C5" }));
+  fireEvent.click(dialog.getByRole("button", { name: "G5" }));
+  fireEvent.click(dialog.getByRole("button", { name: "Apply" }));
+  fireEvent.click(ui.getByRole("button", { name: "Apply & generate" }));
+  await waitFor(async () =>
+    expect((await db.preferences.get("settings"))?.settings).toMatchObject({
+      rangeVersion: 2,
+      min: 72,
+      max: 79,
+      leftMin: 48,
+      leftMax: 55,
+    }),
+  );
+  fireEvent.change(ui.getByLabelText("Hands"), { target: { value: "both" } });
+  fireEvent.click(ui.getByRole("button", { name: "Apply & generate" }));
+  await waitFor(async () =>
+    expect((await db.preferences.get("settings"))?.settings.hand).toBe("both"),
+  );
+  ui.unmount();
+  const restored = render(<App />);
+  await waitFor(() =>
+    expect((restored.getByLabelText("Hands") as HTMLSelectElement).value).toBe(
+      "both",
+    ),
+  );
+  expect(
+    restored.container.querySelector(".keyboard-range")?.textContent,
+  ).toContain("C3–G3");
+  expect(
+    restored.container.querySelector(".keyboard-range")?.textContent,
+  ).toContain("C5–G5");
+});
 
 it("counts down only during active practice and expires on the session clock", async () => {
   setupNotationDom();
@@ -395,23 +484,23 @@ it("switches All/Smart/None and Reveal during play without resetting the target,
   expect((await db.sessions.toArray())[0].ms).toBeGreaterThan(0);
 });
 
-it("pending exercise changes can generate and start in one action; invalid note boundaries are disabled", async () => {
+it("pending exercise changes can generate and start in one action; invalid ranges cannot apply", async () => {
   setupNotationDom();
   await db.sessions.clear();
   await db.preferences.clear();
   const ui = render(<App />);
-  const low = ui.getByLabelText("Lowest note") as HTMLSelectElement;
-  expect(low.selectedOptions[0].textContent).toBe("C4");
+  fireEvent.click(ui.getByRole("button", { name: "Edit range" }));
+  const dialog = within(ui.getByRole("dialog"));
+  expect(dialog.getByRole("button", { name: "Lowest note · C4" })).toBeTruthy();
+  fireEvent.click(dialog.getByRole("button", { name: "E4" }));
   expect(
-    (ui.getByLabelText("Highest note") as HTMLSelectElement).selectedOptions[0]
-      .textContent,
-  ).toBe("G4");
-  expect(
-    (low.querySelector('option[value="64"]') as HTMLOptionElement).disabled,
+    (dialog.getByRole("button", { name: "Apply" }) as HTMLButtonElement)
+      .disabled,
   ).toBe(true);
-  fireEvent.change(ui.getByLabelText("Highest note"), {
-    target: { value: "84" },
-  });
+  fireEvent.click(dialog.getByRole("button", { name: "Lowest note · E4" }));
+  fireEvent.click(dialog.getByRole("button", { name: "C4" }));
+  fireEvent.click(dialog.getByRole("button", { name: "C6" }));
+  fireEvent.click(dialog.getByRole("button", { name: "Apply" }));
   fireEvent.click(ui.getByRole("button", { name: "Apply & play" }));
   await waitFor(() =>
     expect(ui.getByRole("button", { name: "Pause" })).not.toBeNull(),
@@ -435,9 +524,11 @@ it("applies real difficulty without changing range, reveals advance shifts, stre
   const ui = render(<App />);
   fireEvent.click(ui.container.querySelector(".piano-card summary")!);
   expect(ui.getByText(/Only one hand position fits this range/)).not.toBeNull();
-  fireEvent.change(ui.getByLabelText("Highest note"), {
-    target: { value: "84" },
-  });
+  fireEvent.click(ui.getByRole("button", { name: "Edit range" }));
+  const dialog = within(ui.getByRole("dialog"));
+  fireEvent.click(dialog.getByRole("button", { name: "Highest note · G4" }));
+  fireEvent.click(dialog.getByRole("button", { name: "C6" }));
+  fireEvent.click(dialog.getByRole("button", { name: "Apply" }));
   fireEvent.click(
     within(ui.getByRole("group", { name: "Hand movements" })).getByRole(
       "button",
@@ -449,8 +540,8 @@ it("applies real difficulty without changing range, reveals advance shifts, stre
       name: "Large",
     }),
   );
-  expect((ui.getByLabelText("Highest note") as HTMLSelectElement).value).toBe(
-    "84",
+  expect(ui.container.querySelector(".keyboard-range")?.textContent).toContain(
+    "C4–C6",
   );
   fireEvent.click(ui.getByText("Advanced settings", { exact: true }));
   fireEvent.change(ui.getByLabelText("Hand-shift frequency"), {

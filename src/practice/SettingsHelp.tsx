@@ -372,7 +372,7 @@ export function SettingsHelp({
           </dl>
           <p>
             {tr(
-              "Expand Keyboard range to set note names and octaves; middle C is C4. Clefs, key, meter, rhythm, timing calibration and MIDI diagnostics are in Advanced settings.",
+              "Choose Edit range to select the lowest and highest piano keys for each hand; middle C is C4. Apply saves the range for your next exercise. Clefs, key, meter, rhythm, timing calibration and MIDI diagnostics are in Advanced settings.",
             )}
           </p>
         </details>
