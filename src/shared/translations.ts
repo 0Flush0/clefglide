@@ -1,5 +1,11 @@
 ﻿// English message keys remain stable across saved practice sessions.
 export const german: Record<string, string> = {
+  "Legal Notice (Impressum)": "Impressum",
+  "Information pursuant to Section 18(1) MStV":
+    "Angaben gemäß § 18 Abs. 1 MStV",
+  "80805 Munich": "80805 München",
+  Germany: "Deutschland",
+  "Back to ClefGlide": "Zurück zu ClefGlide",
   "Edit range": "Bereich bearbeiten",
   "Edit keyboard range": "Tastaturbereich bearbeiten",
   "Cancel range editing": "Bereichsbearbeitung abbrechen",

@@ -1327,6 +1327,12 @@ export function App() {
             {tr("ClefGlide")}
             <span>{tr("Read ahead. Play naturally.")}</span>
             <SourceLinks />
+            <a
+              className="licenses-link"
+              href={lang === "de" ? "#/de/impressum" : "#/en/legal-notice"}
+            >
+              {tr("Legal Notice (Impressum)")}
+            </a>
             <span>
               {tr("Local-first · Generator v")}
               {tr(VERSION)}
