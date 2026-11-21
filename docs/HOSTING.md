@@ -51,6 +51,8 @@ See [GitHub's secret setup instructions](https://docs.github.com/en/actions/how-
 
 The title, description, canonical URL, and Open Graph and Twitter metadata are in [index.html](../index.html). The [robots file](../public/robots.txt) allows crawler access to the app and its assets. The [sitemap](../public/sitemap.xml) lists the homepage because Practice, Progress and Settings are views within it. Vite copies both files and the [Google ownership file](../public/google8841eb056d99831e.html) to the site root.
 
+The homepage's existing visible heading, “Read ahead. Play naturally.” (or its German translation), is already an `<h1>` inside `<main>`. React renders one H1 for the active view; inactive tabs do not keep their headings in the DOM. The initial HTML response contains an empty React root, so a crawler that does not execute JavaScript will find no H1 and may report “H1 tag missing”. Check the rendered DOM as well as the page source when investigating this notice. SSR and prerendering are not part of the current static SPA architecture.
+
 After a deployment, check the following on the live host.
 
 1. View the page source and confirm the title, description and canonical URL. The homepage and bundled assets should return HTTP 200. Inspect the HTML and response headers for an unexpected `noindex` directive, including any `X-Robots-Tag` from a proxy.

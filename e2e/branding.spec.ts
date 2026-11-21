@@ -40,12 +40,16 @@ for (const language of ["en", "de"] as const) {
     ).toBeVisible();
     await expect(
       page.getByRole("heading", {
+        level: 1,
+        exact: true,
         name:
           language === "en"
             ? "Read ahead. Play naturally."
             : "Vorauslesen. Natürlich spielen.",
       }),
     ).toBeVisible();
+    await expect(page.locator("h1")).toHaveCount(1);
+    await expect(page.locator("main h1")).toHaveCount(1);
     await page.screenshot({
       path: testInfo.outputPath("practice-light.png"),
       fullPage: true,
@@ -63,6 +67,8 @@ for (const language of ["en", "de"] as const) {
       ? ["Practice", "Settings & help", "Progress"]
       : ["Üben", "Einstellungen & Hilfe", "Fortschritt"]) {
       await page.getByRole("tab", { name: tab, exact: true }).click();
+      await expect(page.locator("h1")).toHaveCount(1);
+      await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
       await expect(page.locator("body")).not.toContainText(/sightflow/i);
       expect(
         await page.evaluate(
