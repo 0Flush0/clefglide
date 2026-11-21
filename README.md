@@ -2,7 +2,7 @@
 
 ClefGlide is a browser-based piano sight-reading trainer that generates new sheet music as you play. It runs without an account or application server and keeps your practice history in your browser.
 
-[Try ClefGlide](https://piano.rit.cl/)
+[Try ClefGlide](https://clefglide.org/)
 
 ![ClefGlide practice screen with sheet music, fingering guidance and difficulty controls](docs/practice.png)
 

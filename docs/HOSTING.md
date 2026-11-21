@@ -2,7 +2,7 @@
 
 `npm run build` writes the static site to `dist/`. Serve it over HTTPS so Chrome can offer Web MIDI when the user selects **Connect MIDI**. Use a top-level page, or allow MIDI through the embedding page’s permissions policy. The app requires no runtime backend, accounts or API keys.
 
-Production is served at [piano.rit.cl](https://piano.rit.cl/). The [GitHub Actions workflow](../.github/workflows/deploy.yml) publishes `ghcr.io/0flush0/sightflow` and updates the existing Docker Compose project over SSH. The [Dockerfile](../Dockerfile) builds the app and copies `dist/` into Nginx. The image name and `SIGHTFLOW_IMAGE` retain the original SightFlow name for compatibility.
+Production is served at [clefglide.org](https://clefglide.org/). The [GitHub Actions workflow](../.github/workflows/deploy.yml) publishes `ghcr.io/0flush0/sightflow` and updates the existing Docker Compose project over SSH. The [Dockerfile](../Dockerfile) builds the app and copies `dist/` into Nginx. The image name and `SIGHTFLOW_IMAGE` retain the original SightFlow name for compatibility.
 
 ## Production deployment setup
 

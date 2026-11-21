@@ -9,15 +9,17 @@ for (const language of ["en", "de"] as const) {
       localStorage.setItem("sightflow-language", lang);
     }, language);
     await page.goto("/");
-    await expect(page).toHaveTitle("ClefGlide | Free Piano Sight-Reading Exercises");
+    await expect(page).toHaveTitle(
+      "Piano Sight-Reading Trainer with Smart Fingering | ClefGlide",
+    );
     await expect(page.locator("html")).toHaveAttribute("lang", language);
     await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
       "href",
-      "https://piano.rit.cl/",
+      "https://clefglide.org/",
     );
     await expect(page.locator('meta[name="description"]')).toHaveAttribute(
       "content",
-      /ClefGlide/,
+      "Practice piano sight-reading with adaptive musical exercises, intelligent fingering hints, natural hand movements, and real-time MIDI feedback. Free online.",
     );
     for (const selector of [
       'meta[property="og:title"]',
@@ -25,7 +27,7 @@ for (const language of ["en", "de"] as const) {
     ]) {
       await expect(page.locator(selector)).toHaveAttribute(
         "content",
-        "ClefGlide | Free Piano Sight-Reading Exercises",
+        "Piano Sight-Reading Trainer with Smart Fingering | ClefGlide",
       );
     }
     const icon = await page.request.get("/favicon.svg");
