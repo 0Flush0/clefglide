@@ -39,16 +39,9 @@ On GitHub, open the repository's **Settings → Secrets and variables → Action
 | `SFTP_HOST` | SFTP hostname or IP only, without `sftp://`, a port or a path |
 | `SFTP_USER` | SFTP login username |
 | `SFTP_PASSWORD` | SFTP login password; this job uses password authentication |
-| `SFTP_KNOWN_HOSTS` | Verified OpenSSH `known_hosts` entry or entries for this SFTP server |
 | `SFTP_PORT` | Optional port; defaults to `22` |
 
-For `SFTP_KNOWN_HOSTS`, obtain the server's public host key from your hosting provider or collect it locally with the command below, replacing the example host and port:
-
-```sh
-ssh-keyscan -p 22 sftp.example.com
-```
-
-Compare the collected key's fingerprint with the fingerprint supplied by your hosting provider before saving the output as `SFTP_KNOWN_HOSTS`. For a nonstandard port, keep the `[hostname]:port` format produced by `ssh-keyscan`. The workflow requires a matching host key and does not automatically trust unknown servers.
+The job automatically retrieves the server's host keys with `ssh-keyscan` on each run, using `SFTP_PORT` or port `22`, and stops if no keys are returned. No `SFTP_KNOWN_HOSTS` secret is needed; you can remove it if previously added. SSH requires the connection to match a retrieved key. These keys are trusted as returned by the network and are not independently verified against the hosting provider's fingerprint.
 
 Keep the existing `DEPLOY_*` secrets. The Docker image publication and SSH/Compose deployment jobs are unchanged and run independently of the SFTP job after checks pass. Missing SFTP secrets or a failed transfer fail the SFTP job without preventing those existing jobs from running. After adding the secrets, push to `main` or select **Actions → Build and deploy ClefGlide → Run workflow** with branch `main`. Check the SFTP website over HTTPS after the transfer.
 

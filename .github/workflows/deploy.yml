@@ -125,17 +125,16 @@ jobs:
           SFTP_PORT: ${{ secrets.SFTP_PORT }}
           SFTP_USER: ${{ secrets.SFTP_USER }}
           LFTP_PASSWORD: ${{ secrets.SFTP_PASSWORD }}
-          SFTP_KNOWN_HOSTS: ${{ secrets.SFTP_KNOWN_HOSTS }}
         run: |
           set -euo pipefail
           : "${SFTP_HOST:?Add the SFTP_HOST repository secret}"
           : "${SFTP_USER:?Add the SFTP_USER repository secret}"
           : "${LFTP_PASSWORD:?Add the SFTP_PASSWORD repository secret}"
-          : "${SFTP_KNOWN_HOSTS:?Add the SFTP_KNOWN_HOSTS repository secret}"
           test -s dist/index.html
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
-          printf '%s\n' "$SFTP_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          ssh-keyscan -H -T 10 -p "${SFTP_PORT:-22}" "$SFTP_HOST" > ~/.ssh/known_hosts
+          test -s ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
           lftp --env-password --user "$SFTP_USER" \
             -p "${SFTP_PORT:-22}" "sftp://$SFTP_HOST" <<'SFTP'
