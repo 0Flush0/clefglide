@@ -167,7 +167,6 @@ export const german: Record<string, string> = {
   "Dismiss error": "Fehlermeldung schließen",
   "Fresh music, at your own pace.": "Neue Musik in deinem eigenen Tempo.",
   major: "Dur",
-  "Plan checked": "Plan geprüft",
   Bar: "Takt",
   "bars in view · endless music": "Takte sichtbar · endlose Musik",
   "Restart this seed": "Diese Übung neu starten",

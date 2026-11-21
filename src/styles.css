@@ -539,13 +539,6 @@ main {
   margin: 0 8px;
   font-weight: 400;
 }
-.validated {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 10px;
-  color: #66805b;
-}
 .placement {
   display: flex;
   gap: 12px;
@@ -1710,9 +1703,6 @@ body:has(.range-dialog[open]) {
 .score-toolbar h2 {
   font-size: 14px;
   margin-top: 5px;
-}
-.validated {
-  font-size: 9px;
 }
 .placement {
   margin: 0 18px;

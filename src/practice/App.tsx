@@ -792,9 +792,6 @@ export function App() {
                         {tr("BPM")}
                       </h2>
                     </div>
-                    <span className="validated">
-                      <Check size={14} /> {tr("Plan checked")}
-                    </span>
                   </div>
                   <PracticeHints
                     initialHands={guidanceHands}
