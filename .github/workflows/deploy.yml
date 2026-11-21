@@ -95,3 +95,56 @@ jobs:
           REMOTE
           } | ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$DEPLOY_USER@$DEPLOY_HOST" \
             "SIGHTFLOW_IMAGE='$IMAGE' bash -s"
+
+  deploy-sftp:
+    needs: check
+    if: >-
+      github.repository == '0Flush0/clefglide' &&
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Install SFTP client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends lftp openssh-client
+      - name: Mirror the site to the SFTP login directory
+        shell: bash
+        env:
+          SFTP_HOST: ${{ secrets.SFTP_HOST }}
+          SFTP_PORT: ${{ secrets.SFTP_PORT }}
+          SFTP_USER: ${{ secrets.SFTP_USER }}
+          LFTP_PASSWORD: ${{ secrets.SFTP_PASSWORD }}
+          SFTP_KNOWN_HOSTS: ${{ secrets.SFTP_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          : "${SFTP_HOST:?Add the SFTP_HOST repository secret}"
+          : "${SFTP_USER:?Add the SFTP_USER repository secret}"
+          : "${LFTP_PASSWORD:?Add the SFTP_PASSWORD repository secret}"
+          : "${SFTP_KNOWN_HOSTS:?Add the SFTP_KNOWN_HOSTS repository secret}"
+          test -s dist/index.html
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$SFTP_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+          lftp --env-password --user "$SFTP_USER" \
+            -p "${SFTP_PORT:-22}" "sftp://$SFTP_HOST" <<'SFTP'
+          set cmd:fail-exit yes
+          set net:timeout 30
+          set net:max-retries 2
+          set sftp:auto-confirm no
+          set sftp:connect-program "ssh -a -x -o StrictHostKeyChecking=yes -o PreferredAuthentications=password,keyboard-interactive -o PubkeyAuthentication=no"
+          # A target of '.' keeps index.html in the login directory, without a dist subdirectory.
+          mirror --reverse --delete --transfer-all --no-perms --verbose dist/ .
+          bye
+          SFTP

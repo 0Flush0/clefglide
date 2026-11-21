@@ -26,6 +26,34 @@ Complete these steps before pushing the environment activation.
 
 [GitHub's environment setup guide](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments)
 
+## SFTP deployment setup
+
+The same workflow also runs `deploy-sftp` after the checks pass on `main`, for pushes and manual runs in `0Flush0/clefglide`. It builds the static site with Node.js 24 and mirrors the **contents** of `dist/` into the SFTP account's initial login directory. `index.html` sits directly in that directory; no `dist/` subdirectory or remote path secret is used. This is the SFTP account's home/root, which can differ from the server's filesystem `/`.
+
+Every build file is overwritten, and remote files and directories absent from `dist/` are deleted, including hidden entries. The account's login directory must therefore be dedicated to this website. The job checks that a nonempty `dist/index.html` exists before mirroring. Uploads happen in place rather than as an atomic release.
+
+On GitHub, open the repository's **Settings → Secrets and variables → Actions → New repository secret** and add:
+
+| Secret | Value |
+| --- | --- |
+| `SFTP_HOST` | SFTP hostname or IP only, without `sftp://`, a port or a path |
+| `SFTP_USER` | SFTP login username |
+| `SFTP_PASSWORD` | SFTP login password; this job uses password authentication |
+| `SFTP_KNOWN_HOSTS` | Verified OpenSSH `known_hosts` entry or entries for this SFTP server |
+| `SFTP_PORT` | Optional port; defaults to `22` |
+
+For `SFTP_KNOWN_HOSTS`, obtain the server's public host key from your hosting provider or collect it locally with the command below, replacing the example host and port:
+
+```sh
+ssh-keyscan -p 22 sftp.example.com
+```
+
+Compare the collected key's fingerprint with the fingerprint supplied by your hosting provider before saving the output as `SFTP_KNOWN_HOSTS`. For a nonstandard port, keep the `[hostname]:port` format produced by `ssh-keyscan`. The workflow requires a matching host key and does not automatically trust unknown servers.
+
+Keep the existing `DEPLOY_*` secrets. The Docker image publication and SSH/Compose deployment jobs are unchanged and run independently of the SFTP job after checks pass. Missing SFTP secrets or a failed transfer fail the SFTP job without preventing those existing jobs from running. After adding the secrets, push to `main` or select **Actions → Build and deploy ClefGlide → Run workflow** with branch `main`. Check the SFTP website over HTTPS after the transfer.
+
+See [GitHub's secret setup instructions](https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/use-secrets) and the [lftp mirror documentation](https://lftp.yar.ru/lftp-man.html).
+
 ## Search metadata and verification
 
 The title, description, canonical URL, and Open Graph and Twitter metadata are in [index.html](../index.html). The [robots file](../public/robots.txt) allows crawler access to the app and its assets. The [sitemap](../public/sitemap.xml) lists the homepage because Practice, Progress and Settings are views within it. Vite copies both files and the [Google ownership file](../public/google8841eb056d99831e.html) to the site root.
