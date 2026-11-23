@@ -36,6 +36,7 @@ import { inspectGeneratorFeasibility } from "./feasibility";
 import { nextLeapPreparation } from "./wideLeaps";
 import { attachNoteLifetimes } from "../score/lifetimes";
 import { planTies, validateTieCarry, carryHeadId } from "./ties";
+import { generateIndependent } from "./independentVoices";
 export function generateConfigured(
   c: ValidatedGeneratorConfig,
   seed: string,
@@ -43,6 +44,9 @@ export function generateConfigured(
   // Internal legacy stream identity override; parameter-driven callers omit this.
   contextKey = generatorConfigFingerprint(c),
 ): GeneratedPhrase {
+  if (c.independentVoices) return generateIndependent(c, seed, previous);
+  if (previous?.independentVoices)
+    throw new Error("Start a new stream to change the voice model.");
   if (previous) validateTieCarry(c, previous, seed);
   if (previous?.activeLifetimes?.length && c.notation.ties === false)
     throw new Error(

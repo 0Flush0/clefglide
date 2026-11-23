@@ -2,7 +2,7 @@
 
 The generator has two entry points. `generate(settings, seed, previous?)` in `src/generation/planner.ts` is the unchanged application compatibility API. It resolves saved settings through `config/presets.ts`, calls the parameter-driven engine, and returns the original `Phrase` shape. No UI control, preference schema, session schema, backup format or historical fingerprint changes in this refactor.
 
-`generateConfigured(config, seed, previous?)` in `engine.ts` accepts only a branded, deeply readonly `ValidatedGeneratorConfig`. It returns `GeneratedPhrase`, which carries the resolved config and a separate parameter fingerprint (`5.2.0:parameters:...` with optional modules disabled, `6.0.0:parameters:...` for wide leaps, `7.0.0:parameters:...` for explicit lifetimes without ties, `8.1.0:parameters:...` for enabled ties) and deliberately has no legacy `settings` field. Custom parameters must not be recorded as an ordinary legacy-settings session: integrating such a future practice mode into history will require an explicit persistence/comparison design.
+`generateConfigured(config, seed, previous?)` in `engine.ts` accepts only a branded, deeply readonly `ValidatedGeneratorConfig`. It returns `GeneratedPhrase`, which carries the resolved config and a separate parameter fingerprint (`5.2.0:parameters:...` with optional modules disabled, `6.0.0:parameters:...` for wide leaps, `7.0.0:parameters:...` for explicit lifetimes without ties, `8.1.0:parameters:...` for shared-rhythm ties, and `9.0.0:parameters:...` for independent voices). It has no legacy `settings` field. Custom configurations require a separate history and comparison design before they can be saved as practice sessions.
 
 The engine orchestrates small modules: `initialHands.ts`, `melody.ts`, `rhythm.ts`, `harmony.ts`, `chromatic.ts`, `movement.ts`, `wideLeaps.ts`, `ties.ts`, `voicings.ts`, `rangeCoverage.ts`, `positionMaps.ts` and `ergonomics.ts`. `sampling.ts` supplies ordered weighted selection. They consume resolved parameters, not difficulty labels. `planner.ts`, `positions.ts`, `chords.ts` and `validator.ts` retain the old signatures/range-preview behavior as compatibility facades; core modules do not import those facades. `difficulty.ts` and `config/presets.ts` are preset/UI policy, not algorithms. `generation/index.ts` provides the public composition API.
 
@@ -45,7 +45,7 @@ Defaults below refer to `generatorDefaults`. For an inactive union module, its e
 | `notation.key` | `C` | `C`, `G`, `F`, `D`, major only; controls spelling, maps and harmony. |
 | `notation.beats` | `4` | `3` or `4` quarter-note beats per measure. Rhythm budgets must tile exactly after rests. |
 | `notation.phraseBars` | `4` | Literal capability, not a free length knob. Contours and progressions have exactly four entries. |
-| `notation.voices`                     | `shared-rhythm`  | Both hands share the base rhythm; tie subdivision may add notation segments and partial-chord reattacks. Independent voices remain unsupported.    |
+| `notation.voices` | `shared-rhythm` | `shared-rhythm` uses the existing rhythm per hand. `independent` requires the `independentVoices` configuration below. |
 | `notation.ties`                       | `false`          | `false` disables ties; a complete `{ kind: "enabled", ... }` branch enables the programmatic tie module below. Boolean `true` is rejected.         |
 | `hands.active` | `right` | `right`, `left`, `both`; paired hands need non-overlapping playable positions, even if configured ranges overlap. |
 | `hands.right.min`, `.max` | `60`, `67` | Integer MIDI 21–108, min ≤ max; active ranges require a five-note position in the chosen key. |
@@ -214,7 +214,7 @@ The score model's optional `NoteLifetime` is on each `Notehead`, mirrored by the
 
 | Field | Meaning and validation |
 | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `voiceId` | Nonempty identity for a logical voice; a grouping label, not a tie, slur or MIDI channel assignment. Current generation emits `right:main`/`left:main`. |
+| `voiceId` | Nonempty identity for a logical voice. Shared rhythm emits `right:main`/`left:main`. Independent timelines also emit their declared secondary IDs. |
 | `onsetTick` | Absolute nonnegative safe integer at 480 TPQ. Each attack has one globally unique notehead ID, independent of its phrase. |
 | `releaseTick` | Absolute intended logical sound-end tick, strictly after onset. |
 | `durationTicks` | Positive safe integer, exactly `releaseTick - onsetTick`; no accumulated fractional ticks. |
@@ -224,7 +224,7 @@ The score model's optional `NoteLifetime` is on each `Notehead`, mirrored by the
 
 A `LifetimePlan` can specify `startTick`, `endTick`, incoming `initial` attack records and outgoing `final` records. Incoming notes must actually cross the start boundary. Final state must exactly retain every still-sounding note, with its original ID and full record; it cannot reset an attack or invent a continuation. Notes can cross multiple phrase boundaries. Optional movement validation rejects any required physical hold or attack during that hand's relocation preparation, even when a logical sound tail alone is permitted to continue. This is occupancy validation, not a general polyphonic fingering optimizer or reach guarantee.
 
-The current generator attaches lifetime metadata after all note/chord selection, consuming no random draws. Its explicit metadata still ends exactly at each existing event's end. `StreamState.activeLifetimes` is empty at generated phrase boundaries; nonempty carry-in voices are explicitly rejected by this shared-rhythm generator. `lifetimeValidator.ts` reconstructs expected metadata and checks the independent canonical interval validator without calling the projector. It rejects missing/contradictory metadata, implicit activation, held movements and altered boundary state. Held overlapping or cross-phrase voices are currently supported as authored core lifetime plans and scorer inputs, not as new generated exercises.
+The lifetime projector attaches metadata after note and chord selection and consumes no random draws. Untied generated lifetimes end at their event's end. A tie chain extends the original lifetime and records it in `StreamState.activeLifetimes` while it crosses a boundary. `lifetimeValidator.ts` reconstructs the metadata and checks the canonical interval validator without calling the projector. It rejects missing or contradictory metadata, held movements and altered boundary state.
 
 `Scorer` retains its existing three constructor arguments; the optional fourth accepts the validated configuration. Enabled construction checks meter, tempo, metadata, onset ordering and occupancy. Pass sounded events, as in the existing application; rests stay in the score timeline. `appendNotes` accepts complete, future onset groups, validates the complete plan and preserves open releases. Ordinary growth of `notes` is also checked on the next input/tick. Do not mutate already validated events or remove scored events. To change mode, tempo, offset, onset tolerance or chord capture width, construct a new scorer; enabled scoring rejects a changed runtime clock/policy instead of mixing comparison identities. Hint/display changes remain independent. With ties disabled, append each note only at its attack. With ties enabled, pass complete sounded notation, including continuation segments, to construction and `appendNotes`; the scorer validates links and projects attacks internally. The cursor can finish all attacks while releases are still pending; programmatic callers must continue forwarding note-offs/CC64 and ticking until duration outcomes are resolved or explicitly interrupt the attempt.
 
@@ -238,7 +238,83 @@ Input offset applies to attacks, releases and pedal observations. Timed targets 
 
 Enabled lifetime configurations without ties use version **7.0.0** with every lifetime/evaluation parameter in the generator fingerprint, even when evaluation is disabled. Both disabled modules retain **5.2.0**, and wide leaps with lifetimes disabled retain **6.0.0**, including their prior fingerprint serialization order. `scorer.scoringFingerprint` additionally identifies mode, BPM, meter, offset, onset tolerance and chord capture width for enabled programmatic scoring. It is not a complete persisted session identity: a future session integration must also retain assistance state. Historical settings, session/backup schemas, fingerprints, results and UI replay stay untouched. Duration records are not silently inserted into or discarded through the legacy session format; programmatic consumers must retain/export them separately until a versioned custom-session persistence design exists.
 
-Fully supported here: explicit attack/release/key-hold data, overlapping distinct-pitch core lifetimes, intended finger occupancy, canonical boundary carry, optional physical/sounding release scoring, per-head chord releases, repeated attacks, binary sustain, calibrated timing, interruptions and streaming. The tie module below adds explicit notation segments, engraving and attack suppression. Slurs, articulation engraving, independent-voice generation/layout and general held-voice ergonomic planning remain future work. Configuration still rejects `notation.ties: true`, independent generated voices and unknown capabilities; attaching a voice label does not enable them. Release/pedal latency and comfortable held-note coordination still need physical piano testing. MIDI does not verify fingers or audible acoustic duration.
+The lifetime API supports explicit attack and release data, overlapping distinct-pitch lifetimes, planned finger occupancy, boundary carry, optional physical and sounding release scoring, per-head chord releases, repeated attacks, binary sustain, calibrated timing, interruptions and streaming. The independent voice and tie modules below use those same records. Configuration rejects `notation.ties: true` and unknown capabilities. Release and pedal latency still need physical piano testing.
+
+### Independent voices (programmatic API, version 9)
+
+Set `notation.voices: "independent"`, provide `independentVoices`, and enable `noteLifetimes` with required physical holds. To resolve a shared-rhythm configuration from an independent base, set `notation.voices: "shared-rhythm"` and `independentVoices: false`. Each active hand gets its own set of voice profiles. Profiles have an ordered, stable identity for the stream. The first profile is `right:main` or `left:main`. Additional profiles use suffixes `:2` through `:5`. Every event has a `voiceId`, including rests. Chord heads and tied segments in that event have the same lifetime voice ID.
+
+| Parameter | Default when enabled | Allowed values and behavior |
+| --- | --- | --- |
+| `independentVoices.right`, `.left` | Required for the corresponding active hand | Each active hand supplies a group. Inactive hands omit their group. |
+| `group.voices` | Required | Ordered array of 1–5 profiles. Five lanes can use all five mapped fingers as distinct concurrent roles. Put the upper voice first for the conventional upward stem on a two-voice staff. |
+| `group.minPolyphony` | `1` | Required peak number of simultaneous physical keys **at least once per phrase**, integer 0–5. Includes both chord tones and notes from different voices. Zero allows the entire hand to rest for a phrase. |
+| `group.maxPolyphony` | `5` | Maximum simultaneous physical keys at any tick, integer 1–5. Must be at least the minimum. |
+| `overlapProbability` | `1` | Probability in [0,1] of considering a new attack while a different voice is sounding, including an earlier attack at the same tick. Applies within and between hands. A committed continuation keeps its original hold. Zero disallows all cross-voice intersections. |
+| `maxOverlapTicks` | `491520` | Integer 0–491520. Maximum intersection of any two lifetimes in different voices, including their tied segments. Zero disallows overlap. This limit neither shortens notes nor changes chord-internal holds. |
+| `maxAttempts` | `24` | Integer 1–128. Deterministic retries of a phrase that fails the hard constraints. Exhaustion reports the first failing constraint from the final attempt and suggests adjustments. |
+| `profile.durations` | Inherits `rhythm.durations` | Unique weighted selection of 240, 480, 960 and 1920 ticks. Each profile samples separately. Slots that cannot fit the remaining sounded budget are omitted. The remainder is filled with rests. |
+| `profile.activity` | `1` | Probability in [0,1] of attempting an attack at an eligible voice slot. A rest fills the slot when a legal attack is unavailable. |
+| `profile.entryProbability`, `.exitProbability` | `1`, `0` | Independent [0,1] probabilities applied at phrase starts to an inactive or active voice respectively. A committed carry keeps that voice active at the boundary. |
+| `profile.minAttacksPerPhrase` | `0` | Integer 0–32. Minimum sounded onsets for an active profile in a phrase. A chord onset counts once and a continuation-only onset does not count. |
+| `profile.minSoundedTicks` | `240` | Integer 0–7680. Minimum sounded ticks for an active profile, counting a chord's time once and including tied continuations. Both minimums must fit its available rhythm slots. |
+| `profile.offbeatWeight` | `1` | Multiplies the duration weight when a candidate ends off a quarter-beat boundary, encouraging or discouraging the next offbeat slot. A 240-tick duration is what makes this possible in the current vocabulary. |
+| `profile.coincidentAttackWeight` | `1` | Multiplier on the attack probability if another voice already attacked at the current tick. Clamped to 1. Values below 1 discourage coincidence and values above 1 favor it when activity is below 1. Both weight fields use 0.000001–1000. |
+| `profile.minMidi`, `.maxMidi` | Active hand bounds | Optional inclusive bounds 21–108 that intersect the configured hand range. Every played head in the voice must fit both ranges. |
+| `profile.fingers` | `[1,2,3,4,5]` | Unique nonempty subset of mapped fingers 1–5. Assign disjoint sets to reserve fingers for long notes and a moving melody. Fingers outside the list may still be used by another voice. |
+| `profile.maxIntervalSteps` | Inherits `melody.maxIntervalSteps` | Integer 1–7 at most the global melody cap. Measures the jump between successive melodic anchors of this voice, including phrase transitions. |
+| `profile.chords`, `.chromatic` | `true`, `true` | Boolean permission for the global chord and chromatic modules in this profile. Global settings still control actual voicing shapes, probability, neighbor resolution and spelling. |
+
+For example, configure one left-hand bass voice with a whole-note rhythm and a separate left-hand inner voice restricted to upper mapped fingers. The right hand uses a different rhythm, with weighted offbeats.
+
+```ts
+import { generateConfigured, noteLifetimeDefaults, resolveGeneratorConfig, tieDefaults } from "./generation";
+
+const config = resolveGeneratorConfig({
+  notation: {
+    voices: "independent",
+    ties: {
+      ...tieDefaults,
+      crossPhrase: true,
+      voices: ["left:2"],
+      patterns: [{ value: "carry", weight: 1 }],
+    },
+  },
+  hands: { active: "both" },
+  rhythm: { breathBars: [] },
+  noteLifetimes: noteLifetimeDefaults,
+  independentVoices: {
+    left: {
+      minPolyphony: 2,
+      maxPolyphony: 2,
+      voices: [
+        { fingers: [1, 2, 3], durations: [{ value: 480, weight: 1 }] },
+        { fingers: [4, 5], durations: [{ value: 1920, weight: 1 }] },
+      ],
+    },
+    right: {
+      voices: [{
+        durations: [{ value: 240, weight: 1 }, { value: 480, weight: 2 }],
+        activity: 0.8,
+        minAttacksPerPhrase: 4,
+        offbeatWeight: 1.4,
+      }],
+    },
+  },
+});
+const first = generateConfigured(config, "bass-and-melody");
+const next = generateConfigured(config, first.seed, first.final);
+```
+
+The scheduler walks the next onset of each timeline in chronological order. A seeded priority per bar resolves simultaneous candidate selection. Each accepted attack reserves its keys and fingers until release. Rests and holds can alternate independently. The combined hand map, reach, distinct physical keys, hand separation and per-voice transitions still apply. The feasibility check rejects missing position assignments. Sampling can still run out of candidates under a binding register, rhythm, activity, movement or overlap constraint. Minimums remain binding and a failed phrase returns an error. At the current meter, phrase length and minimum duration, an attempt processes at most 32 slots per voice and 320 across both hands. The attempt setting bounds retries without introducing a separate cap on how many phrases a tie can cross.
+
+The existing `subdivide`, `connect`, and multi-phrase `carry` patterns run per eligible voice. The carry unit is the shortest duration of that voice. Each chain retains its voice, original attack, position, planned finger and release tick. Partial chord carry can keep a selected tone while releasing and reattacking other tones when capacity, harmony and reach allow it. The validator checks the resulting intersections of whole lifetimes, including ties. A carry must fit that voice's sounded slots and leave room for its required attacks when partial reattacks are unavailable. Shared breath and rested repositioning policies reserve the same tail ticks in every timeline. A repositioning changes the position of the entire hand after all its voices release, with a mapped single-note landing in its main voice.
+
+Each staff renders a VexFlow voice for each configured timeline. Voices share a horizontal tick grid and the staff's measure accidental state. Same-staff voices use alternating stem directions and staggered rest positions. Accidental state is updated in tick order across voices. Tied continuations keep their spelling and do not establish an accidental for later untied attacks. Both visible and clipped tie curves use the linked head IDs.
+
+Supply complete generated events to `Scorer` and `appendNotes` with the resolved config. The existing tracker grades each attack and physical release once, including when several voices sound together. For independent timed scores, adjacent attack groups divide their timing window at the midpoint, within the existing matching bounds. This prevents a missed dense onset from blocking the following attack. Pitch, onset and duration metrics stay separate. Wait mode and pause, pedal and interruption handling retain the lifetime module's rules.
+
+Version 9 fingerprints include every resolved voice setting. Stream continuation requires the same seed and fingerprint. The existing shared-rhythm presets, seed schedules, historical comparisons and backup formats retain their identities. Independent generation stays programmatic. Supported rhythms remain eighth, quarter, half and whole notes in 3/4 and 4/4. The scheduler uses mapped fingers and supports fixed positions and rested repositioning. Wide lifted leaps, guided register coverage, rested alternate fingers, arbitrary voice IDs, same-pitch simultaneous ownership, finger substitution, slurs and expressive articulation evaluation are outside this mode. Ties are the supported way to extend a hold across independently engraved measures or phrases. MIDI does not verify finger identity. Hardware and pianist review remain separate from automated tests.
 
 ### Musical ties (programmatic API, version 8)
 
@@ -292,7 +368,7 @@ const next = generateConfigured(config, "ties-example", first.final);
 | `crossMeasure`     | `true`                       | Permit tie edges across barlines. Cross-measure-only connection works with `withinMeasure: false` and no subdivision pattern.                                                                                                                                                                                                                                                                                               |
 | `crossPhrase` | `false` | Enable exactly when selecting `carry`; requires cross-measure permission and sounded ending/opening slots. Supports diatonic/chromatic notes and full/partial chords. Every selected carry count must fit the cyclic sounded timeline; a hold cannot overlap a shared-voice breath or movement-preparation rest. Multiple segments within a bar require `withinMeasure`; whole-bar continuation chains can use cross-measure-only policy. |
 | `maxDurationTicks` | `3840` | Integer **480–491520** ticks (1–1024 quarter beats), bounding the **entire continuous lifetime**, including its initial segment and all future phrases. The 256-segment limit and selected rhythms can impose a lower achievable maximum. With whole-note segments in 4/4, the upper bounds allow a chain crossing 64 phrase boundaries. There is no separate chunk-count cap. |
-| `voices`           | `["right:main","left:main"]` | Unique nonempty subset of these two hand voices; at least one must be active. Inactive entries allow that hand when configured active. Arbitrary or independent generated voices are rejected.                                                                                                                                                                                                                              |
+| `voices` | `["right:main","left:main"]` | Unique nonempty list of eligible voice IDs. Shared rhythm supports the two main IDs. Independent configurations may also name their declared secondary voices. The main ID of an inactive hand may be present, and at least one listed voice must belong to an active hand. |
 | `chordTones`       | `none`                       | `none`: single-note events only. `all`: every head, requiring the complete same set throughout a connection. `outer`: one uniformly selected lowest/highest head, outer in every participating chord. `any`: one uniformly selected eligible head. The latter two generate partial chord ties. Non-`none` choices require enabled, contextually feasible chord voicings in an eligible voice; single notes remain eligible. |
 | `patterns`         | `subdivide:1, connect:1`     | Unique weighted subset of `subdivide`, `connect`, `carry`, using finite relative weights 0.000001–1000. Only feasible candidates compete at a source event. Unsupported patterns are rejected.                                                                                                                                                                                                                              |
 
@@ -316,7 +392,7 @@ Independent `score/ties.ts` validation reconstructs the segment graph, ownership
 
 Enabled ties now use **8.1.0**, including every tie and lifetime/evaluation field in the parameter fingerprint. Expanded carry changes enabled generation and its PRNG schedule; 8.0.0 seeds are not relabelled or promised exact 8.1 replay. Previously generated two-segment scores remain valid score data and renderable. Disabled ties retain exact prior 5.2/6/7 fingerprints, PRNG schedules, presets and seeded output. Existing history, backup formats and persisted outcomes are unchanged. Both hands retain shared rhythm; tie subdivision and carry can add notation segments and partial-chord reattacks without enabling independent-voice generation.
 
-Limits: carry begins at a sounded phrase ending and uses a committed equal-unit continuation grid. `any`/`outer` retain one tone; `all` retains every tone with a common release. Independently starting new overlapping tie groups within a hand, finger substitution, independent-voice generation, new rhythm vocabularies, slurs and articulation engraving remain unsupported. Carry counts overlapping scheduled shared-voice rests are explicitly rejected; remove those rests or choose shorter counts. No UI or custom-session persistence integration is added. Tests use simulated MIDI and actual VexFlow SVG rendering; physical piano/pedal testing has not been performed. Consistent planned fingering is not proof of human comfort or evidence of which fingers a player used.
+Carry begins at a sounded phrase ending and uses a committed equal-unit continuation grid. `any` and `outer` retain one tone. `all` gives every chord tone the same release target. Overlapping tie groups can be generated in separate version 9 profiles. Carry counts overlapping scheduled rests are explicitly rejected. Tests use simulated MIDI and VexFlow SVG rendering. Physical piano and pedal testing remains outstanding.
 
 ### Chromatic figures and chords
 
@@ -398,6 +474,6 @@ New custom values can intentionally select different exercises. Their complete r
 
 ## Future capabilities that are not parameter switches
 
-Wide lifted leaps are implemented through the separate module documented above. Core note lifetimes, voice identities, occupancy and release scoring are implemented above. Opt-in ties now provide notation-segment identity, attack suppression and engraving as documented above. Slur evaluation remains unimplemented. Independent generated voices still require coordinated timelines, held-hand planning and polyphonic rendering; the core lifetime model and scorer can already accept authored overlapping voices. General crossings, thumb-under, alternate ergonomic shapes, new meters/keys/durations and non-major harmonic vocabularies require explicit model/algorithm/validator work before their schemas can be widened.
+Slur evaluation remains outside the generator. General crossings, thumb-under, alternate ergonomic shapes, new meters, keys and durations, and non-major harmonic vocabularies require explicit model and validator work before their schemas can be widened.
 
 Future modules can be added as new typed fields/unions with their own defaults, resolver composition and validators. Unsupported capabilities are rejected today; no placeholder configuration fields or plugin registry claim those algorithms exist.

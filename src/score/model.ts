@@ -134,6 +134,8 @@ export interface Notehead {
 }
 export interface ScoreEvent {
   id: string;
+  /** Explicit on independent timelines, including rests. */
+  voiceId?: string;
   kind: "note" | "rest";
   bar: number;
   onset: number;
@@ -163,6 +165,10 @@ export interface StreamState {
   hints?: HintMemory;
   coverage?: Partial<Record<Hand, RangeCoverage>>;
   activeLifetimes?: LifetimeNote[];
+  independentVoices?: {
+    context: string;
+    voices: Record<string, VoiceState>;
+  };
   pendingTies?: {
     configFingerprint: string;
     head: Notehead;
@@ -176,6 +182,13 @@ export interface StreamState {
     cueTick: number;
     landingTick: number;
   };
+}
+export interface VoiceState {
+  active: boolean;
+  lastPitch?: string;
+  lastPositionId?: string;
+  lastFingering?: { midi: number; finger: number }[];
+  resolutionPitch?: string;
 }
 export interface Phrase {
   seed: string;

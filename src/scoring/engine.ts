@@ -62,10 +62,20 @@ export class Scorer {
     public chordOnsetMs = DEFAULT_CHORD_ONSET_MS,
     public readonly config?: ValidatedGeneratorConfig,
   ) {
-    if (config?.notation.ties !== undefined && config.notation.ties !== false) {
+    if (
+      config?.independentVoices ||
+      (config?.notation.ties !== undefined && config.notation.ties !== false)
+    ) {
+      if (
+        config.notation.ties === false &&
+        notes.some((e) => e.tie || noteheads(e).some((n) => n.tie))
+      )
+        throw new Error("Tie scoring requires the enabled tie configuration.");
       this.validateTies(notes);
       this.notationEvents = [...notes];
       this.notes = attackEvents(notes);
+      if (config.independentVoices)
+        this.notes = this.notes.filter((e) => e.kind === "note");
       notes = this.notes;
     } else if (notes.some((e) => e.tie || noteheads(e).some((n) => n.tie))) {
       throw new Error("Tie scoring requires the enabled tie configuration.");
@@ -123,6 +133,14 @@ export class Scorer {
         noteheads(e).some((n) => n.lifetime?.onsetTick !== tick)
       )
         errors.push("Scored lifetime attacks must match sorted score onsets.");
+      if (
+        this.config?.independentVoices &&
+        (!e.voiceId ||
+          noteheads(e).some((n) => n.lifetime?.voiceId !== e.voiceId))
+      )
+        errors.push(
+          "Scored attacks must retain their independent voice identity.",
+        );
       previous = tick;
     }
     const c = this.config?.noteLifetimes;
@@ -193,10 +211,17 @@ export class Scorer {
     this.syncLifetimeNotes();
     let notation: ScoreEvent[] | undefined;
     if (this.notationEvents) {
+      if (
+        this.config?.notation.ties === false &&
+        notes.some((e) => e.tie || noteheads(e).some((n) => n.tie))
+      )
+        throw new Error("Tie scoring requires the enabled tie configuration.");
       notation = [...this.notationEvents, ...notes];
       this.validateAppendBoundary(notes, this.notationEvents);
       this.validateTies(notation);
       notes = attackEvents(notes);
+      if (this.config?.independentVoices)
+        notes = notes.filter((e) => e.kind === "note");
     }
     if (this.lifetimes) {
       this.validateAppendBoundary(notes);
@@ -226,11 +251,11 @@ export class Scorer {
   }
   get group() {
     const n = this.target;
-    return n
-      ? this.notes
-          .slice(this.index)
-          .filter((x) => x.bar === n.bar && x.onset === n.onset)
-      : [];
+    if (!n) return [];
+    let end = this.index + 1;
+    while (this.notes[end]?.bar === n.bar && this.notes[end]?.onset === n.onset)
+      end++;
+    return this.notes.slice(this.index, end);
   }
   get required() {
     return this.group.flatMap((event) =>
@@ -297,14 +322,26 @@ export class Scorer {
     this.captureTimes.clear();
     this.activated = now;
   }
+  /** Dense independent onsets divide the matching window at the midpoint. */
+  private nextOnsetBoundary() {
+    const current = this.target;
+    const next = this.notes[this.index + this.group.length];
+    return current && next
+      ? (this.expected(current) + this.expected(next)) / 2
+      : Infinity;
+  }
   tick(now: number, calibratedInput = false) {
     this.syncLifetimeNotes();
     if (this.running)
       this.lifetimes?.tick(now - (calibratedInput ? 0 : this.settings.offset));
     if (!this.running || this.settings.mode !== "timed") return;
+    const independent = this.config?.independentVoices;
+    if (independent && !calibratedInput) now -= this.settings.offset;
     while (
       this.target &&
-      now > this.expected(this.target) + Math.max(450, this.settings.tolerance)
+      (now >
+        this.expected(this.target) + Math.max(450, this.settings.tolerance) ||
+        (independent && now >= this.nextOnsetBoundary()))
     ) {
       for (const n of this.required)
         if (!this.completed.has(n.id)) {
@@ -345,8 +382,11 @@ export class Scorer {
     if (this.held.has(e.pitch)) return;
     this.held.add(e.pitch);
     this.sounding.add(e.pitch);
-    if (!this.running || e.time < this.origin) return;
     const now = e.time - this.settings.offset;
+    const independentTimed =
+      this.config?.independentVoices && this.settings.mode === "timed";
+    if (!this.running || (independentTimed ? now : e.time) < this.origin)
+      return;
     this.tick(now, true);
     const group = this.required;
     // A surplus attack can arrive just AFTER the last required chord tone.
@@ -401,7 +441,15 @@ export class Scorer {
     }
     const n = group.find((x) => x.midi === e.pitch);
     const timing = n ? now - this.expected(n) : 0;
-    if (!n || (this.settings.mode === "timed" && Math.abs(timing) > 450)) {
+    const previous = this.notes[this.index - 1];
+    if (
+      !n ||
+      (this.settings.mode === "timed" &&
+        (Math.abs(timing) > 450 ||
+          (independentTimed &&
+            previous &&
+            now < (this.expected(previous) + this.expected(n)) / 2)))
+    ) {
       const t = this.target!;
       group.forEach((n) => this.failed.add(n.id));
       this.results.push({
@@ -462,7 +510,13 @@ export class Scorer {
       }
       this.recentCapture =
         group.length > 1
-          ? { until: this.captureAt! + this.chordOnsetMs, tones: group }
+          ? {
+              until: Math.min(
+                this.captureAt! + this.chordOnsetMs,
+                independentTimed ? this.nextOnsetBoundary() : Infinity,
+              ),
+              tones: group,
+            }
           : undefined;
       this.advance(now);
     }

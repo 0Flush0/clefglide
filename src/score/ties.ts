@@ -86,6 +86,8 @@ export function validateTieSegments(
     }
     const t = parsed.data,
       l = head.lifetime;
+    if (event.voiceId !== undefined && event.voiceId !== l?.voiceId)
+      errors.push("Tie segment does not belong to its notation voice.");
     const spelling = Note.get(head.pitch);
     if (
       spelling.midi !== head.midi ||

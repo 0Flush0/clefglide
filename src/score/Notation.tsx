@@ -14,6 +14,7 @@ import {
   StaveConnector,
   Annotation,
   StaveTie,
+  Stem,
 } from "vexflow/bravura";
 import {
   TPQ,
@@ -113,6 +114,7 @@ export function Notation({
     ctx.setFont("Arial", 12);
     const barW = (w - 24) / settings.bars;
     const drawn: StaveNote[] = [];
+    const independent = events.some((e) => e.voiceId !== undefined);
     const segments = new Map<
       string,
       {
@@ -124,6 +126,8 @@ export function Notation({
     for (let b = 0; b < settings.bars; b++) {
       const staves: Stave[] = [];
       const voices: Voice[] = [];
+      const voiceStaves: Stave[] = [];
+      const staffVoices: Voice[][] = [];
       const beams: Beam[] = [];
       hands.forEach((hand, hi) => {
         const stave = new Stave(12 + b * barW, hi * 145 + 38, barW);
@@ -135,66 +139,128 @@ export function Notation({
         stave.setContext(ctx).draw();
         staves.push(stave);
         const accidentalState = new AccidentalState(settings.key);
-        const notes = events
-          .filter((e) => e.bar === startBar + b && e.hand === hand.hand)
-          .map((e) => {
-            const heads = [...noteheads(e)].sort((a, b) => a.midi - b.midi);
-            const duration =
-              String((TPQ * 4) / e.duration) + (e.kind === "rest" ? "r" : "");
-            const note = new StaveNote({
-              clef: hand.clef,
-              keys:
-                e.kind === "rest"
-                  ? [hand.clef === "bass" ? "d/3" : "b/4"]
-                  : heads.map((n) =>
-                      n.pitch.replace(/(\d+)$/, "/$1").toLowerCase(),
-                    ),
-              duration,
-            });
-            note.setAttribute("id", e.id);
-            heads.forEach((head, index) => {
-              segments.set(head.id, { note, index, head });
-              const sign = accidentalState.attack(
-                head.pitch,
-                (head.tie?.index ?? 0) > 0,
-              );
-              if (sign) note.addModifier(new Accidental(sign), index);
-              const show = selected.get(head.id)?.show;
-              if (show && (head.tie?.index ?? 0) === 0)
-                note.addModifier(
-                  new FretHandFinger(String(head.finger))
-                    .setFont("Arial", 12, "bold")
-                    .setPosition(
-                      heads.length > 1
-                        ? Modifier.Position.RIGHT
-                        : Modifier.Position.ABOVE,
-                    ),
-                  index,
+        const measureEvents = events.filter(
+          (e) => e.bar === startBar + b && e.hand === hand.hand,
+        );
+        const lanes = [...new Set(measureEvents.map((e) => e.voiceId))].sort(
+          (a, b) =>
+            (a?.endsWith(":main") ? 0 : Number(a?.split(":")[1] ?? 0)) -
+            (b?.endsWith(":main") ? 0 : Number(b?.split(":")[1] ?? 0)),
+        );
+        const signs = new Map<string, ReturnType<AccidentalState["attack"]>>();
+        if (independent) {
+          const onsets = [...new Set(measureEvents.map((e) => e.onset))].sort(
+            (a, b) => a - b,
+          );
+          for (const onset of onsets) {
+            const heads = measureEvents
+              .filter((e) => e.onset === onset)
+              .flatMap(noteheads);
+            const simultaneous = accidentalState.simultaneous(
+              heads.map((head) => ({
+                pitch: head.pitch,
+                tied: (head.tie?.index ?? 0) > 0,
+              })),
+            );
+            heads.forEach((head, i) => signs.set(head.id, simultaneous[i]));
+          }
+        }
+        const staffGroup: Voice[] = [];
+        staffVoices.push(staffGroup);
+        for (const [lane, id] of (lanes.length
+          ? lanes
+          : [undefined]
+        ).entries()) {
+          const polyphonic = lanes.length > 1;
+          const stem = lane % 2 === 0 ? Stem.UP : Stem.DOWN;
+          const restKeys =
+            hand.clef === "bass"
+              ? ["f/3", "b/2", "a/3", "g/2", "c/4"]
+              : ["d/5", "g/4", "f/5", "e/4", "a/5"];
+          const notes = measureEvents
+            .filter((e) => e.voiceId === id)
+            .map((e) => {
+              const heads = [...noteheads(e)].sort((a, b) => a.midi - b.midi);
+              const duration =
+                String((TPQ * 4) / e.duration) + (e.kind === "rest" ? "r" : "");
+              const note = new StaveNote({
+                clef: hand.clef,
+                keys:
+                  e.kind === "rest"
+                    ? [
+                        polyphonic
+                          ? restKeys[lane]
+                          : hand.clef === "bass"
+                            ? "d/3"
+                            : "b/4",
+                      ]
+                    : heads.map((n) =>
+                        n.pitch.replace(/(\d+)$/, "/$1").toLowerCase(),
+                      ),
+                duration,
+                ...(polyphonic ? { stemDirection: stem } : {}),
+              });
+              note.setAttribute("id", e.id);
+              heads.forEach((head, index) => {
+                segments.set(head.id, { note, index, head });
+                const sign = independent
+                  ? signs.get(head.id)
+                  : accidentalState.attack(
+                      head.pitch,
+                      (head.tie?.index ?? 0) > 0,
+                    );
+                if (sign) note.addModifier(new Accidental(sign), index);
+                const show = selected.get(head.id)?.show;
+                if (show && (head.tie?.index ?? 0) === 0)
+                  note.addModifier(
+                    new FretHandFinger(String(head.finger))
+                      .setFont("Arial", 12, "bold")
+                      .setPosition(
+                        heads.length > 1
+                          ? Modifier.Position.RIGHT
+                          : Modifier.Position.ABOVE,
+                      ),
+                    index,
+                  );
+              });
+              if (
+                (!independent || lane === 0) &&
+                showPlacement(settings.hints, reveal)
+              ) {
+                const move = movements?.find(
+                  (m) =>
+                    m.hand === e.hand &&
+                    m.cueTick === e.bar * settings.beats * TPQ + e.onset,
                 );
+                if (move)
+                  note.addModifier(
+                    new Annotation(
+                      translate(movementAnnotation(move), language),
+                    )
+                      .setFont("Arial", 9)
+                      .setVerticalJustification(Annotation.VerticalJustify.TOP),
+                    0,
+                  );
+              }
+              drawn.push(note);
+              return note;
             });
-            if (showPlacement(settings.hints, reveal)) {
-              const move = movements?.find(
-                (m) =>
-                  m.hand === e.hand &&
-                  m.cueTick === e.bar * settings.beats * TPQ + e.onset,
-              );
-              if (move)
-                note.addModifier(
-                  new Annotation(translate(movementAnnotation(move), language))
-                    .setFont("Arial", 9)
-                    .setVerticalJustification(Annotation.VerticalJustify.TOP),
-                  0,
-                );
-            }
-            drawn.push(note);
-            return note;
-          });
-        const voice = new Voice({
-          numBeats: settings.beats,
-          beatValue: 4,
-        }).addTickables(notes);
-        voices.push(voice);
-        beams.push(...Beam.generateBeams(notes));
+          const voice = new Voice({
+            numBeats: settings.beats,
+            beatValue: 4,
+          }).addTickables(notes);
+          voices.push(voice);
+          staffGroup.push(voice);
+          voiceStaves.push(stave);
+          beams.push(
+            ...Beam.generateBeams(
+              notes,
+              polyphonic
+                ? { stemDirection: stem, maintainStemDirections: true }
+                : {},
+            ),
+          );
+        }
       });
       if (staves.length === 2) {
         new StaveConnector(staves[0], staves[1])
@@ -208,9 +274,11 @@ export function Notation({
         const left = Math.max(...staves.map((s) => s.getNoteStartX()));
         staves.forEach((s) => s.setNoteStartX(left));
       }
-      const format = new Formatter().joinVoices(voices);
+      const format = new Formatter();
+      if (independent) staffVoices.forEach((group) => format.joinVoices(group));
+      else format.joinVoices(voices);
       format.format(voices, barW - (b === 0 ? 115 : 30));
-      voices.forEach((v, i) => v.draw(ctx, staves[i]));
+      voices.forEach((v, i) => v.draw(ctx, voiceStaves[i]));
       beams.forEach((beam) => beam.setContext(ctx).draw());
     }
     // Draw once after every stave is formatted so curves can cross barlines.

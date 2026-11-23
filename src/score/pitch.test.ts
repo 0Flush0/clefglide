@@ -44,3 +44,22 @@ it("tracks sharps, flats, cancellation, octaves, key signatures, barlines and ti
     "b",
   ]);
 });
+
+it("prints distinct simultaneous alterations across voices and reasserts the following attack", () => {
+  const state = new AccidentalState("C");
+  expect(
+    state.simultaneous([
+      { pitch: "E4", tied: false },
+      { pitch: "Eb4", tied: false },
+    ]),
+  ).toEqual(["n", "b"]);
+  expect(state.attack("E4")).toBe("n");
+  state.barline();
+  expect(
+    state.simultaneous([
+      { pitch: "Eb4", tied: true },
+      { pitch: "E4", tied: false },
+    ]),
+  ).toEqual([undefined, "n"]);
+  expect(state.attack("Eb4")).toBe("b");
+});

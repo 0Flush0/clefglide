@@ -28,6 +28,11 @@ export function planMovements(
   positions: HandState[],
   movements: MovementPlan[],
   diagnostics: MovementDiagnostic[] = [],
+  acceptsLanding: (
+    from: HandState,
+    to: HandState,
+    pitch: string,
+  ) => boolean = () => true,
 ) {
   const movement = c.movement;
   const bar = state.bar + b;
@@ -78,6 +83,7 @@ export function planMovements(
             diatonicIndex(pitch) - diatonicIndex(from.lastPitch!),
           );
           return !from.pitches.includes(pitch) &&
+            acceptsLanding(from, to, pitch) &&
             leap <= c.melody.maxIntervalSteps
             ? [{ to, index, distance }]
             : [];

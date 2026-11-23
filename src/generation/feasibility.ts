@@ -14,13 +14,16 @@ import {
 } from "./positionMaps";
 import { chordCandidatesForConfig } from "./voicings";
 import { wideLandingOptions } from "./wideLeaps";
+import { positionFitsVoices, voiceAllows, voiceSpecs } from "./voiceConfig";
 
 /** Context-dependent feasibility is separate from structural configuration validity.
  * Chord/movement probabilities are opportunities, not promises that every shape fits. */
 export function inspectGeneratorFeasibility(c: ValidatedGeneratorConfig) {
   const hands: Hand[] =
     c.hands.active === "both" ? ["right", "left"] : [c.hands.active];
-  const lists = hands.map((hand) => positionsForConfig(c, hand));
+  const lists = hands.map((hand) =>
+    positionsForConfig(c, hand).filter((pos) => positionFitsVoices(c, pos)),
+  );
   const compatible = lists.map((positions, i) =>
     hands.length === 1
       ? positions
@@ -36,9 +39,25 @@ export function inspectGeneratorFeasibility(c: ValidatedGeneratorConfig) {
     ties.chordTones !== "none" &&
     (c.chords.kind !== "voicings" ||
       c.chords.probability === 0 ||
-      !compatible.some(
-        (positions, i) =>
-          ties.voices.includes(`${hands[i]}:main`) && hasChord(c, positions),
+      !compatible.some((positions, i) =>
+        c.independentVoices
+          ? voiceSpecs(c).some(
+              (v) =>
+                v.hand === hands[i] &&
+                v.profile.chords &&
+                ties.voices.some((id) => id === v.id) &&
+                hasChord(
+                  c,
+                  positions,
+                  (heads) =>
+                    heads.length <=
+                      c.independentVoices![v.hand]!.maxPolyphony &&
+                    heads.every((n) =>
+                      voiceAllows(v.profile, n.midi, n.finger),
+                    ),
+                ),
+            )
+          : ties.voices.includes(`${hands[i]}:main`) && hasChord(c, positions),
       ))
   )
     errors.push(
@@ -47,7 +66,9 @@ export function inspectGeneratorFeasibility(c: ValidatedGeneratorConfig) {
   for (let i = 0; i < hands.length; i++) {
     if (!lists[i].length)
       errors.push(
-        `${hands[i]} hand: the range needs five consecutive notes in ${c.notation.key} major; widen it or change the key.`,
+        c.independentVoices
+          ? `${hands[i]} hand: no position fits the voice registers, permitted fingers and minimum polyphony.`
+          : `${hands[i]} hand: the range needs five consecutive notes in ${c.notation.key} major; widen it or change the key.`,
       );
     else if (
       c.fingering.variablePositionProbability > 0 &&
@@ -135,7 +156,13 @@ export function inspectGeneratorFeasibility(c: ValidatedGeneratorConfig) {
   return { errors, warnings };
 }
 
-function hasChord(c: ValidatedGeneratorConfig, positions: HandState[]) {
+function hasChord(
+  c: ValidatedGeneratorConfig,
+  positions: HandState[],
+  accepts: (
+    heads: ReturnType<typeof chordCandidatesForConfig>[number],
+  ) => boolean = () => true,
+) {
   const scale = Scale.get(`${c.notation.key} major`).notes;
   const degrees = [...new Set(c.harmony.progressions.flatMap((p) => p.value))];
   return positions.some((pos) =>
@@ -158,7 +185,7 @@ function hasChord(c: ValidatedGeneratorConfig, positions: HandState[]) {
           finger: pos.fingerToMidi.indexOf(midi) + 1,
           action: "PLAY_WITHIN_POSITION",
         };
-        return chordCandidatesForConfig(event, pos, c, harmony).length > 0;
+        return chordCandidatesForConfig(event, pos, c, harmony).some(accepts);
       });
     }),
   );

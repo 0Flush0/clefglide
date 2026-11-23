@@ -3,20 +3,23 @@ import type { ValidatedGeneratorConfig } from "./config";
 import { chooseWeighted } from "./sampling";
 import { wideRestBeats } from "./wideLeaps";
 
+export function smallRestBeats(c: ValidatedGeneratorConfig, bar: number) {
+  return c.movement.kind === "rested-reposition" &&
+    c.movement.probability > 0 &&
+    c.movement.eligibleBars.includes(bar + 1)
+    ? c.movement.preparationBeats
+    : c.rhythm.breathBars.includes(bar)
+      ? c.rhythm.breathBeats
+      : 0;
+}
+
 /** Preparatory rests take precedence over discretionary breathing rests. */
 export function barRhythm(
   c: ValidatedGeneratorConfig,
   bar: number,
   state: { rng: number },
 ) {
-  const smallRest =
-    c.movement.kind === "rested-reposition" &&
-    c.movement.probability > 0 &&
-    c.movement.eligibleBars.includes(bar + 1)
-      ? c.movement.preparationBeats
-      : c.rhythm.breathBars.includes(bar)
-        ? c.rhythm.breathBeats
-        : 0;
+  const smallRest = smallRestBeats(c, bar);
   const wideRest = wideRestBeats(c, bar);
   const restBeats = Math.max(smallRest, wideRest);
   const durations: number[] = [];

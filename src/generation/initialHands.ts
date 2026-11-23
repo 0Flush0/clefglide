@@ -12,10 +12,13 @@ import { chooseWeighted } from "./sampling";
 export function initialHands(
   c: ValidatedGeneratorConfig,
   state: { rng: number },
+  accepts: (position: HandState) => boolean = () => true,
 ): HandState[] {
   const hands: Hand[] =
     c.hands.active === "both" ? ["right", "left"] : [c.hands.active];
-  const lists = hands.map((hand) => positionsForConfig(c, hand));
+  const lists = hands.map((hand) =>
+    positionsForConfig(c, hand).filter(accepts),
+  );
   if (lists.some((xs) => !xs.length))
     throw new Error(
       "This range needs five consecutive notes in the chosen major key. Widen the range or change the key.",

@@ -19,7 +19,7 @@ export function attachNoteLifetimes(
     const onsetTick = e.bar * c.notation.beats * TPQ + e.onset;
     const releaseTick = onsetTick + e.duration;
     const lifetime: NoteLifetime = {
-      voiceId: `${e.hand}:main`,
+      voiceId: e.voiceId ?? `${e.hand}:main`,
       onsetTick,
       releaseTick,
       durationTicks: e.duration,

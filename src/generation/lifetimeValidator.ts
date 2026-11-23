@@ -8,6 +8,7 @@ import {
   noteLifetimeDataSchema,
 } from "../score/lifetimeValidation";
 import { validateTieSegments } from "../score/ties";
+import { voiceEventId, voiceSpecs, voiceUnit } from "./voiceConfig";
 
 /** Reconstruct emitted lifetimes independently of the metadata projector. */
 export function validateGeneratedLifetimes(
@@ -68,7 +69,7 @@ export function validateGeneratedLifetimes(
           (l.onsetTick !== onset ||
             l.releaseTick !== onset + e.duration ||
             l.durationTicks !== e.duration)) ||
-        l.voiceId !== `${e.hand}:main` ||
+        l.voiceId !== (e.voiceId ?? `${e.hand}:main`) ||
         l.keyHold.kind !== config.keyHold ||
         (l.keyHold.kind === "required" &&
           l.keyHold.releaseTick !== l.releaseTick)
@@ -111,6 +112,11 @@ export function validateGeneratedLifetimes(
     );
     for (const e of p.events) {
       const heads = noteheads(e);
+      const voice = e.voiceId ?? `${e.hand}:main`;
+      const durations =
+        voiceSpecs(c).find((spec) => spec.id === voice)?.durations ??
+        c.rhythm.durations;
+      const unit = voiceUnit(c, voice);
       if (JSON.stringify(e.tie) !== JSON.stringify(heads[0]?.tie))
         errors.push("Primary tie differs from its notehead.");
       for (const n of heads.filter((n) => n.tie)) {
@@ -120,7 +126,7 @@ export function validateGeneratedLifetimes(
           t.probability === 0 ||
           !t.segmentCounts.includes(s.count) ||
           !t.subdivisions.some((s) => s === e.duration) ||
-          !t.voices.includes(l?.voiceId as "right:main" | "left:main") ||
+          !t.voices.some((id) => id === l?.voiceId) ||
           !t.patterns.some((p) => p.value === s.pattern) ||
           !l ||
           l.durationTicks > t.maxDurationTicks ||
@@ -160,12 +166,12 @@ export function validateGeneratedLifetimes(
               owner.bar !== e.bar ||
               owner.duration !== e.duration ||
               l.durationTicks !== s.count * e.duration ||
-              !c.rhythm.durations.some((d) => d.value === l.durationTicks))
+              !durations.some((d) => d.value === l.durationTicks))
           )
             errors.push("Invalid subdivision tie pattern.");
           if (
             s.pattern === "connect" &&
-            !c.rhythm.durations.some((d) => d.value === e.duration)
+            !durations.some((d) => d.value === e.duration)
           )
             errors.push(
               "Connected segments must belong to the attack rhythm vocabulary.",
@@ -176,15 +182,11 @@ export function validateGeneratedLifetimes(
               (e.bar !== p.final.bar - 1 ||
                 e.onset + e.duration !== c.notation.beats * TPQ)) ||
               (s.index > 0 &&
-                (e.duration !==
-                  Math.min(...c.rhythm.durations.map((d) => d.value)) ||
+                (e.duration !== unit ||
                   e.bar * c.notation.beats * TPQ + e.onset !==
                     l.releaseTick - (s.count - s.index) * e.duration)) ||
               (s.index === 0 &&
-                l.durationTicks !==
-                  e.duration +
-                    (s.count - 1) *
-                      Math.min(...c.rhythm.durations.map((d) => d.value))))
+                l.durationTicks !== e.duration + (s.count - 1) * unit))
           )
             errors.push("Invalid cross-phrase carry pattern.");
         }
@@ -207,16 +209,17 @@ export function validateGeneratedLifetimes(
           l = n.lifetime,
           s = n.tie;
         const owned = active.find((a) => a.id === s?.lifetimeId);
+        const voice = l?.voiceId ?? `${n.hand}:main`;
+        const eventId = voiceEventId(p.seed, state.bar, 0, voice);
         const source = incoming
           ? p.events.flatMap(noteheads).find((n) => n.id === item.nextSegmentId)
           : p.events.flatMap(noteheads).find((h) => h.id === n.id);
         if (
           !t.crossPhrase ||
           item.configFingerprint !== generatorConfigFingerprint(c) ||
-          ![
-            `${p.seed}-${state.bar}-0-${n.hand}`,
-            `${p.seed}-${state.bar}-0-${n.hand}:hold:${n.finger}`,
-          ].includes(item.nextSegmentId) ||
+          ![eventId, `${eventId}:hold:${n.finger}`].includes(
+            item.nextSegmentId,
+          ) ||
           !owned ||
           !source ||
           source.pitch !== n.pitch ||
@@ -229,8 +232,7 @@ export function validateGeneratedLifetimes(
           s.pattern !== "carry" ||
           s.index >= s.count - 1 ||
           s.nextId !== item.nextSegmentId ||
-          item.duration !==
-            Math.min(...c.rhythm.durations.map((d) => d.value)) ||
+          item.duration !== voiceUnit(c, voice) ||
           l.releaseTick !==
             boundary + (s.count - s.index - 1) * item.duration ||
           owned.eventId !== s.attackEventId ||

@@ -44,6 +44,26 @@ export class AccidentalState {
   barline() {
     this.active.clear();
   }
+  /** Concurrent alterations of the same staff position each need their own sign. */
+  simultaneous(heads: readonly { pitch: string; tied: boolean }[]) {
+    const spelling = heads.map(({ pitch }) => Note.get(pitch));
+    return heads.map(({ pitch, tied }, i) => {
+      if (tied) return;
+      const n = spelling[i];
+      if (
+        spelling.some(
+          (other) =>
+            other.letter === n.letter &&
+            other.oct === n.oct &&
+            other.acc !== n.acc,
+        )
+      ) {
+        this.active.set(`${n.letter}${n.oct}`, "?");
+        return (n.acc || "n") as "#" | "b" | "n";
+      }
+      return this.attack(pitch);
+    });
+  }
   attack(pitch: string, tied = false): "#" | "b" | "n" | undefined {
     if (tied) return;
     const n = Note.get(pitch),

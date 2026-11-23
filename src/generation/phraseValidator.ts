@@ -7,6 +7,7 @@ import {
 } from "./config";
 import type { GeneratedPhrase } from "./model";
 import { validateGeneratedLifetimes } from "./lifetimeValidator";
+import { validateIndependentVoices } from "./independentValidator";
 import {
   hasMovementPreparation,
   validateWideLanding,
@@ -189,6 +190,20 @@ export function validateWithConfig(
         errors.push("Unvalidated chromatic position options.");
     }
   }
+  if (c.independentVoices)
+    return [
+      ...new Set([
+        ...errors,
+        ...validateIndependentVoices(p, c),
+        ...validateGeneratedLifetimes(p, c),
+      ]),
+    ];
+  if (
+    p.initial.independentVoices ||
+    p.final.independentVoices ||
+    p.events.some((e) => e.voiceId !== undefined)
+  )
+    errors.push("Explicit voices require independent voice generation.");
   for (const state of [p.initial, p.final])
     for (const h of state.hands) {
       if (!Number.isInteger(h.lastIndex) || h.lastIndex < 0 || h.lastIndex > 4)
