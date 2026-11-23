@@ -92,7 +92,7 @@ See the [product requirements](docs/REQUIREMENTS.md), [implementation decisions]
 
 ## AI-assisted development
 
-OpenAI Codex assists with implementation, tests and documentation. The trainer generates exercises with deterministic rules and validates each phrase locally.
+AI Agents assisting with implementation, tests and documentation. The trainer generates exercises with deterministic rules and validates each phrase locally.
 
 ## Licensing
 

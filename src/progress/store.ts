@@ -58,7 +58,7 @@ export const sessionSchema = z.preprocess(
       settings: v4SettingsSchema,
     }),
     sessionBase.extend({
-      generatorVersion: z.enum(["5.0.0", "5.1.0"]),
+      generatorVersion: z.enum(["5.0.0", "5.1.0", "5.2.0"]),
       settings: settingsValuesSchema,
     }),
   ]),
@@ -66,7 +66,16 @@ export const sessionSchema = z.preprocess(
 export type Session = z.infer<typeof sessionSchema>;
 class Database extends Dexie {
   sessions!: Table<Session, string>;
-  preferences!: Table<{ id: string; settings: Settings }, string>;
+  preferences!: Table<
+    {
+      id: string;
+      settings: Settings;
+      profiles?: Record<Settings["hand"], Settings>;
+      selectedHand?: Settings["hand"];
+      duration?: 0 | 3 | 5;
+    },
+    string
+  >;
   constructor() {
     super("sightflow");
     this.version(1).stores({
@@ -110,9 +119,10 @@ export async function importSessions(text: string) {
       s.generatorVersion === VERSION
         ? s.fingerprint ===
           fingerprint(settingsSchema.parse(s.settings), s.assistanceUsed)
-        : s.generatorVersion === "5.0.0"
+        : s.generatorVersion === "5.0.0" || s.generatorVersion === "5.1.0"
           ? s.fingerprint ===
-            "5.0.0:" +
+            s.generatorVersion +
+              ":" +
               JSON.stringify(settingsValuesSchema.parse(s.settings)) +
               `|assistance:${s.assistanceUsed ? "assisted" : "unassisted"}`
           : s.generatorVersion === "4.0.0"

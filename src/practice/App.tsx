@@ -79,6 +79,12 @@ import {
   importSessions,
   type Session,
 } from "../progress/store";
+import {
+  defaultProfiles,
+  loadPracticePreferences,
+  savePracticePreferences,
+  type PracticeDuration,
+} from "../progress/preferences";
 
 const bus = new MidiBus();
 const initialSeed = "first-light";
@@ -87,7 +93,7 @@ const sessionDurations = [
   { minutes: 5, label: "5 min" },
   { minutes: 0, label: "Unlimited" },
 ] as const;
-type SessionDuration = (typeof sessionDurations)[number]["minutes"];
+type SessionDuration = PracticeDuration;
 type Runtime = {
   phrases: Phrase[];
   engine: Scorer;
@@ -191,6 +197,10 @@ export function App() {
     [seed, setSeed] = useState(initialSeed),
     [run, setRun] = useState(() => runtime(defaults, initialSeed));
   const [duration, setDuration] = useState<SessionDuration>(0);
+  const profiles = useRef(defaultProfiles());
+  const preferencesEdited = useRef(false);
+  const editedProfiles = useRef(new Set<Settings["hand"]>());
+  const durationEdited = useRef(false);
   const ref = useRef(run);
   ref.current = run;
   const [, render] = useState(0),
@@ -274,16 +284,22 @@ export function App() {
     [expireIfDue, persist],
   );
   useEffect(() => {
-    db.preferences
-      .get("settings")
+    let cancelled = false;
+    loadPracticePreferences()
       .then((p) => {
-        if (p) {
-          const parsed = settingsSchema.parse(p.settings);
-          const s = {
-            ...parsed,
-            hints:
-              parsed.hints === "reveal" ? ("smart" as const) : parsed.hints,
-          };
+        if (cancelled) return;
+        profiles.current = {
+          ...p.profiles,
+          ...Object.fromEntries(
+            [...editedProfiles.current].map((hand) => [
+              hand,
+              profiles.current[hand],
+            ]),
+          ),
+        };
+        if (!durationEdited.current) setDuration(p.duration);
+        if (p.saved && !preferencesEdited.current) {
+          const s = p.settings;
           const restored = runtime(s, initialSeed);
           setSettings(s);
           setDraft(s);
@@ -295,6 +311,9 @@ export function App() {
           "Local settings could not be loaded. Export important progress regularly.",
         ),
       );
+    return () => {
+      cancelled = true;
+    };
   }, []);
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? "dark" : "light";
@@ -462,7 +481,14 @@ export function App() {
       setReveal(false);
       savedPhrase.current = -1;
       ref.current = next;
-      await db.preferences.put({ id: "settings", settings: checked });
+      preferencesEdited.current = true;
+      editedProfiles.current.add(checked.hand);
+      profiles.current[checked.hand] = checked;
+      await savePracticePreferences({
+        settings: checked,
+        profile: checked,
+        selectedHand: checked.hand,
+      });
       return next;
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -623,23 +649,51 @@ export function App() {
   }, [sim, pianoLow]);
   const pending =
     JSON.stringify(draft) !== JSON.stringify(settings) || seed !== run.seed;
+  const updateDraft = (next: Settings) => {
+    preferencesEdited.current = true;
+    const switching = next.hand !== draft.hand;
+    profiles.current[draft.hand] = { ...draft };
+    editedProfiles.current.add(draft.hand);
+    const selected = switching ? profiles.current[next.hand] : next;
+    setDraft({ ...selected });
+    const parsed = settingsSchema.safeParse(selected);
+    if (parsed.success) {
+      profiles.current[selected.hand] = parsed.data;
+      void savePracticePreferences({
+        profile: parsed.data,
+        selectedHand: selected.hand,
+      }).catch((e) => setError(String(e)));
+    }
+  };
+  const chooseDuration = (minutes: SessionDuration) => {
+    durationEdited.current = true;
+    setDuration(minutes);
+    void savePracticePreferences({ duration: minutes }).catch((e) =>
+      setError(String(e)),
+    );
+  };
   const setHints = (hints: Settings["hints"]) => {
     const updated = { ...settings, hints };
     setSettings(updated);
-    setDraft((s) => ({ ...s, hints }));
+    // The assistance control belongs to the selected profile; the active score
+    // still responds immediately, as before, without changing its notes/cursor.
+    updateDraft({ ...draft, hints });
     if (!expireIfDue(run, performance.now())) {
       engine.settings = { ...engine.settings, hints };
       run.assistanceUsed ||= automaticAssistance(updated);
       void persist(run);
     }
     setReveal(false);
-    void db.preferences
-      .put({ id: "settings", settings: updated })
-      .catch((e) => setError(String(e)));
+    void savePracticePreferences({ settings: updated }).catch((e) =>
+      setError(String(e)),
+    );
   };
   const apply = () =>
     change(draft, seed !== run.seed ? seed : createLocalId("exercise"));
   const toggle = async () => {
+    // A delayed settings read must never replace an attempt the user has started.
+    preferencesEdited.current = true;
+    durationEdited.current = true;
     if (engine.running) {
       void pausePractice(run);
       return;
@@ -1115,7 +1169,7 @@ export function App() {
                           type="button"
                           aria-pressed={duration === minutes}
                           disabled={run.duration !== undefined && !run.complete}
-                          onClick={() => setDuration(minutes)}
+                          onClick={() => chooseDuration(minutes)}
                         >
                           {tr(label)}
                         </button>
@@ -1258,7 +1312,7 @@ export function App() {
                 draft={draft}
                 seed={seed}
                 pending={pending}
-                onChange={setDraft}
+                onChange={updateDraft}
                 onSeed={setSeed}
                 onHints={setHints}
                 onApply={() => void apply()}

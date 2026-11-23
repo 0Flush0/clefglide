@@ -24,6 +24,7 @@ import { jumpLevels, spacingLevels } from "./difficulty";
 import { inferFingeringHints } from "../score/hints";
 import { writtenPitch } from "../score/pitch";
 import { chordCandidates } from "./chords";
+import { playableTransition } from "./ergonomics";
 import {
   planRangeCoverage,
   coverageMoveWeight,
@@ -258,6 +259,7 @@ export function generate(
           lastPitch: from.lastPitch,
           lastNoteEnd: from.lastNoteEnd,
           resolutionPitch: undefined,
+          lastFingering: undefined,
         };
         positions.push(structuredClone(to));
         landings.set(from.hand, index);
@@ -285,12 +287,20 @@ export function generate(
     for (let j = 0; j < durations.length; j++) {
       const rest = breath && j === durations.length - 1;
       for (const h of state.hands) {
+        const previousFingering = h.lastFingering ?? [];
+        const fingerFor = (pitch: string) =>
+          h.fingerToMidi.indexOf(Note.midi(pitch)!) + 1;
+        const canPlay = (pitch: string, finger: number) =>
+          playableTransition(previousFingering, [
+            { midi: Note.midi(pitch)!, finger },
+          ]);
         let choices = [0, 1, 2, 3, 4].filter(
           (i) =>
-            !h.lastPitch ||
-            Math.abs(
-              diatonicIndex(h.pitches[i]) - diatonicIndex(h.lastPitch),
-            ) <= s.interval,
+            canPlay(h.pitches[i], fingerFor(h.pitches[i])) &&
+            (!h.lastPitch ||
+              Math.abs(
+                diatonicIndex(h.pitches[i]) - diatonicIndex(h.lastPitch),
+              ) <= s.interval),
         );
         // Do not strand Small-jump melodies on an isolated thumb key. Keep the
         // chosen position intact and start in its most connected melodic region.
@@ -332,11 +342,12 @@ export function generate(
             : j === 0 && landings.has(h.hand)
               ? landings.get(h.hand)!
               : choose(weighted, state);
-        if (index === undefined)
+        if (index === undefined || index < 0)
           throw new Error(
             "No playable melodic transition. Widen the range or maximum melodic interval.",
           );
         let pitch = h.pitches[index];
+        let finger = fingerFor(pitch);
         const resolving = !!h.resolutionPitch;
         if (!rest) h.resolutionPitch = undefined;
         const frequency = { off: 0, easy: 0.12, medium: 0.28, hard: 0.45 }[
@@ -348,26 +359,67 @@ export function generate(
           !(j === 0 && landings.has(h.hand)) &&
           random(state) < frequency
         ) {
-          const finger = h.fingerToMidi.indexOf(Note.midi(pitch)!) + 1;
-          const options = (h.pitchOptions?.[finger - 1] ?? []).filter(
-            (p) => p !== pitch,
+          // Search validated per-finger choices before choosing an alteration.
+          // Prefer another finger over reusing one for an illegal key change.
+          const playableOptions = (h.pitchOptions ?? []).flatMap((pitches, f) =>
+            pitches.flatMap((p) => {
+              if (
+                p ===
+                  h.pitches.find(
+                    (base) => Note.midi(base) === h.fingerToMidi[f],
+                  ) ||
+                Math.abs(Note.midi(p)! - Note.midi(pitch)!) !== 1 ||
+                !canPlay(p, f + 1) ||
+                (h.lastPitch &&
+                  Math.abs(diatonicIndex(p) - diatonicIndex(h.lastPitch)) >
+                    s.interval)
+              )
+                return [];
+              const resolutions = h.pitches.filter(
+                (base) =>
+                  Math.abs(Note.midi(base)! - Note.midi(p)!) === 1 &&
+                  Math.abs(diatonicIndex(base) - diatonicIndex(p)) <=
+                    s.interval &&
+                  playableTransition(
+                    [{ midi: Note.midi(p)!, finger: f + 1 }],
+                    [{ midi: Note.midi(base)!, finger: fingerFor(base) }],
+                  ),
+              );
+              return resolutions.length
+                ? [{ pitch: p, finger: f + 1, resolutions }]
+                : [];
+            }),
+          );
+          const options = playableOptions.filter(
+            (option) =>
+              option.finger === finger ||
+              !playableOptions.some(
+                (other) =>
+                  other.pitch === option.pitch && other.finger === finger,
+              ),
           );
           // Neighbors resolve on their next attack. Hard also favors applied-dominant alterations.
           const root = chords[b][0];
           const applied = Chord.get(`${root}7`).notes;
           const preferred =
             s.accidentals === "hard"
-              ? options.filter((p) => applied.includes(Note.pitchClass(p)))
+              ? options.filter((p) =>
+                  applied.includes(Note.pitchClass(p.pitch)),
+                )
               : [];
           if (options.length) {
-            h.resolutionPitch = pitch;
-            pitch = choose(preferred.length ? preferred : options, state);
-            const passing = h.pitches.filter(
+            const option = choose(
+              preferred.length ? preferred : options,
+              state,
+            );
+            pitch = option.pitch;
+            finger = option.finger;
+            h.resolutionPitch = option.resolutions.includes(h.pitches[index])
+              ? h.pitches[index]
+              : choose(option.resolutions, state);
+            const passing = option.resolutions.filter(
               (p) =>
-                p !== h.pitches[index] &&
-                Math.abs(Note.midi(p)! - Note.midi(pitch)!) === 1 &&
-                Math.abs(diatonicIndex(p) - diatonicIndex(pitch)) <=
-                  s.interval &&
+                p !== h.resolutionPitch &&
                 chords[b].includes(Note.pitchClass(p)),
             );
             if (
@@ -378,9 +430,7 @@ export function generate(
               h.resolutionPitch = choose(passing, state);
           }
         }
-        const basePitch = h.pitches[index],
-          midi = Note.midi(pitch)!;
-        const finger = h.fingerToMidi.indexOf(Note.midi(basePitch)!) + 1;
+        const midi = Note.midi(pitch)!;
         const id = `${seed}-${bar}-${onset}-${h.hand}`;
         const event: ScoreEvent = {
           id,
@@ -407,7 +457,7 @@ export function generate(
               ],
           action: rest
             ? "REST"
-            : pitch === h.lastPitch
+            : midi === Note.midi(h.lastPitch ?? "")
               ? "REPEAT_NOTE"
               : "PLAY_WITHIN_POSITION",
         };
@@ -426,13 +476,20 @@ export function generate(
             chords[b],
             h.lastVoicing,
           );
-          if (candidates.length) event.notes = choose(candidates, state);
+          const playable = candidates.filter((heads) =>
+            playableTransition(previousFingering, heads),
+          );
+          if (playable.length) event.notes = choose(playable, state);
         }
         events.push(event);
         if (!rest) {
-          h.lastIndex = index;
+          h.lastIndex = h.hand === "right" ? finger - 1 : 5 - finger;
           h.lastPitch = pitch;
           h.lastVoicing = event.notes!.map((n) => n.midi);
+          h.lastFingering = event.notes!.map(({ midi, finger }) => ({
+            midi,
+            finger,
+          }));
           h.lastNoteEnd = bar * s.beats * TPQ + onset + durations[j];
         }
       }

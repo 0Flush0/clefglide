@@ -1,5 +1,18 @@
 # Implementation decisions
 
+## Generator v5.2: physical key transitions
+
+- Reusing a finger within a position permits the same physical MIDI key, or a slide from a black key to either immediately adjacent white key. White-to-black, white-to-white and black-to-black changes with the same finger are rejected, including after ordinary rests. Explicit, independently validated rested hand relocations establish a new position as before. Written sharps/flats do not determine a key's physical color.
+- Chromatic options remain explicit and immutable per position. Single-semitone alterations of the inner mapped notes, including enharmonic spellings, may use another inner finger only when the complete substituted map passes the existing anatomical, span, horizontal-distance and range limits. Base keys keep their natural mappings; outer-finger chromatic options and arbitrary fingering substitutions remain excluded.
+- Note selection checks every reused finger from the preceding attack. Chromatic candidates require both a legal incoming transition and a legal next semitone resolution; otherwise another validated finger/note is selected. The validator also permits repeated chromatic keys, including respellings, before resolution. Chords retain their existing simultaneous constraints and additionally check their transitions. Actual previous MIDI/finger pairs carry across chunks in ephemeral hand state; the independent validator reconstructs options and checks transitions, pending resolutions and boundary state without calling planner helpers. Smart hints use the selected validated assignment, including chromatic reassignments.
+- Generator version **5.2.0** separates changed seeded content and comparison fingerprints. The existing session shape and backup format remain unchanged; v5.0/v5.1 and older records retain their original settings, fingerprints and version-specific replay restrictions. These software constraints still require piano/teacher review for human comfort; simulator tests do not establish hardware behavior.
+
+## Persistent practice preferences
+
+- Practice duration (3 minutes, 5 minutes or Unlimited) is saved in the existing Dexie preferences record, outside exercise settings and session records. Unlimited remains the default, and duration remains locked after an attempt starts, including while paused.
+- Right, Left and Both hands each retain a complete settings profile. Switching hands restores the selected draft; the current exercise changes only through the existing Apply/New exercise actions. Hint controls retain their immediate behavior. Profile edits and the selected profile persist locally, so reopening starts with that profile's settings.
+- Existing single-profile settings migrate only into their corresponding mode, including legacy range and hint migration. Missing modes start from independent defaults. Transactional preference merges prevent duration and profile writes from erasing each other. No database version, session schema or backup-format migration is needed.
+
 ## Generator v5.1: coverage-guided range exploration
 
 - Each moving hand keeps five coarse pitch-region counts in ephemeral `StreamState.coverage`. Actual generated noteheads, including chord tones and excluding rests, update a normalized per-phrase histogram with 0.95 decay (roughly a fourteen-phrase half-life). No settings, dependencies, database migration or persisted coverage are added.

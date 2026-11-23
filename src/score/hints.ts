@@ -74,11 +74,14 @@ export function inferFingeringHints(
           (p) => p.hand === note.hand && p.id === movement.fromPositionId,
         ) ?? position)
       : position;
-    const expectedFinger =
-      position.fingerToMidi.findIndex(
-        (m, i) =>
-          m === note.midi || position.pitchOptions?.[i]?.includes(note.pitch),
-      ) + 1;
+    const expectedFinger = position.pitchOptions?.[note.finger - 1]?.includes(
+      note.pitch,
+    )
+      ? note.finger
+      : position.fingerToMidi.findIndex(
+          (m, i) =>
+            m === note.midi || position.pitchOptions?.[i]?.includes(note.pitch),
+        ) + 1;
     const previous = state[note.hand];
     const starting =
       !previous || previous.positionId !== position.id || !!movement;

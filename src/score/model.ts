@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { RangeCoverage } from "../generation/rangeCoverage";
-export const VERSION = "5.1.0";
+export const VERSION = "5.2.0";
 export const TPQ = 480;
 export const legacySettingsSchema = z.object({
   hand: z.enum(["right", "left", "both"]).default("right"),
@@ -101,10 +101,12 @@ export interface HandState {
   max: number;
   lastPitch?: string;
   lastNoteEnd?: number;
-  /** Explicit same-finger alternatives; immutable for this position. */
+  /** Explicit playable pitch choices per finger; immutable for this position. */
   pitchOptions?: string[][];
   resolutionPitch?: string;
   lastVoicing?: number[];
+  /** Actual previous attack, including every chord finger, across chunk boundaries. */
+  lastFingering?: { midi: number; finger: number }[];
 }
 export interface WrittenPitch {
   letter: string;

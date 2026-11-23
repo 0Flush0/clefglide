@@ -119,21 +119,25 @@ export function validatePhrase(p: Phrase): string[] {
     )
       errors.push("Position finger map does not match hand direction.");
     if (pos.pitchOptions) {
+      const alterations = pos.fingerToMidi.slice(1, 4).flatMap((m) => {
+        const n = Note.get(
+          pos.pitches.find((pitch) => Note.midi(pitch) === m)!,
+        );
+        return [-1, 1].flatMap((delta) => {
+          if (s.accidentals === "off" || Math.abs(n.alt + delta) > 1) return [];
+          const alt = n.alt + delta;
+          const pitch = `${n.letter}${alt === -1 ? "b" : alt === 1 ? "#" : ""}${n.oct}`;
+          return pos.fingerToMidi.includes(Note.midi(pitch) ?? -1)
+            ? []
+            : [...new Set([pitch, Note.enharmonic(pitch)])];
+        });
+      });
       const reconstructed = pos.fingerToMidi.map((m, i) => {
         const base = pos.pitches.find((pitch) => Note.midi(pitch) === m)!;
-        const n = Note.get(base);
         return [
           base,
-          ...[-1, 1].flatMap((delta) => {
-            if (
-              s.accidentals === "off" ||
-              i === 0 ||
-              i === 4 ||
-              Math.abs(n.alt + delta) > 1
-            )
-              return [];
-            const alt = n.alt + delta,
-              pitch = `${n.letter}${alt === -1 ? "b" : alt === 1 ? "#" : ""}${n.oct}`;
+          ...[...new Set(alterations)].flatMap((pitch) => {
+            if (i === 0 || i === 4) return [];
             const midi = Note.midi(pitch) ?? -1,
               map = [...pos.fingerToMidi];
             map[i] = midi;
@@ -153,9 +157,33 @@ export function validatePhrase(p: Phrase): string[] {
         errors.push("Invalid boundary finger index.");
       if (
         h.lastPitch !== undefined &&
-        (degree(h.pitches[h.lastIndex]) !== degree(h.lastPitch) ||
-          (!h.pitches.includes(h.lastPitch) &&
-            !h.pitchOptions?.flat().includes(h.lastPitch)) ||
+        (!h.lastFingering?.length ||
+          h.lastFingering.length > 4 ||
+          h.lastFingering[0].midi !== Note.midi(h.lastPitch) ||
+          new Set(h.lastFingering.map((n) => n.finger)).size !==
+            h.lastFingering.length ||
+          new Set(h.lastFingering.map((n) => n.midi)).size !==
+            h.lastFingering.length ||
+          h.lastFingering.some(
+            (n) =>
+              !Number.isInteger(n.finger) ||
+              n.finger < 1 ||
+              n.finger > 5 ||
+              !Number.isInteger(n.midi) ||
+              n.midi < h.min ||
+              n.midi > h.max,
+          ) ||
+          (h.lastVoicing &&
+            JSON.stringify(h.lastVoicing) !==
+              JSON.stringify(h.lastFingering.map((n) => n.midi))))
+      )
+        errors.push("Inconsistent boundary fingering.");
+      if (
+        h.lastPitch !== undefined &&
+        ((h.pitches[h.lastIndex] !== h.lastPitch &&
+          !h.pitchOptions?.[
+            h.hand === "right" ? h.lastIndex : 4 - h.lastIndex
+          ]?.includes(h.lastPitch)) ||
           !Number.isInteger(h.lastNoteEnd) ||
           h.lastNoteEnd! > state.bar * s.beats * TPQ)
       )
@@ -168,6 +196,21 @@ export function validatePhrase(p: Phrase): string[] {
             (Note.midi(h.lastPitch) ?? -100) -
               (Note.midi(h.resolutionPitch) ?? 100),
           ) !== 1 ||
+          Math.abs(degree(h.lastPitch ?? "") - degree(h.resolutionPitch)) >
+            s.interval ||
+          (h.lastFingering ?? []).some((n) => {
+            const target = Note.midi(h.resolutionPitch!)!;
+            const finger = h.fingerToMidi.indexOf(target) + 1;
+            return (
+              n.finger === finger &&
+              n.midi !== target &&
+              !(
+                black(n.midi) &&
+                !black(target) &&
+                Math.abs(n.midi - target) === 1
+              )
+            );
+          }) ||
           s.accidentals === "off")
       )
         errors.push("Invalid pending chromatic resolution.");
@@ -179,6 +222,7 @@ export function validatePhrase(p: Phrase): string[] {
       lastEnd = active.lastNoteEnd,
       lastIndex = active.lastIndex;
     let lastVoicing = active.lastVoicing;
+    let lastFingering = active.lastFingering ?? [];
     let unresolved = active.resolutionPitch ? active.lastPitch : undefined;
     const used = new Set<string>();
     for (let bar = p.initial.bar; bar < p.final.bar; bar++) {
@@ -255,12 +299,14 @@ export function validatePhrase(p: Phrase): string[] {
               errors.push("Unnecessary or excessive repositioning.");
             active = to;
             unresolved = undefined;
+            lastFingering = [];
           }
         }
         if (e.positionId !== active.id) errors.push("Unannounced shift.");
         if (e.kind === "note") {
           if (
             unresolved &&
+            Note.midi(unresolved) !== e.midi &&
             (!active.pitches.includes(e.pitch) ||
               Math.abs((Note.midi(unresolved) ?? -100) - e.midi) !== 1)
           )
@@ -268,11 +314,14 @@ export function validatePhrase(p: Phrase): string[] {
               "Chromatic figure does not resolve by semitone within its position.",
             );
           unresolved = active.pitches.includes(e.pitch) ? undefined : e.pitch;
-          const expectedFinger =
-            active.fingerToMidi.findIndex(
-              (m, i) =>
-                m === e.midi || active!.pitchOptions?.[i]?.includes(e.pitch),
-            ) + 1;
+          const expectedFinger = active.pitchOptions?.[e.finger - 1]?.includes(
+            e.pitch,
+          )
+            ? e.finger
+            : active.fingerToMidi.findIndex(
+                (m, i) =>
+                  m === e.midi || active!.pitchOptions?.[i]?.includes(e.pitch),
+              ) + 1;
           const preparation = p.events.find(
             (rest) =>
               rest.hand === hand &&
@@ -319,6 +368,19 @@ export function validatePhrase(p: Phrase): string[] {
           for (const n of heads) {
             if (headIds.has(n.id)) errors.push("Duplicate notehead ID.");
             headIds.add(n.id);
+            if (
+              lastFingering.some(
+                (previous) =>
+                  previous.finger === n.finger &&
+                  previous.midi !== n.midi &&
+                  !(
+                    black(previous.midi) &&
+                    !black(n.midi) &&
+                    Math.abs(previous.midi - n.midi) === 1
+                  ),
+              )
+            )
+              errors.push("Invalid same-finger key transition.");
             const w = Note.get(n.pitch);
             if (
               n.hand !== e.hand ||
@@ -448,6 +510,7 @@ export function validatePhrase(p: Phrase): string[] {
               errors.push("Chord voice leading exceeds Note jumps.");
           }
           lastVoicing = heads.map((n) => n.midi);
+          lastFingering = heads.map(({ midi, finger }) => ({ midi, finger }));
           if (
             lastPitch &&
             Math.abs(degree(e.pitch) - degree(lastPitch)) > s.interval
@@ -455,14 +518,15 @@ export function validatePhrase(p: Phrase): string[] {
             errors.push("Maximum diatonic interval exceeded.");
           if (
             e.action !==
-            (lastPitch === e.pitch ? "REPEAT_NOTE" : "PLAY_WITHIN_POSITION")
+            (Note.midi(lastPitch ?? "") === e.midi
+              ? "REPEAT_NOTE"
+              : "PLAY_WITHIN_POSITION")
           )
             errors.push("Incorrect hand action.");
           lastPitch = e.pitch;
           lastEnd = tick(e) + e.duration;
-          lastIndex = active.pitches.findIndex(
-            (pitch) => degree(pitch) === degree(e.pitch),
-          );
+          const mappedFinger = alternate ? expectedFinger : e.finger;
+          lastIndex = hand === "right" ? mappedFinger - 1 : 5 - mappedFinger;
         } else if (e.action !== "REST" || (e.notes && e.notes.length > 0))
           errors.push("Incorrect rest action.");
       }
@@ -485,6 +549,8 @@ export function validatePhrase(p: Phrase): string[] {
       JSON.stringify(final.lastVoicing) !== JSON.stringify(lastVoicing)
     )
       errors.push("Final chord state differs from score.");
+    if (JSON.stringify(final?.lastFingering) !== JSON.stringify(lastFingering))
+      errors.push("Final fingering state differs from score.");
     if (!!final?.resolutionPitch !== !!unresolved)
       errors.push("Final chromatic resolution state differs from score.");
     if (p.movements.filter((m) => m.hand === hand).some((m) => !used.has(m.id)))

@@ -119,6 +119,7 @@ export function spacedPhrase(
         lastNoteEnd:
           last.bar * settings.beats * 480 + last.onset + last.duration,
         lastVoicing: undefined,
+        lastFingering: [{ midi: last.midi, finger: last.finger }],
       },
     );
   }

@@ -61,7 +61,7 @@ function setupNotationDom() {
   });
 }
 
-it("restores old left-only preferences and persists both ranges through hand switches and reload", async () => {
+it("migrates old left-only preferences and restores independent ranges through hand switches and reload", async () => {
   setupNotationDom();
   await db.sessions.clear();
   await db.preferences.clear();
@@ -126,8 +126,143 @@ it("restores old left-only preferences and persists both ranges through hand swi
   ).toContain("C3–G3");
   expect(
     restored.container.querySelector(".keyboard-range")?.textContent,
+  ).toContain("C4–G4");
+  fireEvent.change(restored.getByLabelText("Hands"), {
+    target: { value: "right" },
+  });
+  expect(
+    restored.container.querySelector(".keyboard-range")?.textContent,
   ).toContain("C5–G5");
+  fireEvent.change(restored.getByLabelText("Hands"), {
+    target: { value: "left" },
+  });
+  expect(
+    restored.container.querySelector(".keyboard-range")?.textContent,
+  ).toContain("C3–G3");
 });
+
+it("remembers all three staged hand profiles without changing the running exercise", async () => {
+  setupNotationDom();
+  await db.sessions.clear();
+  await db.preferences.clear();
+  const initial = { ...defaults, bpm: 61 };
+  await db.preferences.put({ id: "settings", settings: initial });
+  const ui = render(<App />);
+  // Wait for initial hydration before starting a session.
+  await waitFor(() =>
+    expect((ui.getByLabelText("Tempo") as HTMLInputElement).value).toBe("61"),
+  );
+  fireEvent.click(ui.getByRole("button", { name: "Start practice" }));
+  const originalTarget = ui.getByTestId("target").getAttribute("data-pitches");
+  for (const [hand, bpm, key, rhythm, tolerance] of [
+    ["right", 82, "G", "mixed", 120],
+    ["left", 55, "F", "quarters", 220],
+    ["both", 74, "D", "gentle", 160],
+  ] as const) {
+    fireEvent.change(ui.getByLabelText("Hands"), { target: { value: hand } });
+    fireEvent.change(ui.getByLabelText("Tempo"), { target: { value: bpm } });
+    fireEvent.change(ui.getByLabelText("Key", { exact: true }), {
+      target: { value: key },
+    });
+    fireEvent.change(ui.getByLabelText("Rhythm"), {
+      target: { value: rhythm },
+    });
+    fireEvent.change(ui.getByLabelText("Timing tolerance (ms)"), {
+      target: { value: tolerance },
+    });
+    expect(ui.getByTestId("target").getAttribute("data-pitches")).toBe(
+      originalTarget,
+    );
+    expect(ui.getByRole("button", { name: "Pause" })).toBeTruthy();
+    await waitFor(async () =>
+      expect(
+        (await db.preferences.get("settings"))?.profiles?.[hand],
+      ).toMatchObject({ hand, bpm, key, rhythm, tolerance }),
+    );
+  }
+  const stored = (await db.preferences.get("settings"))!;
+  expect(stored.settings).toEqual(initial);
+  fireEvent.change(ui.getByLabelText("Hands"), { target: { value: "right" } });
+  expect((ui.getByLabelText("Tempo") as HTMLInputElement).value).toBe("82");
+  expect(
+    (ui.getByLabelText("Key", { exact: true }) as HTMLSelectElement).value,
+  ).toBe("G");
+  fireEvent.click(ui.getByRole("button", { name: "New exercise" }));
+  await waitFor(async () =>
+    expect((await db.preferences.get("settings"))?.settings).toEqual(
+      stored.profiles!.right,
+    ),
+  );
+  ui.unmount();
+  const restored = render(<App />);
+  await waitFor(() =>
+    expect((restored.getByLabelText("Tempo") as HTMLInputElement).value).toBe(
+      "82",
+    ),
+  );
+  fireEvent.change(restored.getByLabelText("Hands"), {
+    target: { value: "left" },
+  });
+  expect((restored.getByLabelText("Tempo") as HTMLInputElement).value).toBe(
+    "55",
+  );
+  fireEvent.change(restored.getByLabelText("Hands"), {
+    target: { value: "both" },
+  });
+  expect((restored.getByLabelText("Tempo") as HTMLInputElement).value).toBe(
+    "74",
+  );
+});
+
+it.each(["3 min", "5 min", "Unlimited"])(
+  "restores %s after reload and keeps duration locked through pause",
+  async (label) => {
+    setupNotationDom();
+    await db.sessions.clear();
+    await db.preferences.clear();
+    await db.preferences.put({
+      id: "settings",
+      settings: { ...defaults, bpm: 61 },
+    });
+    const ui = render(<App />);
+    await waitFor(() =>
+      expect((ui.getByLabelText("Tempo") as HTMLInputElement).value).toBe("61"),
+    );
+    fireEvent.click(ui.getByRole("button", { name: label }));
+    const minutes = label === "3 min" ? 3 : label === "5 min" ? 5 : 0;
+    await waitFor(async () =>
+      expect((await db.preferences.get("settings"))?.duration).toBe(minutes),
+    );
+    ui.unmount();
+    const restored = render(<App />);
+    await waitFor(() =>
+      expect((restored.getByLabelText("Tempo") as HTMLInputElement).value).toBe(
+        "61",
+      ),
+    );
+    await waitFor(() =>
+      expect(
+        restored
+          .getByRole("button", { name: label })
+          .getAttribute("aria-pressed"),
+      ).toBe("true"),
+    );
+    fireEvent.click(restored.getByRole("button", { name: "Start practice" }));
+    fireEvent.click(restored.getByRole("button", { name: "Pause" }));
+    const buttons = within(
+      restored.getByRole("group", { name: "Practice duration" }),
+    ).getAllByRole("button");
+    expect(
+      buttons.every((button) => (button as HTMLButtonElement).disabled),
+    ).toBe(true);
+    fireEvent.click(restored.getByRole("button", { name: "New exercise" }));
+    await waitFor(() =>
+      expect(
+        buttons.every((button) => !(button as HTMLButtonElement).disabled),
+      ).toBe(true),
+    );
+  },
+);
 
 it("counts down only during active practice and expires on the session clock", async () => {
   setupNotationDom();
