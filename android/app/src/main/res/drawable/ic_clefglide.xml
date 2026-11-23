@@ -1,0 +1,12 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="48" android:viewportHeight="48">
+    <path android:fillColor="#142f2c" android:pathData="M0,0h48v48h-48z" />
+    <!-- Shared note mark from public/favicon.svg, inside the adaptive safe area. -->
+    <group android:translateX="8" android:translateY="8">
+        <path android:fillColor="@android:color/transparent"
+            android:strokeColor="#f3efe5" android:strokeWidth="2"
+            android:strokeLineCap="round" android:strokeLineJoin="round"
+            android:pathData="M13,23V10l10,-3v13M13,14l10,-3M13,23a3,2.5 0,1 1,-6,0a3,2.5 0,1 1,6,0M23,20a3,2.5 0,1 1,-6,0a3,2.5 0,1 1,6,0" />
+    </group>
+</vector>

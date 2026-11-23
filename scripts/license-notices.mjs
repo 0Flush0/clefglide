@@ -14,6 +14,7 @@ const standaloneLicenses = new Set([
   "MIT",
   "MIT-0",
   "MPL-2.0",
+  "Unlicense",
 ]);
 
 const noticeOverride = (file) =>

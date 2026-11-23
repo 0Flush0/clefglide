@@ -68,6 +68,17 @@ const nativeSources = [
 ];
 
 export async function missingPackageNotice(id, directory) {
+  if (id === "bplist-parser@0.3.1" || id === "bplist-parser@0.3.2") {
+    const readme = await readFile(path.join(directory, "README.md"), "utf8");
+    const text = readme.split("## License")[1]?.trim();
+    if (
+      !text?.includes("Copyright (c) 2012 Near Infinity Corporation") ||
+      !text.includes("THE SOFTWARE IS PROVIDED")
+    ) {
+      throw new Error(`${id}: the README license section is incomplete.`);
+    }
+    return { file: "README.md (license section)", text };
+  }
   if (id === "imurmurhash@0.1.4" || id === "esrecurse@4.3.0") {
     const readme = await readFile(path.join(directory, "README.md"), "utf8");
     const text = readme

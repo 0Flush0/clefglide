@@ -23,6 +23,21 @@ export interface MidiEvent {
   source: "hardware" | "simulator";
   channel: number;
 }
+export interface MidiInput {
+  id: string;
+  name: string;
+}
+
+/** Platform hardware boundary. Construction must never request MIDI access. */
+export interface MidiAdapter {
+  readonly input?: MidiInput;
+  enable(): Promise<void>;
+  select(id: string): void | Promise<void>;
+  dispose(): void | Promise<void>;
+}
+
+export type MidiUpdate = (inputs: MidiInput[], status: string) => void;
+
 export class MidiBus {
   listeners = new Set<(e: MidiEvent) => void>();
   emit(e: MidiEvent) {
@@ -45,16 +60,17 @@ export class MidiBus {
     });
   }
 }
-export class HardwareMidi {
+export class HardwareMidi implements MidiAdapter {
   input?: Input;
   cleanup?: () => void;
   hotplug?: () => void;
   constructor(
     private bus: MidiBus,
-    private update: (inputs: Input[], status: string) => void,
+    private update: MidiUpdate,
     private disconnected: () => void,
   ) {}
   async enable() {
+    this.dispose();
     const unavailable = midiUnavailableReason();
     if (unavailable) throw new Error(unavailable);
     await WebMidi.enable({ sysex: false });
@@ -77,6 +93,7 @@ export class HardwareMidi {
   }
   select(id: string) {
     this.cleanup?.();
+    this.cleanup = undefined;
     this.input = WebMidi.inputs.find((i) => i.id === id);
     const input = this.input;
     if (!input) return;
@@ -120,9 +137,11 @@ export class HardwareMidi {
   }
   dispose() {
     this.cleanup?.();
+    this.cleanup = undefined;
     if (this.hotplug) {
       WebMidi.removeListener("connected", this.hotplug);
       WebMidi.removeListener("disconnected", this.hotplug);
     }
+    this.hotplug = undefined;
   }
 }

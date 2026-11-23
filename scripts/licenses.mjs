@@ -28,7 +28,9 @@ async function noticeFiles(directory, prefix = "") {
     if (
       entry.isFile() &&
       (prefix ||
-        /^(licen[cs]e|copying|copyright|notice)([._-]|$)/i.test(entry.name))
+        /^((?:un)?licen[cs]e|copying|copyright|notice)([._-]|$)/i.test(
+          entry.name,
+        ))
     ) {
       result.push({
         file: name,

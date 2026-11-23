@@ -1,5 +1,18 @@
 # ClefGlide QA
 
+## Capacitor Android support (2026-11-23)
+
+Verified on Windows with Node.js 24.12.0, Capacitor 8.6.2, Android SDK 36 and Android Studio's JDK 21:
+
+- `npm run typecheck`, `npm run lint`, `npm run test` and `npm run build`: passed. **136 tests in 23 files**, including native-bridge simulation, unchanged browser MIDI behavior, shared scoring, virtual input, persistence, backup dispatch and Android-only viewport setup.
+- `npm run test:e2e -- --workers=2`: **36 Chromium tests passed**. The existing desktop/tablet suite and Android layout simulations cover phone/tablet portrait and landscape sizes, both themes, changing safe-area values, independent main-content scrolling, boundary gestures, stable navigation and unchanged browser spacing. No Android emulator is used by these browser tests.
+- Capacitor sync: passed; the packaged APK's index and referenced Vite assets matched the final `dist/` build.
+- Gradle `:app:assembleDebug` and `:app:testDebugUnitTest`: passed. **12 Kotlin JVM tests** cover stream decoding, USB-only discovery, native port event forwarding, pause/resume, disconnect/driver-close errors, pending opens, disposal and stale callbacks after Activity destruction. Android APIs are mocked for these tests.
+- Gradle `:app:lintDebug`: passed with **0 errors and 9 warnings**, covering dependency-update suggestions, Capacitor template resources and a Kotlin extension suggestion.
+- Generator, score, scoring engine, `src/progress`, Vite configuration and runtime web-deployment files were unchanged. `.dockerignore` excludes the native project from the web build context. Dependency-notice discovery was extended for the added Capacitor CLI dependencies.
+
+**Hardware/runtime checks remain open:** no Android emulator, physical phone or USB MIDI keyboard was used for these automated checks. Native WebView rendering, touch/audio, actual Activity lifecycle delivery, USB/OTG discovery and selection, hardware note/sustain timing, detach/reconnect behavior, Android file-picker export/import, system-bar contrast and the native overscroll/stretch animation require physical verification. Follow the [phone setup and hardware checklist](ANDROID.md). These automated results do not establish hardware compatibility or comfortable human fingering.
+
 ## Repository cleanup checks (2026-11-10)
 
 Verified on Windows with Node.js 24.12.0 and npm 10.9.2. A separate working copy allowed a clean install while the existing development server stayed running.

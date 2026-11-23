@@ -1,6 +1,6 @@
 # ClefGlide
 
-ClefGlide is a browser-based piano sight-reading trainer that generates new sheet music as you play. It runs without an account or application server and keeps your practice history in your browser.
+ClefGlide is a piano sight-reading trainer for the browser and Android that generates new sheet music as you play. Both platforms share the same React application, exercise generator, notation and scoring. It runs without an account or application server and keeps your practice history on your device.
 
 [Try ClefGlide](https://clefglide.org/)
 
@@ -11,7 +11,7 @@ ClefGlide is a browser-based piano sight-reading trainer that generates new shee
 - Seeded exercises for either hand or both hands, with adjustable note ranges, leaps, hand movements, finger spacing, accidentals and chords.
 - Treble, bass and grand-staff notation with Smart Hints for finger placement and planned hand movements.
 - Guided practice that waits for the correct notes, plus timed practice with a count-in and separate timing feedback.
-- Web MIDI input and a virtual piano for touch or computer keyboard practice.
+- Web MIDI in supported browsers, a native USB MIDI adapter on Android, and a virtual piano for touch or computer keyboard practice.
 - Local progress comparisons by difficulty and assistance, with JSON backup import/export and CSV summaries.
 - Responsive practice controls, light and dark themes, and English and German UI options.
 
@@ -21,7 +21,7 @@ Fingering suggestions follow the generator’s rules. MIDI input provides pitch 
 
 ## Privacy
 
-ClefGlide stores practice progress locally in your browser’s IndexedDB. Clearing this site’s browser data removes that local history.
+ClefGlide stores practice progress locally in IndexedDB. Android uses the same storage schema inside its WebView, separately from the website's browser data. Clearing site/app data or uninstalling the Android app removes that local history. Android automatic backups are disabled; use JSON export/import to transfer or back up progress.
 
 JSON backups include session dates and durations, exercise settings and seeds, hint use, and individual note outcomes with pitch and timing data where available. CSV exports contain per-session summaries.
 
@@ -35,6 +35,25 @@ npm run dev
 ```
 
 Open the URL printed by Vite. Choose an exercise, select **Start practice**, then open **Virtual piano** to play without hardware. For a MIDI keyboard, use Chrome on HTTPS or localhost and select **Connect MIDI**. The [practice guide](docs/PRACTICE.md) covers device setup, hints and progress backups.
+
+## Android
+
+Capacitor packages the existing Vite `dist/` build into an Android APK. The app runs locally and does not load the hosted website. Use **Node.js 24**, **JDK 21**, and Android Studio with **Android SDK Platform 36**. The app supports Android 7.0/API 24 or newer and targets API 36; full edge-to-edge layout requires Android System WebView 140 or newer, with a safe native-inset fallback on older WebViews.
+
+After installing dependencies with `npm ci`:
+
+```sh
+npm run android:sync
+npm run android:open
+```
+
+Enable **USB debugging** on your phone, connect it to the PC, and accept its debugging prompt. In Android Studio, select the **app** configuration and your **physical phone**, then press **Run**. Try the virtual piano first. After installation, disconnect the PC and connect a class-compliant USB MIDI keyboard through a USB/OTG adapter; choose **Connect MIDI** and the keyboard's input port.
+
+Run `npm run android:sync` after web changes to rebuild and copy the assets before running from Android Studio. The debug APK is produced at `android/app/build/outputs/apk/debug/app-debug.apk`. The [Android guide](docs/ANDROID.md) covers Windows command-line builds, file-picker backups, lifecycle behavior, safe-area layout and the physical-device checklist.
+
+The native adapter handles note-on/off, sustain and USB disconnections through Android's `MidiManager`. Backgrounding or disconnecting pauses practice; reconnect and start manually. Android keeps the system bars visible and isolates main-content scrolling from navigation. The web build and deployment remain unchanged. Bluetooth MIDI, iOS, release signing and store publication are outside this version.
+
+**Verification:** Android builds and automated browser/native simulations pass. USB MIDI, native WebView behavior, overscroll, system bars and Android file pickers still require verification on a physical phone and keyboard.
 
 ## Checks
 
@@ -51,14 +70,23 @@ npm run test:licenses
 
 Vitest covers generator invariants, scoring, notation, MIDI adapter behavior and storage. Playwright exercises the app with simulated input at desktop and tablet viewport sizes. The [QA checklist](docs/QA_CHECKLIST.md) records test evidence and tracks physical MIDI and device checks.
 
+With `JAVA_HOME` set to JDK 21 and `ANDROID_HOME` set to the Android SDK, run the native checks from PowerShell after `npm run android:sync`:
+
+```powershell
+.\android\gradlew.bat -p android :app:assembleDebug :app:testDebugUnitTest :app:lintDebug
+```
+
+Kotlin JVM tests simulate MIDI decoding, discovery and lifecycle cleanup. Browser tests simulate safe-area changes and verify scrolling and navigation at phone/tablet sizes. These checks do not establish physical USB MIDI compatibility or native Android rendering behavior.
+
 ## Architecture
 
 The static app uses React, TypeScript and Vite, with VexFlow for SVG notation, Tonal for music theory, WEBMIDI.js for MIDI, Dexie and Zod for local storage, and Recharts for progress charts.
 
 - [`src/generation`](src/generation) builds seeded phrases from explicit hand states. An independent validator checks each phrase before use.
 - [`src/score`](src/score) defines the tick-based score model, derives fingering cues and renders the sheet music.
-- [`src/midi`](src/midi) routes hardware and virtual input into the same [scoring engine](src/scoring).
+- [`src/midi`](src/midi) routes hardware and virtual input into the same [scoring engine](src/scoring). A small adapter factory selects WEBMIDI.js for browsers and the local Kotlin MIDI plugin for Android, preserving the `MidiBus`/`MidiEvent` contract.
 - [`src/practice`](src/practice) coordinates exercises, playback and the UI. [`src/progress`](src/progress) handles local sessions and backups.
+- [`src/platform`](src/platform) isolates Android layout, system-bar appearance and file exports while preserving browser behavior. [`android`](android) contains the native project, local plugins, Gradle wrapper and JVM tests; [`capacitor.config.ts`](capacitor.config.ts) points to the shared production build.
 
 See the [product requirements](docs/REQUIREMENTS.md), [implementation decisions](docs/DECISIONS.md), [development notes](docs/DEVELOPMENT.md) and [hosting guide](docs/HOSTING.md).
 

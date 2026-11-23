@@ -11,6 +11,8 @@
 **/.npm
 **/.cache
 **/*.tsbuildinfo
+# Native Android sources and local build artifacts are not part of the web image.
+android/
 public/licenses/dependencies.json
 public/licenses/THIRD_PARTY_NOTICES.txt
 
@@ -38,6 +40,10 @@ OPEN_SOURCE_AUDIT.md
 **/*.p12
 **/*.pfx
 **/*.ppk
+**/*.jks
+**/*.keystore
+**/keystore.properties
+**/key.properties
 **/id_rsa
 **/id_ed25519
 **/id_ecdsa

@@ -1658,8 +1658,11 @@ body:has(.range-dialog[open]) {
   }
 }
 .rail {
-  width: 176px;
-  padding: 24px 16px;
+  --rail-width: 176px;
+  --rail-padding-y: 24px;
+  --rail-padding-x: 16px;
+  width: var(--rail-width);
+  padding: var(--rail-padding-y) var(--rail-padding-x);
 }
 .rail-caption {
   margin: 10px 0 30px 25px;
@@ -1914,8 +1917,11 @@ footer {
 }
 @media (max-width: 1200px) {
   .rail {
-    width: 72px;
-    padding: 22px 12px;
+    --rail-width: 72px;
+    --rail-padding-y: 22px;
+    --rail-padding-x: 12px;
+    width: var(--rail-width);
+    padding: var(--rail-padding-y) var(--rail-padding-x);
   }
   .brand {
     justify-content: center;
@@ -1996,8 +2002,11 @@ footer {
 }
 @media (max-width: 700px) {
   .rail {
-    width: 100%;
-    padding: 10px 15px;
+    --rail-width: 100%;
+    --rail-padding-y: 10px;
+    --rail-padding-x: 15px;
+    width: var(--rail-width);
+    padding: var(--rail-padding-y) var(--rail-padding-x);
   }
   .brand > span {
     display: inline;

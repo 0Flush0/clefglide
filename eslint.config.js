@@ -4,6 +4,7 @@ export default ts.config(
   {
     ignores: [
       "dist/**",
+      "android/**",
       ".tools/**",
       "node_modules/**",
       "playwright-report/**",

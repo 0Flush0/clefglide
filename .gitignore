@@ -37,6 +37,10 @@ _netrc
 *.p12
 *.pfx
 *.ppk
+*.jks
+*.keystore
+keystore.properties
+key.properties
 id_rsa
 id_ed25519
 id_ecdsa

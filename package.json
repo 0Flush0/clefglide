@@ -16,9 +16,14 @@
     "test:licenses": "npm run build && playwright test --config=playwright.licenses.config.ts",
     "lint": "eslint .",
     "licenses": "node scripts/licenses.mjs",
-    "format": "prettier --write src e2e scripts *.ts *.js"
+    "format": "prettier --write src e2e scripts *.ts *.js",
+    "android:sync": "npm run build && cap sync android",
+    "android:open": "cap open android",
+    "android:run": "npm run android:sync && cap run android"
   },
   "dependencies": {
+    "@capacitor/android": "8.6.2",
+    "@capacitor/core": "8.6.2",
     "@radix-ui/react-tabs": "1.1.11",
     "@tailwindcss/vite": "4.3.5",
     "dexie": "4.0.11",
@@ -34,6 +39,7 @@
     "zod": "4.6.7"
   },
   "devDependencies": {
+    "@capacitor/cli": "8.6.2",
     "@eslint/js": "10.0.1",
     "@napi-rs/canvas": "1.1.0",
     "@playwright/test": "1.65.0",

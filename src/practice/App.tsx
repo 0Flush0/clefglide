@@ -57,19 +57,16 @@ import {
 } from "../score/model";
 import { generate } from "../generation/planner";
 import { Scorer, metrics } from "../scoring/engine";
-import {
-  HardwareMidi,
-  MidiBus,
-  midiUnavailableReason,
-  type MidiEvent,
-} from "../midi/adapter";
+import { MidiBus, type MidiAdapter, type MidiEvent } from "../midi/adapter";
+import { createMidiAdapter, midiUnavailableReason } from "../midi/platform";
+import { download } from "../platform/download";
+import { syncAndroidTheme } from "../platform/theme";
 import { createLocalId } from "../shared/ids";
 import { GitHubLink, SourceLinks } from "../shared/SourceLinks";
 import { Notation } from "../score/Notation";
 import {
   db,
   record,
-  download,
   csv,
   importSessions,
   type Session,
@@ -195,7 +192,7 @@ export function App() {
   const t = labels[lang],
     audio = useRef<AudioContext | null>(null),
     lastBeat = useRef(-1),
-    hardware = useRef<HardwareMidi | null>(null),
+    hardware = useRef<MidiAdapter | null>(null),
     savedPhrase = useRef(-1),
     presentedBars = useRef<Settings["bars"]>(settings.bars);
   const sessions =
@@ -271,10 +268,13 @@ export function App() {
   }, []);
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? "dark" : "light";
+    void syncAndroidTheme(dark).catch((e: unknown) => {
+      console.error("Could not synchronize Android system-bar appearance.", e);
+    });
     document.documentElement.lang = lang;
   }, [dark, lang]);
   useEffect(() => {
-    const adapter = new HardwareMidi(
+    const adapter = createMidiAdapter(
       bus,
       (list, message) => {
         setInputs(list.map((i) => ({ id: i.id, name: i.name })));
@@ -287,9 +287,14 @@ export function App() {
           "Piano disconnected. Practice paused; reconnect and press Start.",
         );
       },
+      () => {
+        void pausePractice(ref.current);
+      },
     );
     hardware.current = adapter;
-    return () => adapter.dispose();
+    return () => {
+      void adapter.dispose();
+    };
   }, [pausePractice]);
   useEffect(
     () =>
@@ -604,24 +609,34 @@ export function App() {
     render((x) => x + 1);
   };
   const connect = async () => {
+    void pausePractice(ref.current);
     try {
-      hardware.current?.dispose();
       await hardware.current?.enable();
-      if (hardware.current?.input) selectDevice(hardware.current.input.id);
+      const input = hardware.current?.input;
+      setDevice(input?.id ?? "");
+      setSim(!input);
+      if (input) setStatus("Piano connected");
       setError("");
     } catch (e) {
       setStatus("MIDI connection failed");
-      setError(
-        `${String(e)} Check Chrome site permissions, then retry or use the simulator.`,
-      );
+      setError(String(e));
     }
   };
-  const selectDevice = (id: string) => {
+  const selectDevice = async (id: string) => {
     void pausePractice(ref.current);
-    hardware.current?.select(id);
-    setDevice(id);
-    setSim(!id);
-    setStatus(id ? "Piano connected" : "Piano disconnected");
+    try {
+      await hardware.current?.select(id);
+      const input = hardware.current?.input;
+      setDevice(input?.id ?? "");
+      setSim(!input);
+      setStatus(input ? "Piano connected" : "Piano disconnected");
+      setError("");
+    } catch (e) {
+      setDevice("");
+      setSim(true);
+      setStatus("MIDI connection failed");
+      setError(String(e));
+    }
     render((x) => x + 1);
   };
   const filtered = sessions.filter(
@@ -1235,13 +1250,15 @@ export function App() {
                 <div className="inline-actions">
                   <button
                     onClick={() =>
-                      download(
+                      void download(
                         "clefglide-progress.json",
                         JSON.stringify(
                           { format: "sightflow-1", sessions },
                           null,
                           2,
                         ),
+                      ).catch((e: unknown) =>
+                        setError(`Could not export progress: ${String(e)}`),
                       )
                     }
                   >
@@ -1250,10 +1267,12 @@ export function App() {
                   </button>
                   <button
                     onClick={() =>
-                      download(
+                      void download(
                         "clefglide-progress.csv",
                         csv(sessions),
                         "text/csv",
+                      ).catch((e: unknown) =>
+                        setError(`Could not export progress: ${String(e)}`),
                       )
                     }
                   >

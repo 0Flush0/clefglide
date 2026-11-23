@@ -1,0 +1,73 @@
+/* Capacitor 8 forwards safe-area env() values when viewport-fit=cover is active.
+   Older WebViews receive native padding and zero env() values: never add both.
+   Insets belong to the contents of each column, not to body or the whole shell,
+   so the sidebar background can reach the actual bottom of the screen. */
+html[data-platform="android"] {
+  --android-safe-top: env(safe-area-inset-top, 0px);
+  --android-safe-right: env(safe-area-inset-right, 0px);
+  --android-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --android-safe-left: env(safe-area-inset-left, 0px);
+}
+
+html[data-platform="android"] .app-shell {
+  height: 100dvh;
+  min-height: 100dvh;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+html[data-platform="android"] .rail {
+  width: calc(var(--rail-width) + var(--android-safe-left));
+  padding-top: calc(var(--rail-padding-y) + var(--android-safe-top));
+  padding-bottom: calc(var(--rail-padding-y) + var(--android-safe-bottom));
+  padding-left: calc(var(--rail-padding-x) + var(--android-safe-left));
+}
+
+html[data-platform="android"] .app-shell > main {
+  /* Scroll this sibling of the rail, never the document containing them both.
+     Containment keeps boundary gestures from chaining to WebView overscroll. */
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  padding-top: var(--android-safe-top);
+  padding-right: var(--android-safe-right);
+  padding-bottom: var(--android-safe-bottom);
+}
+
+html[data-platform="android"] .legal-page {
+  padding-top: calc(clamp(20px, 5vw, 64px) + var(--android-safe-top));
+  padding-right: calc(20px + var(--android-safe-right));
+  padding-bottom: calc(clamp(20px, 5vw, 64px) + var(--android-safe-bottom));
+  padding-left: calc(20px + var(--android-safe-left));
+}
+
+html[data-platform="android"] .licenses-dialog {
+  position: fixed;
+  inset: var(--android-safe-top) var(--android-safe-right)
+    var(--android-safe-bottom) var(--android-safe-left);
+  max-height: calc(
+    100dvh - var(--android-safe-top) - var(--android-safe-bottom) - 40px
+  );
+  max-width: calc(
+    100vw - var(--android-safe-left) - var(--android-safe-right) - 32px
+  );
+}
+
+@media (max-width: 700px) {
+  html[data-platform="android"] .app-shell {
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* On phones the rail is a header row; only it clears the status bar. */
+  html[data-platform="android"] .rail {
+    width: 100%;
+    padding-right: calc(var(--rail-padding-x) + var(--android-safe-right));
+    padding-bottom: var(--rail-padding-y);
+  }
+
+  html[data-platform="android"] .app-shell > main {
+    padding-top: 0;
+    padding-left: var(--android-safe-left);
+  }
+}
