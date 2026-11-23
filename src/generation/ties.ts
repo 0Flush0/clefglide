@@ -13,6 +13,16 @@ import {
 } from "./config";
 import { chooseWeighted } from "./sampling";
 import { random } from "./random";
+import { Note } from "tonal";
+import { tieSegmentSchema } from "../score/ties";
+import { noteLifetimeDataSchema } from "../score/lifetimeValidation";
+import { diatonicIndex } from "./positionMaps";
+import { writtenPitch } from "../score/pitch";
+
+/** Continuation identities are committed before the next phrase exists. */
+export function carryHeadId(eventId: string, finger: number, primary: boolean) {
+  return primary ? eventId : `${eventId}:hold:${finger}`;
+}
 
 /** Only notates already playable heads. Never guesses a fingering or moves a hand. */
 export function planTies(
@@ -71,16 +81,40 @@ export function planTies(
       mirror(event);
     });
   };
-  // The preceding phrase committed both the release target and the exact next head ID.
-  for (const pending of initial.pendingTies ?? []) {
-    const e = events.find((e) => e.id === pending.nextSegmentId)!;
-    const n = e.notes![0];
-    n.lifetime = structuredClone(pending.head.lifetime);
-    n.tie = { ...pending.head.tie!, index: 1, previousId: pending.head.id };
-    delete n.tie.nextId;
-    mirror(e);
-  }
   state.pendingTies = [];
+  // Consume the committed grid without extending or rewriting an owned lifetime.
+  for (const pending of initial.pendingTies ?? []) {
+    let previous = pending.head;
+    const release = previous.lifetime!.releaseTick;
+    const primary =
+      pending.nextSegmentId === `${seed}-${initial.bar}-0-${previous.hand}`;
+    for (const e of events.filter(
+      (e) => e.hand === previous.hand && tick(e) < release,
+    )) {
+      const n = noteheads(e).find((n) => n.finger === previous.finger)!;
+      if (!n || n.midi !== previous.midi || n.pitch !== previous.pitch)
+        throw new Error("A committed tie lost its occupied tone.");
+      n.lifetime = structuredClone(previous.lifetime);
+      n.tie = {
+        ...previous.tie!,
+        index: previous.tie!.index + 1,
+        previousId: previous.id,
+      };
+      if (tick(e) + e.duration < release) {
+        const nextTick = tick(e) + e.duration;
+        const nextEvent = `${seed}-${Math.floor(nextTick / (c.notation.beats * TPQ))}-${nextTick % (c.notation.beats * TPQ)}-${n.hand}`;
+        n.tie.nextId = carryHeadId(nextEvent, n.finger, primary);
+      } else delete n.tie.nextId;
+      mirror(e);
+      previous = n;
+    }
+    if (release > end)
+      state.pendingTies.push({
+        ...structuredClone(pending),
+        head: structuredClone(previous),
+        nextSegmentId: previous.tie!.nextId!,
+      });
+  }
   for (const hand of state.hands) {
     const voice = `${hand.hand}:main` as "right:main" | "left:main";
     if (!t.voices.includes(voice)) continue;
@@ -221,38 +255,72 @@ export function planTies(
           });
         } else {
           const duration = Math.min(...c.rhythm.durations.map((d) => d.value));
+          const eligible = heads.filter(
+            (n) =>
+              Math.abs(diatonicIndex(n.pitch) - diatonicIndex(e.pitch)) <=
+                c.melody.maxIntervalSteps &&
+              (t.chordTones !== "outer" ||
+                n.midi === Math.min(...heads.map((h) => h.midi)) ||
+                n.midi === Math.max(...heads.map((h) => h.midi))),
+          );
           if (
-            heads.length !== 1 ||
+            !eligible.length ||
             tick(e) + e.duration !== end ||
             !t.subdivisions.some((s) => s === e.duration) ||
-            e.duration + duration > t.maxDurationTicks
+            !t.segmentCounts.some(
+              (count) =>
+                e.duration + (count - 1) * duration <= t.maxDurationTicks,
+            )
           )
             continue;
           candidates.push({
             weight: pattern.weight,
             value: () => {
-              const n = heads[0],
-                nextSegmentId = `${seed}-${state.bar}-0-${hand.hand}`;
-              const l = n.lifetime!;
-              l.releaseTick += duration;
-              l.durationTicks += duration;
-              l.keyHold = { kind: "required", releaseTick: l.releaseTick };
-              n.tie = {
-                lifetimeId: n.id,
-                attackEventId: e.id,
-                index: 0,
-                count: 2,
-                pattern: "carry",
-                nextId: nextSegmentId,
-              };
-              mirror(e);
-              state.pendingTies!.push({
-                configFingerprint: generatorConfigFingerprint(c),
-                head: structuredClone(n),
-                positionId: e.positionId,
-                nextSegmentId,
-                duration,
-              });
+              const count = chooseWeighted(
+                t.segmentCounts
+                  .filter(
+                    (count) =>
+                      e.duration + (count - 1) * duration <= t.maxDurationTicks,
+                  )
+                  .map((value) => ({ value, weight: 1 })),
+                state,
+              );
+              const chosen =
+                t.chordTones === "all"
+                  ? heads
+                  : [
+                      chooseWeighted(
+                        eligible.map((value) => ({ value, weight: 1 })),
+                        state,
+                      ),
+                    ];
+              for (const [index, n] of chosen.entries()) {
+                const nextSegmentId = carryHeadId(
+                  `${seed}-${state.bar}-0-${hand.hand}`,
+                  n.finger,
+                  index === 0,
+                );
+                const l = n.lifetime!;
+                l.releaseTick += (count - 1) * duration;
+                l.durationTicks += (count - 1) * duration;
+                l.keyHold = { kind: "required", releaseTick: l.releaseTick };
+                n.tie = {
+                  lifetimeId: n.id,
+                  attackEventId: e.id,
+                  index: 0,
+                  count,
+                  pattern: "carry",
+                  nextId: nextSegmentId,
+                };
+                mirror(e);
+                state.pendingTies!.push({
+                  configFingerprint: generatorConfigFingerprint(c),
+                  head: structuredClone(n),
+                  positionId: e.positionId,
+                  nextSegmentId,
+                  duration,
+                });
+              }
             },
           });
         }
@@ -296,20 +364,29 @@ export function validateTieCarry(
       p.configFingerprint !== generatorConfigFingerprint(c) ||
       !h ||
       p.positionId !== h.id ||
-      h.lastPitch !== n.pitch ||
-      h.lastFingering?.length !== 1 ||
-      h.fingerToMidi[n.finger - 1] !== n.midi ||
+      !h.lastFingering?.some(
+        (f) => f.midi === n.midi && f.finger === n.finger,
+      ) ||
+      Note.midi(n.pitch) !== n.midi ||
+      (n.written !== undefined &&
+        JSON.stringify(n.written) !==
+          JSON.stringify(writtenPitch(n.pitch, c.notation.key))) ||
+      (h.fingerToMidi[n.finger - 1] !== n.midi &&
+        !h.pitchOptions?.[n.finger - 1]?.includes(n.pitch)) ||
+      !tieSegmentSchema.safeParse(n.tie).success ||
+      !noteLifetimeDataSchema.safeParse(l).success ||
       n.tie?.pattern !== "carry" ||
-      n.tie.index !== 0 ||
-      n.tie.count !== 2 ||
-      n.tie.lifetimeId !== n.id ||
-      n.tie.attackEventId !== n.id ||
+      n.tie.index >= n.tie.count - 1 ||
+      !c.notation.ties.segmentCounts.includes(n.tie.count) ||
       n.tie.nextId !== p.nextSegmentId ||
-      p.nextSegmentId !== `${seed}-${state.bar}-0-${n.hand}` ||
+      ![
+        `${seed}-${state.bar}-0-${n.hand}`,
+        `${seed}-${state.bar}-0-${n.hand}:hold:${n.finger}`,
+      ].includes(p.nextSegmentId) ||
       p.duration !== Math.min(...c.rhythm.durations.map((d) => d.value)) ||
       !l ||
       l.onsetTick >= start ||
-      l.releaseTick !== start + p.duration ||
+      l.releaseTick !== start + (n.tie.count - n.tie.index - 1) * p.duration ||
       l.durationTicks !== l.releaseTick - l.onsetTick ||
       l.durationTicks > c.notation.ties.maxDurationTicks ||
       l.keyHold.kind !== "required" ||
@@ -317,7 +394,7 @@ export function validateTieCarry(
     )
       throw new Error("Invalid or incompatible cross-phrase tie state.");
     expected.push({
-      id: n.id,
+      id: n.tie.lifetimeId,
       eventId: n.tie.attackEventId,
       midi: n.midi,
       hand: n.hand,
@@ -329,7 +406,8 @@ export function validateTieCarry(
   const canonical = (ns: LifetimeNote[]) =>
     JSON.stringify([...ns].sort((a, b) => a.id.localeCompare(b.id)));
   if (
-    new Set(pending.map((p) => p.head.hand)).size !== pending.length ||
+    new Set(pending.map((p) => `${p.head.hand}:${p.head.finger}`)).size !==
+      pending.length ||
     canonical(expected) !== canonical(state.activeLifetimes ?? [])
   )
     throw new Error("Cross-phrase ties and active lifetimes disagree.");

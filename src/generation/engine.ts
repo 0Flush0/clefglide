@@ -35,7 +35,7 @@ import type { MovementDiagnostic } from "./model";
 import { inspectGeneratorFeasibility } from "./feasibility";
 import { nextLeapPreparation } from "./wideLeaps";
 import { attachNoteLifetimes } from "../score/lifetimes";
-import { planTies, validateTieCarry } from "./ties";
+import { planTies, validateTieCarry, carryHeadId } from "./ties";
 export function generateConfigured(
   c: ValidatedGeneratorConfig,
   seed: string,
@@ -106,7 +106,27 @@ export function generateConfigured(
       c,
       seed,
       state,
-      available,
+      new Map(
+        [...available].map(([hand, options]) => {
+          const preparation =
+            Math.max(
+              movement.kind === "rested-reposition" && movement.probability > 0
+                ? movement.preparationBeats
+                : 0,
+              c.wideLeaps.kind === "lifted-wide" && c.wideLeaps.probability > 0
+                ? c.wideLeaps.preparationBeats
+                : 0,
+            ) * TPQ;
+          const cue = bar * c.notation.beats * TPQ - preparation;
+          const occupied = (initial.activeLifetimes ?? []).some(
+            (n) =>
+              n.hand === hand &&
+              n.lifetime.keyHold.kind === "required" &&
+              n.lifetime.keyHold.releaseTick > cue,
+          );
+          return [hand, occupied ? [] : options];
+        }),
+      ),
       b,
       positions,
       movements,
@@ -114,23 +134,39 @@ export function generateConfigured(
     );
     const { durations, noteCount } = barRhythm(c, b, state);
     let soundedCount = noteCount;
-    if (b === 0 && initial.pendingTies?.length) {
+    const barStart = bar * c.notation.beats * TPQ;
+    const heldUntil = Math.max(
+      0,
+      ...(initial.pendingTies ?? []).map((p) => p.head.lifetime!.releaseTick),
+    );
+    if (barStart < heldUntil) {
       const unit = Math.min(...c.rhythm.durations.map((d) => d.value));
-      const count = durations[0] / unit;
-      durations.splice(0, 1, ...Array.from({ length: count }, () => unit));
-      soundedCount += count - 1;
+      let offset = barStart;
+      for (let d = 0; d < soundedCount; d++) {
+        const length = durations[d];
+        if (offset < heldUntil) {
+          // Tile the whole touched slot, including any tail after the release.
+          const parts = Array.from({ length: length / unit }, () => unit);
+          durations.splice(d, 1, ...parts);
+          soundedCount += parts.length - 1;
+          d += parts.length - 1;
+        }
+        offset += length;
+      }
     }
     let onset = 0;
     for (let j = 0; j < durations.length; j++) {
       const rest = j >= soundedCount;
       for (const h of state.hands) {
         const previousFingering = h.lastFingering ?? [];
-        const carry =
-          b === 0 && j === 0
-            ? initial.pendingTies?.find((p) => p.head.hand === h.hand)
-            : undefined;
+        const carries = (initial.pendingTies ?? []).filter(
+          (p) =>
+            p.head.hand === h.hand &&
+            p.head.lifetime!.releaseTick > barStart + onset,
+        );
+        const carry = carries[0];
         const finalAttack =
-          b === c.notation.phraseBars - 1 && j === noteCount - 1;
+          b === c.notation.phraseBars - 1 && j === soundedCount - 1;
         const choices = melodicChoices(c, h, chords[b], finalAttack);
         const goal = Math.max(
           0,
@@ -150,7 +186,9 @@ export function generateConfigured(
           b === c.notation.phraseBars - 1 && j === durations.length - 1,
         );
         const index = carry
-          ? h.lastIndex
+          ? h.hand === "right"
+            ? carry.head.finger - 1
+            : 5 - carry.head.finger
           : h.resolutionPitch && !(j === 0 && landings.has(h.hand))
             ? h.pitches.indexOf(h.resolutionPitch)
             : j === 0 && landings.has(h.hand)
@@ -160,15 +198,21 @@ export function generateConfigured(
           throw new Error(
             "No playable melodic transition. Widen the range or maximum melodic interval.",
           );
-        const { pitch, finger, resolving } = planChromatic(
-          c,
-          h,
-          index,
-          rest,
-          j === 0 && landings.has(h.hand),
-          chords[b],
-          state,
-        );
+        const { pitch, finger, resolving } = carry
+          ? {
+              pitch: carry.head.pitch,
+              finger: carry.head.finger,
+              resolving: false,
+            }
+          : planChromatic(
+              c,
+              h,
+              index,
+              rest,
+              j === 0 && landings.has(h.hand),
+              chords[b],
+              state,
+            );
         const midi = Note.midi(pitch)!;
         const id = `${seed}-${bar}-${onset}-${h.hand}`;
         const event: ScoreEvent = {
@@ -202,7 +246,11 @@ export function generateConfigured(
         };
         if (
           !rest &&
-          !carry &&
+          (!carry ||
+            (carries.length === 1 &&
+              c.notation.ties !== false &&
+              c.notation.ties.chordTones !== "all" &&
+              c.notation.ties.chordTones !== "none")) &&
           !h.resolutionPitch &&
           !resolving &&
           !(j === 0 && landings.has(h.hand)) &&
@@ -215,9 +263,24 @@ export function generateConfigured(
             c,
             chords[b],
             h.lastVoicing,
+            carries.map((p) => p.head),
           );
-          const playable = candidates.filter((heads) =>
-            playableTransition(previousFingering, heads),
+          const playable = candidates.filter(
+            (heads) =>
+              playableTransition(previousFingering, heads) &&
+              carries.every((p) =>
+                heads.some(
+                  (n) =>
+                    n.midi === p.head.midi &&
+                    n.pitch === p.head.pitch &&
+                    n.finger === p.head.finger,
+                ),
+              ) &&
+              (!carry ||
+                c.notation.ties === false ||
+                c.notation.ties.chordTones !== "outer" ||
+                carry.head.midi === Math.min(...heads.map((n) => n.midi)) ||
+                carry.head.midi === Math.max(...heads.map((n) => n.midi))),
           );
           if (playable.length)
             event.notes = chooseWeighted(
@@ -237,6 +300,25 @@ export function generateConfigured(
               })),
               state,
             );
+        }
+        if (carry) {
+          if (rest)
+            throw new Error("A committed tie overlaps a shared-voice rest.");
+          if (carries.length > 1)
+            event.notes = carries.map((p) => ({
+              ...structuredClone(p.head),
+              id: "",
+            }));
+          event.notes!.forEach((n, k) => {
+            const held = carries.find((p) => p.head.finger === n.finger);
+            n.id = held
+              ? carryHeadId(id, n.finger, held === carry)
+              : k
+                ? `${id}:${k}`
+                : id;
+            delete n.tie;
+            delete n.lifetime;
+          });
         }
         events.push(event);
         if (!rest) {

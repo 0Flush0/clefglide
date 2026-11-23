@@ -74,7 +74,7 @@ export function generatorConfigFingerprint(
   return `${generatorConfigVersion(config)}:parameters:${JSON.stringify(identity)}`;
 }
 export function generatorConfigVersion(config: ValidatedGeneratorConfig) {
-  if (config.notation.ties !== false) return "8.0.0";
+  if (config.notation.ties !== false) return "8.1.0";
   if (config.noteLifetimes.kind === "explicit") return "7.0.0";
   return config.wideLeaps.kind === "disabled" ? VERSION : "6.0.0";
 }

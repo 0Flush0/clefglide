@@ -1,5 +1,11 @@
 # Implementation decisions
 
+## Opt-in phrase-spanning ties (programmatic generator v8.1)
+
+- The existing tie module now commits complete chains of 2–256 segments and a configurable total duration before returning a source phrase. Notes, chromatic neighbors and full/partial chords retain original attack/voice identities, spelling, fingers, positions and physical holds across every intervening boundary. New attacks in partial chords use the approved voicing library; held tones can remain as suspensions over changing harmony.
+- Carry uses the shortest base rhythm duration as its continuation grid. Counts conflicting with scheduled shared-voice rests are rejected. Holds cannot overlap movement preparation. Finger substitution, independent voices and slurs remain unsupported. See [tie configuration and exact limits](GENERATOR_CONFIG.md#musical-ties-programmatic-api-version-8).
+- Enabled generation uses **8.1.0**; disabled presets, seeds and fingerprints remain unchanged. Existing generated scores, historical sessions and backups are retained. Simulator and VexFlow tests cover multi-phrase continuity; physical piano/pedal verification remains separate.
+
 ## Opt-in explicit note lifetimes (programmatic generator/scoring v7)
 
 - `noteLifetimes` adds validated absolute attack/release/duration metadata, per-note physical key requirements and logical voice identities. The default remains disabled. Current generation only projects its existing note ends after sampling; no rhythms, notes or PRNG sequences change. Canonical lifetime plans separately support authored overlapping voices, intended finger occupancy and original attack identities carried across phrase boundaries.

@@ -225,12 +225,12 @@ export const tiesSchema = z.union([
     .object({
       kind: z.literal("enabled"),
       probability,
-      segmentCounts: z.array(z.number().int().min(2).max(4)).min(1).max(3),
+      segmentCounts: z.array(z.number().int().min(2).max(256)).min(1).max(255),
       subdivisions: z.array(duration).min(1).max(4),
       withinMeasure: z.boolean(),
       crossMeasure: z.boolean(),
       crossPhrase: z.boolean(),
-      maxDurationTicks: z.number().int().min(480).max(15360),
+      maxDurationTicks: z.number().int().min(480).max(491520),
       voices: z
         .array(z.enum(["right:main", "left:main"]))
         .min(1)
@@ -335,7 +335,6 @@ const schema = z
         ties.crossPhrase !== patterns.includes("carry") ||
         (ties.crossPhrase &&
           (!ties.crossMeasure ||
-            !ties.segmentCounts.includes(2) ||
             !ties.subdivisions.some(
               (s) => s === Math.min(...c.rhythm.durations.map((d) => d.value)),
             ) ||
@@ -344,12 +343,7 @@ const schema = z
       )
         error(
           ["notation", "ties"],
-          "Cross-phrase ties require the carry pattern, cross-measure permission, two segments and the shortest rhythm subdivision within the duration budget.",
-        );
-      if (ties.crossPhrase && c.chromatic.kind !== "diatonic")
-        error(
-          ["notation", "ties"],
-          "Cross-phrase carry currently supports diatonic single notes only; disable chromatic neighbors.",
+          "Cross-phrase ties require the carry pattern, cross-measure permission and the shortest rhythm subdivision within the duration budget.",
         );
       if (ties.chordTones !== "none" && c.chords.kind === "single-notes")
         error(
@@ -565,6 +559,28 @@ const schema = z
       soundedBudgets.push((c.notation.beats - rest) * TPQ);
     }
     if (ties !== false) {
+      if (ties.crossPhrase) {
+        const unit = Math.min(...c.rhythm.durations.map((d) => d.value));
+        const measure = c.notation.beats * TPQ;
+        for (const count of ties.segmentCounts) {
+          const continuation = (count - 1) * unit;
+          const fits = Array.from(
+            { length: Math.ceil(continuation / measure) },
+            (_, bar) =>
+              Math.min(measure, continuation - bar * measure) <=
+              soundedBudgets[bar % 4],
+          ).every(Boolean);
+          if (
+            count * unit > ties.maxDurationTicks ||
+            !fits ||
+            (continuation > unit && unit < measure && !ties.withinMeasure)
+          )
+            error(
+              ["notation", "ties", "segmentCounts"],
+              "Every carry count must fit the duration budget, sounded timeline and within-measure policy.",
+            );
+        }
+      }
       if (
         ties.patterns.some((p) => p.value === "subdivide") &&
         !c.rhythm.durations.some(
@@ -601,6 +617,7 @@ const schema = z
         );
         const measure = c.notation.beats * TPQ;
         const grid = Math.min(...c.rhythm.durations.map((d) => d.value));
+        const memo = new Map<string, boolean>();
         const fits = (
           tick: number,
           remaining: number,
@@ -616,12 +633,17 @@ const schema = z
               (previousBar === bar ? !ties.withinMeasure : !ties.crossMeasure))
           )
             return false;
-          return lengths.some(
+          const key = `${tick}:${remaining}:${budget}:${previousBar}`;
+          const cached = memo.get(key);
+          if (cached !== undefined) return cached;
+          const possible = lengths.some(
             (length) =>
               length <= budget &&
               onset + length <= soundedBudgets[bar] &&
               fits(tick + length, remaining - 1, budget - length, bar),
           );
+          memo.set(key, possible);
+          return possible;
         };
         const possible = Array.from(
           { length: (4 * measure) / grid },

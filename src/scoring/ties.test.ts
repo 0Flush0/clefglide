@@ -52,6 +52,195 @@ const pair = (c = config()): ScoreEvent[] =>
   generateConfigured(c, "scored-tie").events.slice(0, 2);
 
 describe("tie lifetime scoring with normalized simulated MIDI", () => {
+  const chain = (
+    count: number,
+    treatment: "physical" | "sounding" | "forbid" = "physical",
+  ) => {
+    const c = resolveGeneratorConfig(
+      {
+        rhythm: { durations: [{ value: 480, weight: 1 }], breathBars: [] },
+        notation: {
+          ties: {
+            ...tieDefaults,
+            probability: 1,
+            crossPhrase: true,
+            segmentCounts: [count],
+            maxDurationTicks: count * 480,
+            patterns: [{ value: "carry", weight: 1 }],
+          },
+        },
+      },
+      config(treatment),
+    );
+    let p = generateConfigured(c, `score-chain-${count}`);
+    const source = p.events.at(-1)!;
+    const chunks = [[source]];
+    while (chunks.flat().length < count) {
+      p = generateConfigured(c, `score-chain-${count}`, p.final);
+      chunks.push(p.events.filter((e) => e.tie?.lifetimeId === source.id));
+    }
+    return { c, source, chunks };
+  };
+
+  it.each([2, 18, 34])(
+    "scores a streamed %i-segment chain once through its final release",
+    (count) => {
+      const { c, source, chunks } = chain(count);
+      const s = new Scorer(chunks[0], defaults, 120, c);
+      s.start(0);
+      s.input(event(source.midi, 0));
+      chunks.slice(1).forEach((chunk) => s.appendNotes(chunk));
+      s.tick(count * 1000 - 100);
+      expect(s.notes).toHaveLength(1);
+      expect(s.results).toHaveLength(1);
+      expect(s.durationResults[0].status).toBe("pending");
+      s.input(event(source.midi, count * 1000, "off"));
+      expect(s.durationResults).toHaveLength(1);
+      expect(s.durationResults[0].status).toBe("correct");
+    },
+  );
+
+  it("retains early release and pedal evidence across multiple phrase appends and retriggers", () => {
+    for (const treatment of ["physical", "sounding", "forbid"] as const) {
+      const { c, source, chunks } = chain(34, treatment);
+      const s = new Scorer(chunks[0], defaults, 120, c);
+      s.start(0);
+      s.input(event(source.midi, 0));
+      s.input(event(64, 100, "sustain", 127));
+      s.appendNotes(chunks[1]);
+      s.input(event(source.midi, 17000, "off"));
+      s.input(event(source.midi, 17010));
+      chunks.slice(2).forEach((chunk) => s.appendNotes(chunk));
+      s.input(event(source.midi, 34000, "off"));
+      s.input(event(64, 34000, "sustain", 0));
+      expect(s.results).toHaveLength(1);
+      expect(s.durationResults).toHaveLength(1);
+      expect(s.durationResults[0].status).toBe(
+        treatment === "forbid" ? "pedal" : "early",
+      );
+      expect(s.durationResults[0].physical?.releasedAtMs).toBe(17000);
+    }
+  });
+
+  it("evaluates one timed onset and the committed multi-phrase release with calibrated offset", () => {
+    const { c, source, chunks } = chain(34);
+    const s = new Scorer(
+      chunks[0],
+      { ...defaults, mode: "timed", offset: 20 },
+      120,
+      c,
+    );
+    s.start(0);
+    const onset = s.expected(source) + 20;
+    s.input(event(source.midi, onset));
+    chunks.slice(1).forEach((chunk) => s.appendNotes(chunk));
+    s.input(event(source.midi, onset + 34000, "off"));
+    expect(s.results).toHaveLength(1);
+    expect(s.results[0].errorMs).toBe(0);
+    expect(s.durationResults).toHaveLength(1);
+    expect(s.durationResults[0]).toMatchObject({
+      status: "correct",
+      physical: { errorMs: 0 },
+    });
+  });
+
+  it("keeps a paused multi-phrase hold interrupted after resume and later continuation appends", () => {
+    const { c, source, chunks } = chain(34);
+    const s = new Scorer(chunks[0], defaults, 120, c);
+    s.start(0);
+    s.input(event(source.midi, 0));
+    s.appendNotes(chunks[1]);
+    s.pause(17000);
+    s.start(22000);
+    chunks.slice(2).forEach((chunk) => s.appendNotes(chunk));
+    s.input(event(source.midi, 39000, "off"));
+    expect(s.results).toHaveLength(1);
+    expect(s.durationResults).toHaveLength(1);
+    expect(s.durationResults[0].status).toBe("interrupted");
+    expect(durationMetrics(s.durationResults).evaluated).toBe(0);
+  });
+
+  it("attributes a repeated pitch after a multi-phrase release to a new lifetime", () => {
+    const { c, source, chunks } = chain(34);
+    const last = chunks.at(-1)!.at(-1)!;
+    const repeat = structuredClone(last);
+    repeat.id += ":repeat";
+    repeat.onset += repeat.duration;
+    const head = repeat.notes![0];
+    head.id = repeat.id;
+    delete head.tie;
+    delete repeat.tie;
+    const onsetTick = last.lifetime!.releaseTick;
+    head.lifetime = {
+      ...head.lifetime!,
+      onsetTick,
+      releaseTick: onsetTick + 480,
+      durationTicks: 480,
+      keyHold: { kind: "required", releaseTick: onsetTick + 480 },
+    };
+    repeat.lifetime = structuredClone(head.lifetime);
+    const s = new Scorer(chunks.flat(), defaults, 120, c);
+    s.appendNotes([repeat]);
+    s.start(0);
+    s.input(event(source.midi, 0));
+    s.input(event(source.midi, 34000, "off"));
+    s.input(event(source.midi, 34000));
+    s.input(event(source.midi, 35000, "off"));
+    expect(s.results).toHaveLength(2);
+    expect(s.durationResults.map((r) => r.status)).toEqual([
+      "correct",
+      "correct",
+    ]);
+    expect(new Set(s.durationResults.map((r) => r.id)).size).toBe(2);
+  });
+
+  it("scores independent releases and reattacks in a partially tied boundary chord", () => {
+    const c = resolveGeneratorConfig(
+      {
+        melody: { maxIntervalSteps: 7 },
+        chords: { ...chordDefaults, probability: 1, maxVoiceLeadingSteps: 7 },
+        harmony: { progressions: [{ value: [1, 1, 1, 1], weight: 1 }] },
+        rhythm: { durations: [{ value: 480, weight: 1 }], breathBars: [] },
+        notation: {
+          ties: {
+            ...tieDefaults,
+            probability: 1,
+            crossPhrase: true,
+            chordTones: "any",
+            patterns: [{ value: "carry", weight: 1 }],
+          },
+        },
+      },
+      config(),
+    );
+    const pairs = Array.from({ length: 20 }, (_, i) => {
+      const a = generateConfigured(c, `partial-boundary-${i}`);
+      const b = generateConfigured(c, a.seed, a.final);
+      return [a.events.at(-1)!, b.events[0]];
+    });
+    const notes = pairs.find(
+      ([a, b]) =>
+        noteheads(a).length > 1 &&
+        noteheads(b).some(
+          (n) => !n.tie && !noteheads(a).some((h) => h.midi === n.midi),
+        ),
+    )!;
+    expect(notes).toBeDefined();
+    const s = new Scorer([notes[0]], defaults, 120, c);
+    s.start(0);
+    for (const n of noteheads(notes[0])) s.input(event(n.midi, 0));
+    s.appendNotes([notes[1]]);
+    for (const n of noteheads(notes[0]).filter((n) => !n.tie))
+      s.input(event(n.midi, 1000, "off"));
+    for (const n of noteheads(notes[1]).filter((n) => !n.tie))
+      s.input(event(n.midi, 1000));
+    for (const n of noteheads(notes[1])) s.input(event(n.midi, 2000, "off"));
+    const expected = lifetimeNotes(notes).length;
+    expect(s.results).toHaveLength(expected);
+    expect(s.durationResults).toHaveLength(expected);
+    expect(s.durationResults.every((r) => r.status === "correct")).toBe(true);
+  });
+
   it("rejects malformed continuation ticks and physical hold metadata before projecting attacks", () => {
     const c = config(),
       notes = pair(c);

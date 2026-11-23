@@ -172,16 +172,19 @@ export function validateGeneratedLifetimes(
             );
           if (
             s.pattern === "carry" &&
-            (heads.length !== 1 ||
-              s.count !== 2 ||
+            ((s.index === 0 &&
+              (e.bar !== p.final.bar - 1 ||
+                e.onset + e.duration !== c.notation.beats * TPQ)) ||
+              (s.index > 0 &&
+                (e.duration !==
+                  Math.min(...c.rhythm.durations.map((d) => d.value)) ||
+                  e.bar * c.notation.beats * TPQ + e.onset !==
+                    l.releaseTick - (s.count - s.index) * e.duration)) ||
               (s.index === 0 &&
-                (e.bar !== p.final.bar - 1 ||
-                  e.onset + e.duration !== c.notation.beats * TPQ)) ||
-              (s.index === 1 &&
-                (e.bar !== p.initial.bar ||
-                  e.onset !== 0 ||
-                  e.duration !==
-                    Math.min(...c.rhythm.durations.map((d) => d.value)))))
+                l.durationTicks !==
+                  e.duration +
+                    (s.count - 1) *
+                      Math.min(...c.rhythm.durations.map((d) => d.value))))
           )
             errors.push("Invalid cross-phrase carry pattern.");
         }
@@ -203,29 +206,33 @@ export function validateGeneratedLifetimes(
         const n = item.head,
           l = n.lifetime,
           s = n.tie;
-        const owned = active.find((a) => a.id === n.id);
+        const owned = active.find((a) => a.id === s?.lifetimeId);
         const source = incoming
-          ? p.events.find((e) => e.id === item.nextSegmentId)?.notes?.[0]
+          ? p.events.flatMap(noteheads).find((n) => n.id === item.nextSegmentId)
           : p.events.flatMap(noteheads).find((h) => h.id === n.id);
         if (
           !t.crossPhrase ||
           item.configFingerprint !== generatorConfigFingerprint(c) ||
-          item.nextSegmentId !== `${p.seed}-${state.bar}-0-${n.hand}` ||
+          ![
+            `${p.seed}-${state.bar}-0-${n.hand}`,
+            `${p.seed}-${state.bar}-0-${n.hand}:hold:${n.finger}`,
+          ].includes(item.nextSegmentId) ||
           !owned ||
           !source ||
           source.pitch !== n.pitch ||
+          JSON.stringify(source.written) !== JSON.stringify(n.written) ||
           source.midi !== n.midi ||
           source.finger !== n.finger ||
           source.hand !== n.hand ||
           !l ||
           !s ||
           s.pattern !== "carry" ||
-          s.index !== 0 ||
-          s.count !== 2 ||
+          s.index >= s.count - 1 ||
           s.nextId !== item.nextSegmentId ||
           item.duration !==
             Math.min(...c.rhythm.durations.map((d) => d.value)) ||
-          l.releaseTick !== boundary + item.duration ||
+          l.releaseTick !==
+            boundary + (s.count - s.index - 1) * item.duration ||
           owned.eventId !== s.attackEventId ||
           owned.positionId !== item.positionId ||
           owned.midi !== n.midi ||
@@ -234,7 +241,10 @@ export function validateGeneratedLifetimes(
           JSON.stringify(owned.lifetime) !== JSON.stringify(l) ||
           JSON.stringify(source.lifetime) !== JSON.stringify(l) ||
           (incoming
-            ? source.tie?.previousId !== n.id
+            ? source.tie?.previousId !== n.id ||
+              source.tie.index !== s.index + 1 ||
+              source.tie.lifetimeId !== s.lifetimeId ||
+              source.tie.count !== s.count
             : JSON.stringify(source) !== JSON.stringify(n))
         )
           errors.push("Invalid tie continuation boundary state.");

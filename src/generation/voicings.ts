@@ -15,6 +15,7 @@ export function chordCandidatesForConfig(
   c: ValidatedGeneratorConfig,
   harmony: string[],
   previous?: number[],
+  continuing: readonly Notehead[] = [],
 ): Notehead[][] {
   const chord = c.chords;
   if (chord.kind === "single-notes") return [];
@@ -56,16 +57,32 @@ export function chordCandidatesForConfig(
     const span = heads.at(-1)!.midi - heads[0].midi;
     if (span > chord.maxSpanSemitones) return [];
     const pcs = heads.map((n) => Note.pitchClass(n.pitch));
+    const attackPcs = continuing.length
+      ? heads
+          .filter(
+            (n) =>
+              !continuing.some(
+                (held) =>
+                  held.midi === n.midi &&
+                  held.pitch === n.pitch &&
+                  held.finger === n.finger,
+              ),
+          )
+          .map((n) => Note.pitchClass(n.pitch))
+      : pcs;
     if (heads.length === 2) {
       if (
         !chord.dyadIntervals.includes(span as 3 | 4 | 5 | 7 | 8 | 9) ||
-        !pcs.every((pc) => harmony.includes(pc))
+        !attackPcs.every((pc) => harmony.includes(pc))
       )
         return [];
     } else if (
       !harmonicSets.some(
         (set) =>
-          set.length === heads.length && set.every((pc) => pcs.includes(pc)),
+          set.length === heads.length &&
+          (continuing.length
+            ? attackPcs.every((pc) => set.includes(pc))
+            : set.every((pc) => pcs.includes(pc))),
       )
     )
       return [];

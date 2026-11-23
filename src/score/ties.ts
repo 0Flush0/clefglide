@@ -1,13 +1,14 @@
 import { z } from "zod";
 import { TPQ, noteheads, type LifetimeNote, type ScoreEvent } from "./model";
 import type { ValidatedGeneratorConfig } from "../generation/config";
+import { Note } from "tonal";
 
 export const tieSegmentSchema = z
   .object({
     lifetimeId: z.string().min(1),
     attackEventId: z.string().min(1),
-    index: z.number().int().min(0).max(3),
-    count: z.number().int().min(2).max(4),
+    index: z.number().int().min(0).max(255),
+    count: z.number().int().min(2).max(256),
     pattern: z.enum(["subdivide", "connect", "carry"]),
     previousId: z.string().min(1).optional(),
     nextId: z.string().min(1).optional(),
@@ -25,7 +26,27 @@ export function validateTieSegments(
     ...events.map((e) => e.bar * beats * TPQ + e.onset + e.duration),
   ),
   policy?: Exclude<ValidatedGeneratorConfig["notation"]["ties"], false>,
-) {
+  // For a clipped notation window, retain the full surrounding score as evidence.
+  // Missing glyphs alone are never accepted as proof of an incoming connection.
+  windowContext?: ScoreEvent[],
+): string[] {
+  if (windowContext) {
+    const tick = (e: ScoreEvent) => e.bar * beats * TPQ + e.onset;
+    const errors = validateTieSegments(
+      windowContext,
+      beats,
+      initial,
+      Math.min(startTick, ...windowContext.map(tick)),
+      Math.max(endTick, ...windowContext.map((e) => tick(e) + e.duration)),
+      policy,
+    );
+    const expected = windowContext.filter(
+      (e) => tick(e) >= startTick && tick(e) < endTick,
+    );
+    if (JSON.stringify(expected) !== JSON.stringify(events))
+      errors.push("Notation window differs from its validated tie context.");
+    return [...new Set(errors)];
+  }
   const errors: string[] = [];
   let previousTick = -1;
   for (const e of events) {
@@ -65,6 +86,15 @@ export function validateTieSegments(
     }
     const t = parsed.data,
       l = head.lifetime;
+    const spelling = Note.get(head.pitch);
+    if (
+      spelling.midi !== head.midi ||
+      (head.written &&
+        (head.written.letter !== spelling.letter ||
+          head.written.octave !== spelling.oct ||
+          head.written.accidental !== spelling.acc))
+    )
+      errors.push("Tie has inconsistent chromatic spelling.");
     if (
       policy &&
       (!l ||
@@ -103,6 +133,9 @@ export function validateTieSegments(
           owner.event.id !== t.attackEventId ||
           owner.head.midi !== head.midi ||
           owner.head.pitch !== head.pitch ||
+          (owner.head.written &&
+            head.written &&
+            owner.head.written.key !== head.written.key) ||
           owner.head.finger !== head.finger ||
           owner.head.hand !== head.hand ||
           owner.event.positionId !== event.positionId ||
@@ -137,13 +170,7 @@ export function validateTieSegments(
             : !policy.crossMeasure)
         )
           errors.push("Tie connection violates measure boundary permission.");
-      } else if (
-        !carried ||
-        t.pattern !== "carry" ||
-        t.index !== 1 ||
-        t.previousId !== carried.id ||
-        tick !== startTick
-      )
+      } else if (!carried || t.pattern !== "carry" || tick !== startTick)
         errors.push("Missing incoming tie segment or boundary state.");
     }
     if (t.nextId) {
@@ -158,8 +185,6 @@ export function validateTieSegments(
           errors.push("Broken or discontinuous tie connection.");
       } else if (
         t.pattern !== "carry" ||
-        t.index !== 0 ||
-        t.count !== 2 ||
         tick + event.duration !== endTick ||
         l.releaseTick <= endTick
       )

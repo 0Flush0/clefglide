@@ -496,7 +496,6 @@ export function validateWithConfig(
             const harmony =
               p.harmonies[bar - p.initial.bar]?.split(": ")[1]?.split(" · ") ??
               [];
-            const pcs = heads.map((n) => Note.pitchClass(n.pitch));
             const detected = Chord.detect(harmony)[0],
               root = detected ? Chord.get(detected).tonic : undefined;
             const sets = [
@@ -538,19 +537,22 @@ export function validateWithConfig(
               )
             )
               errors.push("Unapproved or unplayable simultaneous chord.");
+            const attacking = heads.filter((n) => !n.tie || n.tie.index === 0);
+            const attackingPcs = attacking.map((n) => Note.pitchClass(n.pitch));
             if (
-              heads.length === 2
+              attacking.length > 0 &&
+              (heads.length === 2
                 ? !(
                     c.chords.kind === "voicings" &&
                     c.chords.dyadIntervals.includes(
                       span as 3 | 4 | 5 | 7 | 8 | 9,
                     )
-                  ) || !pcs.every((pc) => harmony.includes(pc))
+                  ) || !attackingPcs.every((pc) => harmony.includes(pc))
                 : !sets.some(
                     (set) =>
                       set.length === heads.length &&
-                      set.every((pc) => pcs.includes(pc)),
-                  )
+                      attackingPcs.every((pc) => set.includes(pc)),
+                  ))
             )
               errors.push("Chord violates harmonic plan.");
             if (
