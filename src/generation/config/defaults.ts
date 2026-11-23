@@ -2,6 +2,22 @@ import type { GeneratorConfig } from "./schema";
 
 const weighted = <T>(...values: T[]) =>
   values.map((value) => ({ value, weight: 1 }));
+export const durationEvaluationDefaults = {
+  kind: "evaluate",
+  toleranceMs: 120,
+  earlyRelease: "penalize",
+  lateRelease: "penalize",
+  pedalTreatment: "physical",
+  waitMode: "disabled",
+} satisfies Extract<
+  GeneratorConfig["noteLifetimes"],
+  { kind: "explicit" }
+>["evaluation"];
+export const noteLifetimeDefaults = {
+  kind: "explicit",
+  keyHold: "required",
+  evaluation: { kind: "disabled" },
+} satisfies GeneratorConfig["noteLifetimes"];
 export const wideLeapDefaults = {
   kind: "lifted-wide",
   probability: 0.25,
@@ -119,4 +135,5 @@ export const generatorDefaults: GeneratorConfig = {
   chords: { kind: "single-notes" },
   coverage: { kind: "disabled" },
   wideLeaps: { kind: "disabled" },
+  noteLifetimes: { kind: "disabled" },
 };

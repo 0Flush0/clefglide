@@ -161,6 +161,29 @@ export const wideLeapSchema = z.discriminatedUnion("kind", [
     })
     .strict(),
 ]);
+export const durationEvaluationSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("disabled") }).strict(),
+  z
+    .object({
+      kind: z.literal("evaluate"),
+      toleranceMs: z.number().min(0).max(60000),
+      earlyRelease: z.enum(["penalize", "ignore"]),
+      lateRelease: z.enum(["penalize", "ignore"]),
+      pedalTreatment: z.enum(["physical", "sounding", "forbid"]),
+      waitMode: z.enum(["disabled", "performed-duration"]),
+    })
+    .strict(),
+]);
+export const noteLifetimeSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("disabled") }).strict(),
+  z
+    .object({
+      kind: z.literal("explicit"),
+      keyHold: z.enum(["required", "attack-only"]),
+      evaluation: durationEvaluationSchema,
+    })
+    .strict(),
+]);
 export const chordsSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("single-notes") }).strict(),
   z
@@ -224,11 +247,29 @@ const schema = z
     chords: chordsSchema,
     coverage: coverageSchema,
     wideLeaps: wideLeapSchema.default({ kind: "disabled" }),
+    noteLifetimes: noteLifetimeSchema.default({ kind: "disabled" }),
   })
   .strict()
   .superRefine((c, ctx) => {
     const error = (path: (string | number)[], message: string) =>
       ctx.addIssue({ code: "custom", path, message });
+    const lifetime = c.noteLifetimes;
+    if (
+      lifetime.kind === "explicit" &&
+      lifetime.evaluation.kind === "evaluate"
+    ) {
+      const e = lifetime.evaluation;
+      if (e.earlyRelease === "ignore" && e.lateRelease === "ignore")
+        error(
+          ["noteLifetimes", "evaluation"],
+          "Duration evaluation must evaluate at least one release boundary.",
+        );
+      if (lifetime.keyHold === "attack-only" && e.pedalTreatment !== "sounding")
+        error(
+          ["noteLifetimes", "evaluation"],
+          "Attack-only key requirements need sounding-duration evaluation or disabled evaluation.",
+        );
+    }
     for (const hand of ["right", "left"] as const)
       if (c.hands[hand].min > c.hands[hand].max)
         error(["hands", hand], "Minimum MIDI pitch must not exceed maximum.");

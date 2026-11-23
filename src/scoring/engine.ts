@@ -1,5 +1,14 @@
 import type { MidiEvent } from "../midi/adapter";
 import { TPQ, noteheads, type ScoreEvent, type Settings } from "../score/model";
+import {
+  generatorConfigFingerprint,
+  type ValidatedGeneratorConfig,
+} from "../generation/config";
+import { lifetimeNotes } from "../score/lifetimes";
+import { validateLifetimePlan } from "../score/lifetimeValidation";
+import { LifetimeTracker } from "./lifetimes";
+export { durationMetrics } from "./lifetimes";
+export type { DurationResult, ReleaseResult } from "./lifetimes";
 export const DEFAULT_CHORD_ONSET_MS = 120;
 export interface Result {
   id: string;
@@ -14,6 +23,10 @@ export interface Result {
   simultaneous?: boolean;
 }
 export class Scorer {
+  readonly lifetimes?: LifetimeTracker;
+  private lifetimePaused = false;
+  private lifetimeNoteCount = 0;
+  private lifetimeScoringContext?: string;
   index = 0;
   held = new Set<number>();
   sounding = new Set<number>();
@@ -45,7 +58,135 @@ export class Scorer {
     public notes: ScoreEvent[],
     public settings: Settings,
     public chordOnsetMs = DEFAULT_CHORD_ONSET_MS,
-  ) {}
+    public readonly config?: ValidatedGeneratorConfig,
+  ) {
+    if (config?.noteLifetimes.kind === "explicit") {
+      if (
+        !Number.isFinite(settings.bpm) ||
+        settings.bpm <= 0 ||
+        !Number.isFinite(settings.offset)
+      )
+        throw new Error(
+          "Lifetime scoring requires a positive finite tempo and finite input offset.",
+        );
+      if (config.notation.beats !== settings.beats)
+        throw new Error("Lifetime scoring and score meter must agree.");
+      this.validateLifetimeNotes(notes);
+      this.lifetimeNoteCount = notes.length;
+      this.lifetimes = new LifetimeTracker(config.noteLifetimes, settings);
+      this.lifetimeScoringContext = JSON.stringify(this.scoringContext());
+    }
+  }
+  private validateLifetimeNotes(notes: ScoreEvent[]) {
+    const records = lifetimeNotes(notes);
+    const errors = validateLifetimePlan({ notes: records });
+    let previous = -1;
+    for (const e of notes) {
+      if (e.kind !== "note")
+        throw new Error(
+          "Pass sounded events to the scorer; rests belong to the score timeline.",
+        );
+      const tick = e.bar * this.settings.beats * TPQ + e.onset;
+      if (
+        !Number.isSafeInteger(e.bar) ||
+        e.bar < 0 ||
+        !Number.isSafeInteger(e.onset) ||
+        e.onset < 0 ||
+        e.onset >= this.settings.beats * TPQ ||
+        !Number.isSafeInteger(e.duration) ||
+        e.duration <= 0 ||
+        tick < previous ||
+        !Number.isSafeInteger(tick) ||
+        tick < 0 ||
+        noteheads(e).some((n) => n.lifetime?.onsetTick !== tick)
+      )
+        errors.push("Scored lifetime attacks must match sorted score onsets.");
+      previous = tick;
+    }
+    const c = this.config?.noteLifetimes;
+    if (
+      c?.kind === "explicit" &&
+      c.evaluation.kind === "evaluate" &&
+      c.evaluation.pedalTreatment !== "sounding" &&
+      records.some((n) => n.lifetime.keyHold.kind !== "required")
+    )
+      errors.push(
+        "Physical duration evaluation requires explicit physical release targets.",
+      );
+    if (errors.length) throw new Error(errors.join(" "));
+  }
+  private syncLifetimeNotes() {
+    if (
+      this.lifetimes &&
+      this.lifetimeScoringContext !== JSON.stringify(this.scoringContext())
+    )
+      throw new Error(
+        "Start a new scorer to change the lifetime scoring clock or policy.",
+      );
+    if (this.lifetimes && this.lifetimeNoteCount !== this.notes.length) {
+      if (this.notes.length < this.lifetimeNoteCount)
+        throw new Error(
+          "Do not remove scored lifetime events from an active scorer.",
+        );
+      this.validateAppendBoundary(
+        this.notes.slice(this.lifetimeNoteCount),
+        this.notes.slice(0, this.lifetimeNoteCount),
+      );
+      this.validateLifetimeNotes(this.notes);
+      this.lifetimeNoteCount = this.notes.length;
+    }
+  }
+  private scoringContext() {
+    return {
+      mode: this.settings.mode,
+      bpm: this.settings.bpm,
+      beats: this.settings.beats,
+      offsetMs: this.settings.offset,
+      onsetToleranceMs: this.settings.tolerance,
+      chordOnsetMs: this.chordOnsetMs,
+    };
+  }
+  private validateAppendBoundary(
+    incoming: ScoreEvent[],
+    retained = this.notes,
+  ) {
+    const previous = retained.at(-1),
+      next = incoming[0];
+    if (
+      previous &&
+      next &&
+      next.bar * this.settings.beats * TPQ + next.onset <=
+        previous.bar * this.settings.beats * TPQ + previous.onset
+    )
+      throw new Error(
+        "Append complete future onset groups; an existing onset group cannot be extended retroactively.",
+      );
+  }
+  /** Streaming preserves active releases even after the attack cursor reaches a phrase end. */
+  appendNotes(notes: ScoreEvent[]) {
+    this.syncLifetimeNotes();
+    if (this.lifetimes) {
+      this.validateAppendBoundary(notes);
+      this.validateLifetimeNotes([...this.notes, ...notes]);
+    }
+    this.notes.push(...notes);
+    this.lifetimeNoteCount = this.notes.length;
+  }
+  get durationResults() {
+    return this.lifetimes?.results ?? [];
+  }
+  /** Runtime scoring context; future history must additionally retain assistance state. */
+  get scoringFingerprint() {
+    if (!this.lifetimes || !this.config) return undefined;
+    this.syncLifetimeNotes();
+    return `${generatorConfigFingerprint(this.config)}:scoring:${this.lifetimeScoringContext}`;
+  }
+  disconnect(now: number) {
+    this.pause(now, "disconnect");
+  }
+  finish(now: number) {
+    this.pause(now, "finish");
+  }
   get target() {
     return this.notes[this.index];
   }
@@ -73,7 +214,9 @@ export class Scorer {
       .map((n) => n.midi);
   }
   start(now: number) {
-    if (this.pauseAt) {
+    this.syncLifetimeNotes();
+    if (this.lifetimes && this.running) return;
+    if (this.pauseAt || (this.lifetimes && this.lifetimePaused)) {
       const delta = now - this.pauseAt;
       this.origin += delta;
       this.activated += delta;
@@ -88,9 +231,12 @@ export class Scorer {
     }
     this.activeStart = Math.max(now, this.origin);
     this.running = true;
+    this.lifetimePaused = false;
   }
-  pause(now: number) {
+  pause(now: number, reason: "pause" | "disconnect" | "finish" = "pause") {
     if (!this.running) return;
+    this.lifetimes?.interrupt(reason);
+    this.lifetimePaused = true;
     this.elapsed += Math.max(0, now - this.activeStart);
     this.running = false;
     this.pauseAt = now;
@@ -117,14 +263,18 @@ export class Scorer {
     this.captureTimes.clear();
     this.activated = now;
   }
-  tick(now: number) {
+  tick(now: number, calibratedInput = false) {
+    this.syncLifetimeNotes();
+    if (this.running)
+      this.lifetimes?.tick(now - (calibratedInput ? 0 : this.settings.offset));
     if (!this.running || this.settings.mode !== "timed") return;
     while (
       this.target &&
       now > this.expected(this.target) + Math.max(450, this.settings.tolerance)
     ) {
       for (const n of this.required)
-        if (!this.completed.has(n.id))
+        if (!this.completed.has(n.id)) {
+          this.lifetimes?.unattempted(n.id, "miss");
           this.results.push({
             id: n.id,
             pitch: n.midi,
@@ -135,10 +285,13 @@ export class Scorer {
             eventSize: n.eventSize,
             simultaneous: false,
           });
+        }
       this.advance(now);
     }
   }
   input(e: MidiEvent) {
+    this.syncLifetimeNotes();
+    this.lifetimes?.observe(e);
     if (e.type === "sustain") {
       this.pedal = e.velocity >= 64;
       if (!this.pedal) {
@@ -160,7 +313,7 @@ export class Scorer {
     this.sounding.add(e.pitch);
     if (!this.running || e.time < this.origin) return;
     const now = e.time - this.settings.offset;
-    this.tick(now);
+    this.tick(now, true);
     const group = this.required;
     // A surplus attack can arrive just AFTER the last required chord tone.
     // Keep its original capture window so it cannot improve the next target or
@@ -234,6 +387,25 @@ export class Scorer {
     this.matched.add(n.id);
     // A target is recorded once even when a chord capture window expires.
     if (!this.completed.has(n.id)) {
+      if (this.lifetimes) {
+        if (!n.lifetime)
+          throw new Error(
+            "Missing explicit lifetime on a scored attack; use appendNotes for streaming.",
+          );
+        this.lifetimes.accept(
+          {
+            id: n.id,
+            eventId: n.eventId,
+            midi: n.midi,
+            hand: n.hand,
+            finger: n.finger,
+            positionId: n.positionId,
+            lifetime: n.lifetime,
+          },
+          e,
+          this.origin,
+        );
+      }
       this.completed.add(n.id);
       this.results.push({
         id: n.id,
@@ -263,7 +435,8 @@ export class Scorer {
   }
   skip(now: number) {
     for (const n of this.required)
-      if (!this.completed.has(n.id))
+      if (!this.completed.has(n.id)) {
+        this.lifetimes?.unattempted(n.id, "skip");
         this.results.push({
           id: n.id,
           pitch: n.midi,
@@ -274,6 +447,7 @@ export class Scorer {
           eventSize: n.eventSize,
           simultaneous: false,
         });
+      }
     this.advance(now);
   }
   activeMs(now: number) {

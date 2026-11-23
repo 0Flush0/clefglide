@@ -1,5 +1,13 @@
 # Implementation decisions
 
+## Opt-in explicit note lifetimes (programmatic generator/scoring v7)
+
+- `noteLifetimes` adds validated absolute attack/release/duration metadata, per-note physical key requirements and logical voice identities. The default remains disabled. Current generation only projects its existing note ends after sampling; no rhythms, notes or PRNG sequences change. Canonical lifetime plans separately support authored overlapping voices, intended finger occupancy and original attack identities carried across phrase boundaries.
+- Optional duration evaluation consumes normalized note-on/off and CC64, tracks each accepted note after the attack cursor advances, and keeps physical key release separate from MIDI/damper-derived logical sound release. Duration accuracy/results are separate from pitch/onset metrics. Wait and benchmark modes suppress evaluation unless performed-duration timing is explicitly selected. Required physical holds cannot be replaced by pedal sound.
+- Pause, disconnect and finish interrupt unresolved holds without synthesizing releases or duration success. Future timed expectations shift on resume; observing physical keys starts afresh. The pure API supports streaming future complete onset groups while older releases remain active. Missing/skip/interrupted durations remain explicit and ungraded.
+- Enabled configurations use **7.0.0** and retain all policy parameters in their fingerprint. Disabled configurations preserve existing **5.2.0** and wide-leap **6.0.0** identities. UI settings/presets, MIDI adapters, saved sessions/backups and legacy metrics are unchanged; custom duration outcomes are not persisted through the legacy session API. See the [complete lifetime API, configuration and limitations](GENERATOR_CONFIG.md#explicit-note-lifetimes-and-optional-duration-scoring-programmatic-api).
+- Tied/slurred notation, independent-voice generation, articulation engraving and a general held-voice fingering planner remain future work. Same-pitch overlapping identities are rejected. Binary pedal/reattack tracking is a declared logical model, not acoustic measurement; hardware timing and human comfort still require piano testing. Planned fingers are never MIDI-verified fingers.
+
 ## Opt-in wide lifted leaps (programmatic generator v6)
 
 - `wideLeaps` is a separate resolved capability, disabled in every existing UI preset. It plans `lifted-wide-leap` actions alongside small rested repositioning, with independent distance, target, weighting, landing-finger/interval and preparation parameters. See the [complete parameter inventory](GENERATOR_CONFIG.md#wide-lifted-leaps-programmatic-api-only).

@@ -34,6 +34,7 @@ import { planRangeCoverage, recordRangeCoverage } from "./rangeCoverage";
 import type { MovementDiagnostic } from "./model";
 import { inspectGeneratorFeasibility } from "./feasibility";
 import { nextLeapPreparation } from "./wideLeaps";
+import { attachNoteLifetimes } from "../score/lifetimes";
 export function generateConfigured(
   c: ValidatedGeneratorConfig,
   seed: string,
@@ -41,6 +42,10 @@ export function generateConfigured(
   // Internal legacy stream identity override; parameter-driven callers omit this.
   contextKey = generatorConfigFingerprint(c),
 ): GeneratedPhrase {
+  if (previous?.activeLifetimes?.length)
+    throw new Error(
+      "Shared-rhythm generation cannot consume held carry-in voices; author them with the core lifetime model.",
+    );
   if (c.wideLeaps.kind !== "disabled" && c.wideLeaps.probability > 0) {
     const { errors } = inspectGeneratorFeasibility(c);
     if (errors.length) throw new Error(errors.join(" "));
@@ -58,6 +63,7 @@ export function generateConfigured(
     ? structuredClone(previous)
     : { rng: hash(seed), bar: 0, hands: [], hints: {} };
   if (!previous) state.hands = initialHands(c, state);
+  if (c.noteLifetimes.kind === "explicit") state.activeLifetimes ??= [];
   const initial = structuredClone(state),
     events: ScoreEvent[] = [],
     positions = structuredClone(state.hands),
@@ -230,6 +236,8 @@ export function generateConfigured(
     }
   }
   state.bar += c.notation.phraseBars;
+  attachNoteLifetimes(events, c);
+  if (c.noteLifetimes.kind === "explicit") state.activeLifetimes = [];
   const preparation = nextLeapPreparation(c, state.bar);
   if (preparation) state.wideLeapPreparation = preparation;
   else delete state.wideLeapPreparation;

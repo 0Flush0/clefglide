@@ -327,8 +327,9 @@ describe("lifted wide hand leaps", () => {
 
   it("keeps disabled configuration fingerprints and explicit zero-probability notes stable", () => {
     const disabled = resolveGeneratorConfig();
-    const { wideLeaps: _wide, ...old } = disabled;
+    const { wideLeaps: _wide, noteLifetimes: _lifetimes, ...old } = disabled;
     void _wide;
+    void _lifetimes;
     expect(generatorConfigFingerprint(disabled)).toBe(
       `${VERSION}:parameters:${JSON.stringify(old)}`,
     );

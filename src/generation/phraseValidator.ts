@@ -6,6 +6,7 @@ import {
   type ValidatedGeneratorConfig,
 } from "./config";
 import type { GeneratedPhrase } from "./model";
+import { validateGeneratedLifetimes } from "./lifetimeValidator";
 import {
   hasMovementPreparation,
   validateWideLanding,
@@ -659,5 +660,6 @@ export function validateWithConfig(
     }
   }
   errors.push(...validateWideSweeps(p, c), ...validateLeapReservation(p, c));
+  errors.push(...validateGeneratedLifetimes(p, c));
   return [...new Set(errors)];
 }

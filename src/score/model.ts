@@ -1,5 +1,7 @@
 import { z } from "zod";
 import type { RangeCoverage } from "../generation/rangeCoverage";
+import type { NoteLifetime, LifetimeNote } from "./lifetimeModel";
+export type { NoteLifetime, LifetimeNote, LifetimePlan } from "./lifetimeModel";
 export const VERSION = "5.2.0";
 export const TPQ = 480;
 export const legacySettingsSchema = z.object({
@@ -121,6 +123,7 @@ export interface Notehead {
   written?: WrittenPitch;
   finger: number;
   hand: Hand;
+  lifetime?: NoteLifetime;
   fingering?: { technique: "rested-alternate"; expectedFinger: number };
 }
 export interface ScoreEvent {
@@ -134,6 +137,8 @@ export interface ScoreEvent {
   midi: number;
   pitch: string;
   finger: number;
+  /** Primary lifetime mirrors notes[0]; absent on legacy scores and rests. */
+  lifetime?: NoteLifetime;
   /** Absent only on legacy single-note events. Primary fields mirror notes[0]. */
   notes?: Notehead[];
   action: "PLAY_WITHIN_POSITION" | "REPEAT_NOTE" | "REST";
@@ -150,6 +155,7 @@ export interface StreamState {
   hands: HandState[];
   hints?: HintMemory;
   coverage?: Partial<Record<Hand, RangeCoverage>>;
+  activeLifetimes?: LifetimeNote[];
   /** Reserved, fully silent tail for a possible next-chunk wide landing. */
   wideLeapPreparation?: {
     configFingerprint: string;

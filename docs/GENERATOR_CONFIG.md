@@ -2,17 +2,17 @@
 
 The generator has two entry points. `generate(settings, seed, previous?)` in `src/generation/planner.ts` is the unchanged application compatibility API. It resolves saved settings through `config/presets.ts`, calls the parameter-driven engine, and returns the original `Phrase` shape. No UI control, preference schema, session schema, backup format or historical fingerprint changes in this refactor.
 
-`generateConfigured(config, seed, previous?)` in `engine.ts` accepts only a branded, deeply readonly `ValidatedGeneratorConfig`. It returns `GeneratedPhrase`, which carries the resolved config and a separate parameter fingerprint (`5.2.0:parameters:...` with wide leaps disabled, `6.0.0:parameters:...` for the enabled capability) and deliberately has no legacy `settings` field. Custom parameters must not be recorded as an ordinary legacy-settings session: integrating such a future practice mode into history will require an explicit persistence/comparison design.
+`generateConfigured(config, seed, previous?)` in `engine.ts` accepts only a branded, deeply readonly `ValidatedGeneratorConfig`. It returns `GeneratedPhrase`, which carries the resolved config and a separate parameter fingerprint (`5.2.0:parameters:...` with both new modules disabled, `6.0.0:parameters:...` for wide leaps, `7.0.0:parameters:...` for explicit lifetimes) and deliberately has no legacy `settings` field. Custom parameters must not be recorded as an ordinary legacy-settings session: integrating such a future practice mode into history will require an explicit persistence/comparison design.
 
 The engine orchestrates small modules: `initialHands.ts`, `melody.ts`, `rhythm.ts`, `harmony.ts`, `chromatic.ts`, `movement.ts`, `wideLeaps.ts`, `voicings.ts`, `rangeCoverage.ts`, `positionMaps.ts` and `ergonomics.ts`. `sampling.ts` supplies ordered weighted selection. They consume resolved parameters, not difficulty labels. `planner.ts`, `positions.ts`, `chords.ts` and `validator.ts` retain the old signatures/range-preview behavior as compatibility facades; core modules do not import those facades. `difficulty.ts` and `config/presets.ts` are preset/UI policy, not algorithms. `generation/index.ts` provides the public composition API.
 
-`phraseValidator.ts` and `wideLeapValidation.ts` independently reconstruct approved maps/options, harmony, transitions, movements, exact ticks, rhythm vocabulary, chords and boundary state. The `validator.ts` facade resolves policy for legacy callers. Validation does not call planner candidate, movement, rhythm, harmony, ergonomics or selection algorithms. Its physical checks and approved pattern reconstruction remain independent.
+`phraseValidator.ts`, `wideLeapValidation.ts` and `lifetimeValidator.ts` independently reconstruct approved maps/options, harmony, transitions, movements, exact ticks, rhythm vocabulary, chords and boundary state. The `validator.ts` facade resolves policy for legacy callers. Validation does not call planner candidate, movement, rhythm, harmony, ergonomics or selection algorithms. Its physical checks and approved pattern reconstruction remain independent.
 
 ## Resolution, validation and overrides
 
 - `GeneratorConfig` describes complete supported parameter data. The Zod schemas in `config/schema.ts` reject unknown fields, unknown feature kinds, unsupported capabilities, invalid values and cross-module contradictions.
 - `normalizeGeneratorConfig(unknown)` validates a complete object, clones it through Zod and deeply freezes it. The branded output is the only accepted engine input. Ordinary generation helpers can trust the normalized type rather than repeatedly parsing each note.
-- `resolveGeneratorConfig(overrides, base = generatorDefaults)` applies canonical defaults or a supplied preset base, then explicit overrides. Objects merge recursively; arrays replace completely, preserving order. An omitted/undefined override retains the base value. A changed `kind` replaces the entire union branch: supply the complete new branch, using `repositionDefaults`, `chromaticDefaults`, `chordDefaults`, `coverageDefaults` or `wideLeapDefaults`. Old branch properties never leak into a disabled branch.
+- `resolveGeneratorConfig(overrides, base = generatorDefaults)` applies canonical defaults or a supplied preset base, then explicit overrides. Objects merge recursively; arrays replace completely, preserving order. An omitted/undefined override retains the base value. A changed `kind` replaces the entire union branch: supply the complete new branch, using `repositionDefaults`, `chromaticDefaults`, `chordDefaults`, `coverageDefaults`, `wideLeapDefaults`, `noteLifetimeDefaults` or `durationEvaluationDefaults`. Old branch properties never leak into a disabled branch.
 - `resolveSettings(settings, overrides?)` is the one-way legacy adapter. It first enforces the existing UI's jump and movement caps, maps the labels to parameter presets, then applies explicit parameter overrides. A future practice mode can compose a config directly without adopting these UI caps or labels.
 - Structural validation does not claim a particular keyboard range can realize every permitted shape. `inspectGeneratorFeasibility(config)` reports missing five-note positions, incompatible two-hand ranges and warnings for unavailable compatible variable positions, same-shape relocations or harmonic chord voicings. Its optional checks establish static possibilities, not a promise about sampled attacks/positions. Initialization rejects impossible positions with actionable errors. Optional chord/shift/spacing occurrence is a soft opportunity, just as before; infeasible optional candidates are omitted without widening ranges or weakening ergonomics, jumps or preparation.
 
@@ -150,6 +150,79 @@ Verification includes exact minimum/full-keyboard maximum displacements in both 
 
 Physical piano/teacher testing is still required for comfortable speed and lift height at each distance/tempo, individual hand size, release and pedal behavior, extreme register reading, repeated leap fatigue, simultaneous hand coordination and visual cue lead time. Timing is expressed in score beats; this engine has no tempo or player travel calibration. There are no legato leaps, crossings, overpassing, finger substitutions at landings, chord landings, independent hand rhythms or universal playability guarantee. No new hardware test is implied by simulator/unit success, and MIDI cannot verify fingers.
 
+### Explicit note lifetimes and optional duration scoring (programmatic API)
+
+`noteLifetimes` is independent of difficulty, movement and rhythm selection. The canonical default is `{ kind: "disabled" }`; omitted fields in older parameter objects normalize to that branch. Disabled generation retains its original fields, PRNG consumption and fingerprints. `noteLifetimeDefaults` enables explicit metadata with evaluation disabled. Spread `durationEvaluationDefaults` to opt into evaluation. No UI preset enables either capability.
+
+| Parameter | Enabled default | Bounds, units and dependencies |
+| --- | --- | --- |
+| `noteLifetimes.kind` | `explicit` | `disabled` accepts no other fields; `explicit` emits and validates each notehead's lifetime. The canonical default is disabled. |
+| `noteLifetimes.keyHold` | `required` | `required` assigns a physical key-release target at the note's end; `attack-only` requires a fresh attack but permits early physical release. This is the generated-score policy. Authored core lifetime records explicitly declare each note's own hold requirement. |
+| `noteLifetimes.evaluation.kind` | `disabled` | `disabled` accepts no scoring fields. `evaluate` enables separate duration outcomes without changing pitch/onset results, notes or sampling. |
+| `noteLifetimes.evaluation.toleranceMs` | `120` | Finite 0–60000 milliseconds on each side of an evaluated release target, inclusive. This is separate from onset tolerance and chord capture width. |
+| `noteLifetimes.evaluation.earlyRelease` | `penalize` | `penalize` or `ignore`; a penalized observed release earlier than target minus tolerance is `early`. Ignore removes the minimum-duration penalty. |
+| `noteLifetimes.evaluation.lateRelease` | `penalize` | `penalize` or `ignore`; an observed release or still-open hold after target plus tolerance is `late`. Ignore credits a still-open phase once its intended target is reached, without fabricating a release observation. Both early and late cannot be ignored; disable evaluation instead. |
+| `noteLifetimes.evaluation.pedalTreatment` | `physical` | `physical` evaluates the required physical release, regardless of pedal. `sounding` evaluates the MIDI/damper-derived logical sound release and also every declared physical release requirement. `forbid` evaluates physical release and fails a note if CC64 is down at its attack or becomes down during its active lifetime. Attack-only generated requirements require sounding evaluation or disabled evaluation. |
+| `noteLifetimes.evaluation.waitMode` | `disabled` | `disabled` suppresses duration evaluation in wait and benchmark modes. `performed-duration` explicitly evaluates a hold from each accepted attack using the configured BPM and intended tick duration. It never blocks the attack cursor waiting for a note-off. Timed mode always uses score-clock release targets when evaluation is enabled. |
+
+```ts
+import {
+  generateConfigured, resolveGeneratorConfig,
+  noteLifetimeDefaults, durationEvaluationDefaults,
+} from "./generation";
+import { Scorer, durationMetrics, metrics } from "./scoring/engine";
+
+const config = resolveGeneratorConfig({
+  noteLifetimes: {
+    ...noteLifetimeDefaults,
+    evaluation: {
+      ...durationEvaluationDefaults,
+      waitMode: "performed-duration", // explicit real-time holds in wait practice
+    },
+  },
+});
+const phrase = generateConfigured(config, "held-notes");
+// settings retains the existing runtime mode/BPM/offset/onset-tolerance contract.
+const scorer = new Scorer(
+  phrase.events.filter((event) => event.kind === "note"), settings, 120, config,
+);
+scorer.start(now);
+// Send normalized note-on, note-off and sustain events through scorer.input(event).
+// Continue scorer.tick(now) through release deadlines after the last attack.
+const pitchAndOnset = metrics(scorer.results, scorer.activeMs(now), settings.tolerance);
+const durations = durationMetrics(scorer.durationResults);
+```
+
+The score model's optional `NoteLifetime` is on each `Notehead`, mirrored by the event's primary `lifetime` (including legacy-shaped single-head events when explicitly authored). Its fields are:
+
+| Field | Meaning and validation |
+| --- | --- |
+| `voiceId` | Nonempty identity for a logical voice; a grouping label, not a tie, slur or MIDI channel assignment. Current generation emits `right:main`/`left:main`. |
+| `onsetTick` | Absolute nonnegative safe integer at 480 TPQ. Each attack has one globally unique notehead ID, independent of its phrase. |
+| `releaseTick` | Absolute intended logical sound-end tick, strictly after onset. |
+| `durationTicks` | Positive safe integer, exactly `releaseTick - onsetTick`; no accumulated fractional ticks. |
+| `keyHold` | `{ kind: "required", releaseTick }` declares a physical release target after onset and no later than logical sound end. `{ kind: "attack-only" }` imposes no continued physical hold. Core authored records can declare an earlier physical release than logical sound end for pedal takeover. |
+
+`lifetimeNotes(events)` returns independent attack records containing ID, event ID, MIDI, hand, planned finger, position ID and the lifetime. `lifetimeOccupancy(records, tick)` projects intended sounding notes, physical holds and planned finger occupancy using half-open intervals: release at an attack tick frees that resource. It does not infer or verify the pianist's actual fingers. The independent `validateLifetimePlan` validates canonical records, rejects two overlapping uses of a required finger (including an attack while it is occupied), and rejects overlapping same-pitch logical lifetimes whose ownership cannot be distinguished through the current MIDI/scoring model. Chords can have distinct release targets per head; different pitches/voices can overlap.
+
+A `LifetimePlan` can specify `startTick`, `endTick`, incoming `initial` attack records and outgoing `final` records. Incoming notes must actually cross the start boundary. Final state must exactly retain every still-sounding note, with its original ID and full record; it cannot reset an attack or invent a continuation. Notes can cross multiple phrase boundaries. Optional movement validation rejects any required physical hold or attack during that hand's relocation preparation, even when a logical sound tail alone is permitted to continue. This is occupancy validation, not a general polyphonic fingering optimizer or reach guarantee.
+
+The current generator attaches lifetime metadata after all note/chord selection, consuming no random draws. Its explicit metadata still ends exactly at each existing event's end. `StreamState.activeLifetimes` is empty at generated phrase boundaries; nonempty carry-in voices are explicitly rejected by this shared-rhythm generator. `lifetimeValidator.ts` reconstructs expected metadata and checks the independent canonical interval validator without calling the projector. It rejects missing/contradictory metadata, implicit activation, held movements and altered boundary state. Held overlapping or cross-phrase voices are currently supported as authored core lifetime plans and scorer inputs, not as new generated exercises.
+
+`Scorer` retains its existing three constructor arguments; the optional fourth accepts the validated configuration. Enabled construction checks meter, tempo, metadata, onset ordering and occupancy. Pass sounded events, as in the existing application; rests stay in the score timeline. `appendNotes` accepts complete, future onset groups, validates the complete plan and preserves open releases. Ordinary growth of `notes` is also checked on the next input/tick. Do not mutate already validated events or remove scored events. To change mode, tempo, offset, onset tolerance or chord capture width, construct a new scorer; enabled scoring rejects a changed runtime clock/policy instead of mixing comparison identities. Hint/display changes remain independent. Append each note only at its attack, never again as a phrase-boundary continuation. The cursor can finish all attacks while releases are still pending; programmatic callers must continue forwarding note-offs/CC64 and ticking until duration outcomes are resolved or explicitly interrupt the attempt.
+
+Release tracking associates accepted attacks with normalized source, channel and pitch. Duplicate ons, duplicate/stray offs and pedal messages never supply an attack or duplicate a note's outcome. Physical key release remains observable while pedal holds its sound. Sustain is binary CC64 ≥64, scoped to the source/channel. Pedal-up closes released logical voices but never keys still down. A fresh strike of a released, pedal-held pitch closes the preceding logical voice and opens a new attack identity; MIDI cannot measure separate acoustic tails on the same string. Sostenuto, half-pedal, acoustic decay, device identity beyond the normalized source/channel, and same-pitch polyphonic/unison attribution are not implemented. Events must have finite times and arrive in physical order; an off before its associated attack is rejected. MIDI adapters are unchanged.
+
+Duration outcomes live in `scorer.durationResults`, separate from the unchanged pitch `Result[]`. Each evaluated note can have independent `physical` and `sound` observations with expected milliseconds, actual release/error milliseconds when observed, and `pending`/`correct`/`early`/`late` classification. Overall status can additionally be `pedal`, `interrupted`, `miss` or `skip`. A note needing both physical and sound evaluation succeeds only when both succeed; pedal violation takes precedence over timing failure. Chord heads are independent. The first accepted attack owns the duration result; capture-window retries cannot erase its early release. Pitch accuracy and onset accuracy retain the existing `metrics` definitions and never incorporate release results.
+
+`durationMetrics` reports correct/early/late/pedal counts, pending/interrupted/missed/skipped counts, and a separate accuracy over evaluated releases only. Missing/skipped attacks have no observed duration and do not double-penalize duration accuracy. Pending and interrupted holds are excluded; accuracy is `null` when none is evaluated. Late detection does not fabricate a note-off and later records the real release/error when it arrives. Interim accuracy covers resolved evidence, so retain pending counts when displaying it.
+
+Input offset applies to attacks, releases and pedal observations. Timed targets use the score origin plus absolute ticks converted at BPM. Wait/benchmark opt-in targets use each accepted attack plus its intended hold duration, so waiting before an attack does not cause a duration failure. External `tick(now)` permits the same input-offset compensation before declaring an overdue release; all event timestamps must share the scorer's monotonic clock. Pausing shifts future timed expectations as before. Because physical key state cannot safely be reconstructed after a pause/disconnect, open unresolved durations become `interrupted`, physical/pedal occupancy clears, and resume starts observing fresh attacks. Release keys/pedal before resuming, or provide their current normalized state; this API cannot query physical device state after an interruption. No synthetic note-off or correct duration is awarded. Already observed correct/failed durations remain recorded. `disconnect(now)` and `finish(now)` use this same explicit interruption policy; hardware integration can continue using the existing `pause(now)` path.
+
+Enabled lifetime configurations use version **7.0.0** with every lifetime/evaluation parameter in the generator fingerprint, even when evaluation is disabled. Both disabled modules retain **5.2.0**, and wide leaps with lifetimes disabled retain **6.0.0**, including their prior fingerprint serialization order. `scorer.scoringFingerprint` additionally identifies mode, BPM, meter, offset, onset tolerance and chord capture width for enabled programmatic scoring. It is not a complete persisted session identity: a future session integration must also retain assistance state. Historical settings, session/backup schemas, fingerprints, results and UI replay stay untouched. Duration records are not silently inserted into or discarded through the legacy session format; programmatic consumers must retain/export them separately until a versioned custom-session persistence design exists.
+
+Fully supported here: explicit attack/release/key-hold data, overlapping distinct-pitch core lifetimes, intended finger occupancy, canonical boundary carry, optional physical/sounding release scoring, per-head chord releases, repeated attacks, binary sustain, calibrated timing, interruptions and streaming. Still future work: ties/slurs and articulation engraving, projecting tied notation segments onto one attack, polyphonic/independent-voice generation and layout, general ergonomic validation of held voices and comfortable hand transitions. Configuration still rejects `notation.ties: true`, independent generated voices and unknown capabilities; attaching a voice label does not enable them. Release/pedal latency and comfortable held-note coordination still need physical piano testing. MIDI does not verify fingers or audible acoustic duration.
+
 ### Chromatic figures and chords
 
 | Parameter | Default | Allowed values, units and dependencies |
@@ -230,6 +303,6 @@ New custom values can intentionally select different exercises. Their complete r
 
 ## Future capabilities that are not parameter switches
 
-Wide lifted leaps are implemented through the separate module documented above. Sustained notes and ties require note lifetime/tie identity in the score model plus attack/release/sustain-aware scoring and rendering. Independent voices require separate timelines/voice IDs, overlap validation, coordinated hand-state scheduling and scorer/engraver support. General crossings, thumb-under, alternate ergonomic shapes, new meters/keys/durations and non-major harmonic vocabularies require explicit model/algorithm/validator work before their schemas can be widened.
+Wide lifted leaps are implemented through the separate module documented above. Core note lifetimes, voice identities, occupancy and release scoring are implemented above. Ties and slurs still require notation-segment identity, attack suppression and engraving. Independent generated voices still require coordinated timelines, held-hand planning and polyphonic rendering; the core lifetime model and scorer can already accept authored overlapping voices. General crossings, thumb-under, alternate ergonomic shapes, new meters/keys/durations and non-major harmonic vocabularies require explicit model/algorithm/validator work before their schemas can be widened.
 
 Future modules can be added as new typed fields/unions with their own defaults, resolver composition and validators. Unsupported capabilities are rejected today; no placeholder configuration fields or plugin registry claim those algorithms exist.
