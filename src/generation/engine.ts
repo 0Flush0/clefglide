@@ -1,7 +1,6 @@
 import { Note } from "tonal";
 import {
   TPQ,
-  VERSION,
   noteheads,
   type StreamState,
   type ScoreEvent,
@@ -16,6 +15,7 @@ import {
 import { validateGeneratedPhrase } from "./phraseValidator";
 import {
   generatorConfigFingerprint,
+  generatorConfigVersion,
   type ValidatedGeneratorConfig,
 } from "./config";
 import type { GeneratedPhrase } from "./model";
@@ -31,6 +31,9 @@ import { writtenPitch } from "../score/pitch";
 import { chordCandidatesForConfig } from "./voicings";
 import { playableTransition } from "./ergonomics";
 import { planRangeCoverage, recordRangeCoverage } from "./rangeCoverage";
+import type { MovementDiagnostic } from "./model";
+import { inspectGeneratorFeasibility } from "./feasibility";
+import { nextLeapPreparation } from "./wideLeaps";
 export function generateConfigured(
   c: ValidatedGeneratorConfig,
   seed: string,
@@ -38,6 +41,18 @@ export function generateConfigured(
   // Internal legacy stream identity override; parameter-driven callers omit this.
   contextKey = generatorConfigFingerprint(c),
 ): GeneratedPhrase {
+  if (c.wideLeaps.kind !== "disabled" && c.wideLeaps.probability > 0) {
+    const { errors } = inspectGeneratorFeasibility(c);
+    if (errors.length) throw new Error(errors.join(" "));
+    if (
+      previous?.wideLeapPreparation &&
+      previous.wideLeapPreparation.configFingerprint !==
+        generatorConfigFingerprint(c)
+    )
+      throw new Error(
+        "Wide-leap continuation requires the same configuration.",
+      );
+  }
   const movement = c.movement;
   const state: StreamState = previous
     ? structuredClone(previous)
@@ -47,6 +62,7 @@ export function generateConfigured(
     events: ScoreEvent[] = [],
     positions = structuredClone(state.hands),
     movements: MovementPlan[] = [];
+  const diagnostics: MovementDiagnostic[] = [];
   const available = new Map(
     state.hands.map((h) => [h.hand, positionsForConfig(c, h.hand)]),
   );
@@ -83,16 +99,16 @@ export function generateConfigured(
       b,
       positions,
       movements,
+      diagnostics,
     );
-    const { durations, breath } = barRhythm(c, b, state);
+    const { durations, noteCount } = barRhythm(c, b, state);
     let onset = 0;
     for (let j = 0; j < durations.length; j++) {
-      const rest = breath && j === durations.length - 1;
+      const rest = j >= noteCount;
       for (const h of state.hands) {
         const previousFingering = h.lastFingering ?? [];
         const finalAttack =
-          b === c.notation.phraseBars - 1 &&
-          j === durations.length - (breath ? 2 : 1);
+          b === c.notation.phraseBars - 1 && j === noteCount - 1;
         const choices = melodicChoices(c, h, chords[b], finalAttack);
         const goal = Math.max(
           0,
@@ -214,6 +230,9 @@ export function generateConfigured(
     }
   }
   state.bar += c.notation.phraseBars;
+  const preparation = nextLeapPreparation(c, state.bar);
+  if (preparation) state.wideLeapPreparation = preparation;
+  else delete state.wideLeapPreparation;
   for (const h of useCoverage ? state.hands : [])
     recordRangeCoverage(
       state.coverage![h.hand]!,
@@ -233,7 +252,7 @@ export function generateConfigured(
   ).state;
   const p: GeneratedPhrase = {
     seed,
-    version: VERSION,
+    version: generatorConfigVersion(c),
     config: c,
     configFingerprint: generatorConfigFingerprint(c),
     events,
@@ -244,6 +263,9 @@ export function generateConfigured(
     harmonies: harmony.map(
       (degree, i) => `${degree}: ${chords[i].join(" · ")}`,
     ),
+    ...(c.wideLeaps.kind !== "disabled"
+      ? { movementDiagnostics: diagnostics }
+      : {}),
   };
   const errors = validateGeneratedPhrase(p);
   if (errors.length) throw new Error(errors.join(" "));

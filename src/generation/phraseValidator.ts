@@ -1,10 +1,17 @@
 import { Chord, Note, Scale } from "tonal";
-import { TPQ, VERSION, noteheads, type Phrase } from "../score/model";
+import { TPQ, noteheads, type Phrase } from "../score/model";
 import {
   generatorConfigFingerprint,
+  generatorConfigVersion,
   type ValidatedGeneratorConfig,
 } from "./config";
 import type { GeneratedPhrase } from "./model";
+import {
+  hasMovementPreparation,
+  validateWideLanding,
+  validateWideSweeps,
+  validateLeapReservation,
+} from "./wideLeapValidation";
 export function validateGeneratedPhrase(p: GeneratedPhrase): string[] {
   const errors = validateWithConfig(p, p.config);
   if (p.configFingerprint !== generatorConfigFingerprint(p.config))
@@ -49,7 +56,7 @@ export function validateWithConfig(
   const tick = (e: { bar: number; onset: number }) =>
     e.bar * c.notation.beats * TPQ + e.onset;
   if (
-    p.version !== VERSION ||
+    p.version !== generatorConfigVersion(c) ||
     p.final.bar !== p.initial.bar + c.notation.phraseBars
   )
     errors.push("Invalid generator version or chunk boundary.");
@@ -186,26 +193,27 @@ export function validateWithConfig(
       if (!Number.isInteger(h.lastIndex) || h.lastIndex < 0 || h.lastIndex > 4)
         errors.push("Invalid boundary finger index.");
       if (
-        h.lastPitch !== undefined &&
-        (!h.lastFingering?.length ||
-          h.lastFingering.length > 4 ||
-          h.lastFingering[0].midi !== Note.midi(h.lastPitch) ||
-          new Set(h.lastFingering.map((n) => n.finger)).size !==
-            h.lastFingering.length ||
-          new Set(h.lastFingering.map((n) => n.midi)).size !==
-            h.lastFingering.length ||
-          h.lastFingering.some(
-            (n) =>
-              !Number.isInteger(n.finger) ||
-              n.finger < 1 ||
-              n.finger > 5 ||
-              !Number.isInteger(n.midi) ||
-              n.midi < h.min ||
-              n.midi > h.max,
-          ) ||
-          (h.lastVoicing &&
-            JSON.stringify(h.lastVoicing) !==
-              JSON.stringify(h.lastFingering.map((n) => n.midi))))
+        (h.lastPitch === undefined && h.lastNoteEnd !== undefined) ||
+        (h.lastPitch !== undefined &&
+          (!h.lastFingering?.length ||
+            h.lastFingering.length > 4 ||
+            h.lastFingering[0].midi !== Note.midi(h.lastPitch) ||
+            new Set(h.lastFingering.map((n) => n.finger)).size !==
+              h.lastFingering.length ||
+            new Set(h.lastFingering.map((n) => n.midi)).size !==
+              h.lastFingering.length ||
+            h.lastFingering.some(
+              (n) =>
+                !Number.isInteger(n.finger) ||
+                n.finger < 1 ||
+                n.finger > 5 ||
+                !Number.isInteger(n.midi) ||
+                n.midi < h.min ||
+                n.midi > h.max,
+            ) ||
+            (h.lastVoicing &&
+              JSON.stringify(h.lastVoicing) !==
+                JSON.stringify(h.lastFingering.map((n) => n.midi)))))
       )
         errors.push("Inconsistent boundary fingering.");
       if (
@@ -276,7 +284,12 @@ export function validateWithConfig(
           !c.rhythm.durations.some((d) => d.value === e.duration)
         )
           errors.push("Note duration violates the resolved rhythm.");
-        if (e.kind === "rest" && e.duration !== TPQ && e.duration !== 2 * TPQ)
+        if (
+          e.kind === "rest" &&
+          e.duration !== TPQ &&
+          e.duration !== 2 * TPQ &&
+          !(c.wideLeaps.kind === "lifted-wide" && e.duration === 4 * TPQ)
+        )
           errors.push("Unsupported rest duration.");
         const moves = p.movements.filter(
           (m) => m.hand === hand && m.landingTick === tick(e),
@@ -288,29 +301,42 @@ export function validateWithConfig(
           const to = p.positions.find(
             (pos) => pos.hand === hand && pos.id === move.toPositionId,
           );
-          const prep = p.events.find(
-            (rest) =>
-              rest.hand === hand &&
-              rest.kind === "rest" &&
-              tick(rest) === move.cueTick &&
-              tick(rest) + rest.duration === move.landingTick,
+          const wide = move.technique === "lifted-wide-leap";
+          const smallPreparation = Math.max(
+            preparationTicks,
+            c.wideLeaps.kind === "lifted-wide" &&
+              c.wideLeaps.probability > 0 &&
+              c.wideLeaps.eligibleBars.includes(bar - p.initial.bar)
+              ? c.wideLeaps.preparationBeats * TPQ
+              : 0,
           );
           if (
             !to ||
             move.fromPositionId !== active.id ||
             move.toPositionId === active.id ||
-            move.technique !== "lift-and-reposition" ||
-            !allowedBars.includes(bar - p.initial.bar) ||
+            (!wide && move.technique !== "lift-and-reposition") ||
+            (!wide && !allowedBars.includes(bar - p.initial.bar)) ||
             e.onset !== 0 ||
-            movement.kind !== "rested-reposition" ||
-            movement.probability === 0 ||
+            (!wide &&
+              (movement.kind !== "rested-reposition" ||
+                movement.probability === 0)) ||
             e.kind !== "note" ||
             move.landingNoteId !== e.id ||
             move.landingMidi !== e.midi ||
             move.landingFinger !== e.finger ||
-            move.cueTick !== move.landingTick - preparationTicks ||
-            !prep ||
-            prep.duration < preparationTicks ||
+            (!wide &&
+              (move.cueTick !== move.landingTick - smallPreparation ||
+                !hasMovementPreparation(p, c, move))) ||
+            (wide &&
+              !validateWideLanding(
+                p,
+                c,
+                move,
+                active,
+                e,
+                lastPitch,
+                lastEnd,
+              )) ||
             (lastEnd !== undefined && lastEnd > move.cueTick)
           )
             errors.push(
@@ -329,8 +355,7 @@ export function validateWithConfig(
             if (
               move.distance !== distance ||
               !distance ||
-              Math.abs(distance) > distanceCap ||
-              Math.abs(distance) > distanceCap ||
+              (!wide && Math.abs(distance) > distanceCap) ||
               active.pitches.includes(e.pitch)
             )
               errors.push("Unnecessary or excessive repositioning.");
@@ -560,7 +585,10 @@ export function validateWithConfig(
           if (
             lastPitch &&
             Math.abs(degree(e.pitch) - degree(lastPitch)) >
-              c.melody.maxIntervalSteps
+              (move?.technique === "lifted-wide-leap" &&
+              c.wideLeaps.kind === "lifted-wide"
+                ? c.wideLeaps.maxLandingIntervalSteps
+                : c.melody.maxIntervalSteps)
           )
             errors.push("Maximum diatonic interval exceeded.");
           if (
@@ -630,5 +658,6 @@ export function validateWithConfig(
       if (collision()) errors.push("Hand positions overlap.");
     }
   }
+  errors.push(...validateWideSweeps(p, c), ...validateLeapReservation(p, c));
   return [...new Set(errors)];
 }

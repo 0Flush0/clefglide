@@ -140,6 +140,27 @@ export const chromaticSchema = z.discriminatedUnion("kind", [
     })
     .strict(),
 ]);
+/** A lifted relocation is separate from both small shifts and melodic intervals. */
+export const wideLeapSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("disabled") }).strict(),
+  z
+    .object({
+      kind: z.literal("lifted-wide"),
+      probability,
+      minDistanceSteps: z.number().int().min(5).max(51),
+      maxDistanceSteps: z.number().int().min(5).max(51),
+      maxLandingIntervalSteps: z.number().int().min(1).max(51),
+      targetSelection: z.enum(["anywhere", "higher", "lower", "range-edges"]),
+      landingSelection: z.enum(["uniform-positions", "uniform-landings"]),
+      distanceWeightExponent: z.number().min(-4).max(4),
+      preparationBeats: z.number().int().min(1).max(15),
+      minimumPreparationBeats: z.number().min(1).max(15),
+      additionalPreparationBeatsPerOctave: z.number().min(0).max(15),
+      eligibleBars: z.array(bar).min(1).max(4),
+      landingFingers: z.array(z.number().int().min(1).max(5)).min(1).max(5),
+    })
+    .strict(),
+]);
 export const chordsSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("single-notes") }).strict(),
   z
@@ -202,6 +223,7 @@ const schema = z
     chromatic: chromaticSchema,
     chords: chordsSchema,
     coverage: coverageSchema,
+    wideLeaps: wideLeapSchema.default({ kind: "disabled" }),
   })
   .strict()
   .superRefine((c, ctx) => {
@@ -310,8 +332,52 @@ const schema = z
         "Coverage guidance requires active rested repositioning; use disabled coverage for fixed hands.",
       );
     const smallest = Math.min(...c.rhythm.durations.map((d) => d.value));
+    const wide = c.wideLeaps;
+    if (wide.kind === "lifted-wide") {
+      if (wide.minDistanceSteps > wide.maxDistanceSteps)
+        error(["wideLeaps"], "Minimum leap distance must not exceed maximum.");
+      if (!unique(wide.eligibleBars) || !unique(wide.landingFingers))
+        error(["wideLeaps"], "Leap bars and landing fingers must be unique.");
+      if (
+        wide.minimumPreparationBeats +
+          (wide.minDistanceSteps / 7) *
+            wide.additionalPreparationBeatsPerOctave >
+        wide.preparationBeats
+      )
+        error(
+          ["wideLeaps"],
+          "Reserved preparation cannot satisfy even the minimum leap distance.",
+        );
+      const bars = [...wide.eligibleBars].sort((a, b) => a - b);
+      if (
+        bars.some(
+          (b, i) =>
+            wide.preparationBeats >=
+            ((bars[(i + 1) % bars.length] - b + 4) % 4 || 4) * c.notation.beats,
+        )
+      )
+        error(
+          ["wideLeaps", "preparationBeats"],
+          "Leave at least one sounded beat between leap preparation windows.",
+        );
+      if (
+        c.movement.kind === "rested-reposition" &&
+        c.movement.probability > 0 &&
+        wide.probability > 0 &&
+        c.movement.eligibleBars.some((b) =>
+          bars.some((landing) => {
+            const distance = ((landing - b + 4) % 4) * c.notation.beats;
+            return distance > 0 && distance <= wide.preparationBeats;
+          }),
+        )
+      )
+        error(
+          ["wideLeaps"],
+          "A small repositioning landing cannot lie inside wide-leap preparation.",
+        );
+    }
     for (let b = 0; b < c.notation.phraseBars; b++) {
-      const rest =
+      let rest =
         c.movement.kind === "rested-reposition" &&
         c.movement.probability > 0 &&
         c.movement.eligibleBars.includes(b + 1)
@@ -319,8 +385,22 @@ const schema = z
           : c.rhythm.breathBars.includes(b)
             ? c.rhythm.breathBeats
             : 0;
+      if (wide.kind === "lifted-wide" && wide.probability > 0) {
+        const end = (b + 1) * c.notation.beats;
+        for (const landing of wide.eligibleBars) {
+          const next =
+            (landing <= b ? landing + 4 : landing) * c.notation.beats;
+          rest = Math.max(
+            rest,
+            Math.min(
+              c.notation.beats,
+              Math.max(0, end - (next - wide.preparationBeats)),
+            ),
+          );
+        }
+      }
       if (
-        rest >= c.notation.beats ||
+        rest > c.notation.beats ||
         ((c.notation.beats - rest) * TPQ) % smallest !== 0
       )
         error(

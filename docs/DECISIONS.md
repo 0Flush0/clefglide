@@ -1,5 +1,13 @@
 # Implementation decisions
 
+## Opt-in wide lifted leaps (programmatic generator v6)
+
+- `wideLeaps` is a separate resolved capability, disabled in every existing UI preset. It plans `lifted-wide-leap` actions alongside small rested repositioning, with independent distance, target, weighting, landing-finger/interval and preparation parameters. See the [complete parameter inventory](GENERATOR_CONFIG.md#wide-lifted-leaps-programmatic-api-only).
+- Configured bounds permit the full keyboard's legal same-shape relocations. Preparation can span multiple measures and cross phrase boundaries, including a later landing bar in the next phrase. Exact reserved-rest state carries forward; prior notes must end before the cue. Both-hand travel envelopes remain separated. Missing static possibilities fail feasibility; blocked sampled opportunities return explicit diagnostics rather than weakening constraints.
+- An independent validator reconstructs movement, landing, continuous silence, boundary evidence and travel safety without planner helpers. Smart and VexFlow annotate explicit cues and landing fingers; fixed-position, chromatic and chord rules resume after the single-note landing.
+- Enabled parameter configurations use version **6.0.0** and include all capability settings in their comparison identity. Disabled configurations retain **5.2.0**, original fingerprints and PRNG consumption. Saved UI settings, historical results, persistence and replay eligibility are unchanged. Programmatic configurations remain outside the legacy session persistence API.
+- These are declared beat-based timing and geometric constraints. Piano/teacher review is still needed for travel at actual tempo, release/pedal behavior, hand size, fatigue, coordination and cue readability. No hardware test, finger verification or universal human comfort is claimed.
+
 ## Parameter-driven generator architecture (behavior-preserving v5.2 refactor)
 
 - Generation algorithms consume a branded, validated, deeply readonly `GeneratorConfig`; labels resolve only at the compatibility/preset boundary. Melody, rhythm, harmony, fingering, rested movement, chromatic figures, chords and coverage have independent explicit parameters. Discriminated unions reject unsupported or contradictory feature branches, and cross-module validation checks budgets and limits before sampling.

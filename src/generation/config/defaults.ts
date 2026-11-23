@@ -2,6 +2,21 @@ import type { GeneratorConfig } from "./schema";
 
 const weighted = <T>(...values: T[]) =>
   values.map((value) => ({ value, weight: 1 }));
+export const wideLeapDefaults = {
+  kind: "lifted-wide",
+  probability: 0.25,
+  minDistanceSteps: 5,
+  maxDistanceSteps: 14,
+  maxLandingIntervalSteps: 18,
+  targetSelection: "anywhere",
+  landingSelection: "uniform-positions",
+  distanceWeightExponent: -1,
+  preparationBeats: 2,
+  minimumPreparationBeats: 1,
+  additionalPreparationBeatsPerOctave: 0.5,
+  eligibleBars: [2],
+  landingFingers: [1, 2, 3, 4, 5],
+} satisfies GeneratorConfig["wideLeaps"];
 export const repositionDefaults = {
   kind: "rested-reposition",
   probability: 0.25,
@@ -103,4 +118,5 @@ export const generatorDefaults: GeneratorConfig = {
   chromatic: { kind: "diatonic" },
   chords: { kind: "single-notes" },
   coverage: { kind: "disabled" },
+  wideLeaps: { kind: "disabled" },
 };

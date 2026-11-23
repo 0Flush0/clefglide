@@ -64,5 +64,10 @@ export function resolveGeneratorConfig(
 export function generatorConfigFingerprint(
   config: ValidatedGeneratorConfig,
 ): string {
-  return `${VERSION}:parameters:${JSON.stringify(config)}`;
+  // Disabled configurations retain their pre-capability byte identity.
+  const { wideLeaps, ...legacy } = config;
+  return `${generatorConfigVersion(config)}:parameters:${JSON.stringify(wideLeaps.kind === "disabled" ? legacy : config)}`;
+}
+export function generatorConfigVersion(config: ValidatedGeneratorConfig) {
+  return config.wideLeaps.kind === "disabled" ? VERSION : "6.0.0";
 }

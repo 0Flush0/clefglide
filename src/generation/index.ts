@@ -2,7 +2,7 @@
 export { generateConfigured } from "./engine";
 export { inspectGeneratorFeasibility } from "./feasibility";
 export { validateGeneratedPhrase } from "./phraseValidator";
-export type { GeneratedPhrase } from "./model";
+export type { GeneratedPhrase, MovementDiagnostic } from "./model";
 export * from "./config";
 /** Explicit saved-settings compatibility boundary. */
 export { generate } from "./planner";

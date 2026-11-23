@@ -155,6 +155,8 @@ export function visibleMovements(
     .sort((a, b) => a.landingTick - b.landingTick);
 }
 export function movementAnnotation(m: MovementPlan) {
+  if (m.technique === "lifted-wide-leap")
+    return `Leap ${m.hand === "right" ? "RH" : "LH"} ${m.distance > 0 ? "↑" : "↓"} · ${m.landingFinger}`;
   return `Move ${m.hand === "right" ? "RH" : "LH"} · ${m.landingFinger}`;
 }
 export function nextMovements(

@@ -13,6 +13,7 @@ import {
   diatonicIndex,
 } from "./positionMaps";
 import { chordCandidatesForConfig } from "./voicings";
+import { wideLandingOptions } from "./wideLeaps";
 
 /** Context-dependent feasibility is separate from structural configuration validity.
  * Chord/movement probabilities are opportunities, not promises that every shape fits. */
@@ -43,6 +44,30 @@ export function inspectGeneratorFeasibility(c: ValidatedGeneratorConfig) {
         `${hands[i]} hand: no approved variable position fits; the conventional position option will be used.`,
       );
     const movement = c.movement;
+    const wide = c.wideLeaps;
+    if (
+      wide.kind === "lifted-wide" &&
+      wide.probability > 0 &&
+      compatible[i].length > 0 &&
+      !compatible[i].some((from) =>
+        wideLandingOptions(c, from, compatible[i]).some(
+          ({ to, index }) =>
+            from.pitches.some(
+              (last) =>
+                Math.abs(
+                  diatonicIndex(to.pitches[index]) - diatonicIndex(last),
+                ) <= wide.maxLandingIntervalSteps,
+            ) &&
+            (hands.length === 1 ||
+              lists[1 - i].some(
+                (other) => separated(from, other) && separated(to, other),
+              )),
+        ),
+      )
+    )
+      errors.push(
+        `${hands[i]} hand: wide leaps are infeasible for these ranges, spacing, distance, landing, direction and preparation constraints.`,
+      );
     if (
       movement.kind === "rested-reposition" &&
       movement.probability > 0 &&

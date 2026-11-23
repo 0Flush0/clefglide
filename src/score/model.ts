@@ -150,6 +150,12 @@ export interface StreamState {
   hands: HandState[];
   hints?: HintMemory;
   coverage?: Partial<Record<Hand, RangeCoverage>>;
+  /** Reserved, fully silent tail for a possible next-chunk wide landing. */
+  wideLeapPreparation?: {
+    configFingerprint: string;
+    cueTick: number;
+    landingTick: number;
+  };
 }
 export interface Phrase {
   seed: string;
@@ -165,7 +171,7 @@ export interface Phrase {
 export interface MovementPlan {
   id: string;
   hand: Hand;
-  technique: "lift-and-reposition";
+  technique: "lift-and-reposition" | "lifted-wide-leap";
   fromPositionId: string;
   toPositionId: string;
   cueTick: number;

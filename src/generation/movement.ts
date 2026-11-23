@@ -15,6 +15,8 @@ import {
 } from "./positionMaps";
 import { coverageMoveWeight } from "./rangeCoverage";
 import { random } from "./random";
+import { movementSeparated, planWideLeaps } from "./wideLeaps";
+import type { MovementDiagnostic } from "./model";
 
 /** Plan only explicit, prepared relocations; unavailable opportunities stay put. */
 export function planMovements(
@@ -25,10 +27,20 @@ export function planMovements(
   b: number,
   positions: HandState[],
   movements: MovementPlan[],
+  diagnostics: MovementDiagnostic[] = [],
 ) {
   const movement = c.movement;
   const bar = state.bar + b;
-  const landings = new Map<Hand, number>();
+  const landings = planWideLeaps(
+    c,
+    seed,
+    state,
+    available,
+    b,
+    positions,
+    movements,
+    diagnostics,
+  );
   const usePreparation =
     movement.kind === "rested-reposition" && movement.probability > 0;
   if (
@@ -38,6 +50,7 @@ export function planMovements(
   ) {
     for (let hi = 0; hi < state.hands.length; hi++) {
       const from = state.hands[hi];
+      if (landings.has(from.hand)) continue;
       if (random(state) >= movement.probability || !from.lastPitch) continue;
       const other = state.hands.find((h) => h.hand !== from.hand);
       // Only move when the old position cannot reach the landing pitch.
@@ -48,7 +61,16 @@ export function planMovements(
           spacingSignature(to) !== spacingSignature(from) ||
           !distance ||
           Math.abs(distance) > movement.maxDistanceSteps ||
-          (other && !separated(to, other))
+          (other && !separated(to, other)) ||
+          (c.wideLeaps.kind === "lifted-wide" &&
+            c.wideLeaps.probability > 0 &&
+            !movementSeparated(
+              to,
+              state,
+              positions,
+              movements,
+              bar * c.notation.beats * TPQ,
+            ))
         )
           return [];
         return to.pitches.flatMap((pitch, index) => {
@@ -95,7 +117,17 @@ export function planMovements(
         technique: "lift-and-reposition",
         fromPositionId: from.id,
         toPositionId: to.id,
-        cueTick: tick - movement.preparationBeats * TPQ,
+        cueTick:
+          tick -
+          Math.max(
+            movement.preparationBeats,
+            c.wideLeaps.kind === "lifted-wide" &&
+              c.wideLeaps.probability > 0 &&
+              c.wideLeaps.eligibleBars.includes(b)
+              ? c.wideLeaps.preparationBeats
+              : 0,
+          ) *
+            TPQ,
         landingTick: tick,
         landingNoteId: `${seed}-${bar}-0-${from.hand}`,
         landingMidi: midi,

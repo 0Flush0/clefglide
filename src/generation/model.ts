@@ -6,4 +6,11 @@ import type { ValidatedGeneratorConfig } from "./config";
 export interface GeneratedPhrase extends Omit<Phrase, "settings"> {
   config: ValidatedGeneratorConfig;
   configFingerprint: string;
+  /** Actual skipped leap opportunities; never fabricated practice outcomes. */
+  movementDiagnostics?: MovementDiagnostic[];
+}
+export interface MovementDiagnostic {
+  hand: import("../score/model").Hand;
+  landingTick: number;
+  reason: "no-legal-target" | "no-preparation";
 }

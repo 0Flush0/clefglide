@@ -7,6 +7,11 @@ import { createCanvas } from "@napi-rs/canvas";
 import { applyHandMovements } from "../practice/presets";
 import { movementAnnotation, visibleMovements } from "./hints";
 import { restedAlternatePhrase, spacedPhrase } from "./test-fixtures";
+import {
+  generateConfigured,
+  resolveGeneratorConfig,
+  wideLeapDefaults,
+} from "../generation";
 it("renders actual VexFlow SVG and removes supported fingering modifiers when hidden", () => {
   vi.stubGlobal(
     "ResizeObserver",
@@ -65,6 +70,40 @@ it("renders actual VexFlow SVG and removes supported fingering modifiers when hi
     />,
   );
   expect(fingers()).toHaveLength(0);
+  const wide = generateConfigured(
+    resolveGeneratorConfig({
+      hands: { right: { min: 48, max: 96 } },
+      wideLeaps: {
+        ...wideLeapDefaults,
+        probability: 1,
+        eligibleBars: [1, 2, 3],
+      },
+    }),
+    "wide-engraving",
+  );
+  expect(wide.movements.length).toBeGreaterThan(0);
+  ui.rerender(
+    <Notation
+      events={wide.events}
+      hands={wide.initial.hands}
+      positions={wide.positions}
+      movements={wide.movements}
+      settings={{ ...defaults, hints: "smart" }}
+      startBar={0}
+      reveal={false}
+    />,
+  );
+  for (const m of wide.movements) {
+    const cue = wide.events.find(
+      (e) => e.hand === m.hand && e.bar * 4 * 480 + e.onset === m.cueTick,
+    )!;
+    expect(
+      ui.container.querySelector(`[id="vf-${cue.id}"]`)?.textContent,
+    ).toContain(movementAnnotation(m));
+    expect(
+      ui.container.querySelector(`[id="vf-${m.landingNoteId}"]`)?.textContent,
+    ).toContain(String(m.landingFinger));
+  }
   const settings = {
     ...applyHandMovements(
       {
