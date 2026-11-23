@@ -1,5 +1,33 @@
 ﻿// English message keys remain stable across saved practice sessions.
 export const german: Record<string, string> = {
+  "USB MIDI is discovered automatically. Use the Bluetooth button to discover BLE-MIDI devices.":
+    "USB-MIDI wird automatisch erkannt. Suche mit der Bluetooth-Taste nach BLE-MIDI-Geräten.",
+  "Reconnect the USB cable or choose the input to retry. For Bluetooth, tap Discover Bluetooth MIDI. Practice stays paused until you press Start.":
+    "Verbinde das USB-Kabel erneut oder wähle den Eingang für einen neuen Versuch. Tippe für Bluetooth auf Bluetooth-MIDI suchen. Die Übung bleibt pausiert, bis du Start drückst.",
+  "Requesting MIDI permission…": "MIDI-Zugriff wird angefragt…",
+  "Requesting Bluetooth permission…": "Bluetooth-Zugriff wird angefragt…",
+  "Connecting MIDI…": "MIDI wird verbunden…",
+  "USB MIDI connection timed out. Choose the input to retry.":
+    "Zeitüberschreitung bei der USB-MIDI-Verbindung. Wähle den Eingang für einen neuen Versuch.",
+  "Practice paused. MIDI discovery resumes when you return.":
+    "Übung pausiert. Die MIDI-Gerätesuche wird bei deiner Rückkehr fortgesetzt.",
+  "Discover Bluetooth MIDI": "Bluetooth-MIDI suchen",
+  "Tap Discover Bluetooth MIDI, allow access, then choose your piano input.":
+    "Tippe auf Bluetooth-MIDI suchen, erlaube den Zugriff und wähle dann deinen Klaviereingang.",
+  "Bluetooth MIDI works directly in the Android app. Enable Bluetooth and BLE-MIDI on the piano, discover, then select its input. No connector app is needed.":
+    "Bluetooth-MIDI funktioniert direkt in der Android-App. Aktiviere Bluetooth und BLE-MIDI am Klavier, suche nach Geräten und wähle den Eingang. Eine Verbindungs-App ist nicht nötig.",
+  "Bluetooth: allow Nearby devices in Android settings (Location on Android 11 or earlier), turn Bluetooth on, and discover again. Disconnect the piano from other phones or apps first.":
+    "Bluetooth: Erlaube Geräte in der Nähe in den Android-Einstellungen (Standort bis Android 11), schalte Bluetooth ein und suche erneut. Trenne das Klavier zuerst von anderen Telefonen oder Apps.",
+  "Bluetooth MIDI permission denied": "Bluetooth-MIDI-Berechtigung verweigert",
+  "Discovering Bluetooth MIDI for 10 seconds…":
+    "Bluetooth-MIDI wird 10 Sekunden lang gesucht…",
+  "Bluetooth discovery finished. Choose your piano input.":
+    "Bluetooth-Suche abgeschlossen. Wähle deinen Klaviereingang.",
+  "No Bluetooth MIDI devices found. Enable BLE-MIDI on the piano and discover again.":
+    "Keine Bluetooth-MIDI-Geräte gefunden. Aktiviere BLE-MIDI am Klavier und suche erneut.",
+  "Connecting Bluetooth MIDI…": "Bluetooth-MIDI wird verbunden…",
+  "No USB MIDI inputs. Check USB/OTG or discover Bluetooth MIDI.":
+    "Keine USB-MIDI-Eingänge. Prüfe USB/OTG oder suche nach Bluetooth-MIDI.",
   "Legal Notice (Impressum)": "Impressum",
   "Information pursuant to Section 18(1) MStV":
     "Angaben gemäß § 18 Abs. 1 MStV",

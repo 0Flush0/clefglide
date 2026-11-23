@@ -15,8 +15,16 @@ export function createMidiAdapter(
   update: MidiUpdate,
   disconnected: () => void,
   suspended: () => void,
+  canAutoSelect: () => boolean = () => true,
 ): MidiAdapter {
   return Capacitor.getPlatform() === "android"
-    ? new AndroidMidi(bus, update, disconnected, suspended)
+    ? new AndroidMidi(
+        bus,
+        update,
+        disconnected,
+        suspended,
+        undefined,
+        canAutoSelect,
+      )
     : new HardwareMidi(bus, update, disconnected);
 }

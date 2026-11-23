@@ -34,6 +34,13 @@ html[data-platform="android"] .app-shell > main {
   padding-bottom: var(--android-safe-bottom);
 }
 
+html[data-platform="android"] .topbar {
+  flex-wrap: wrap;
+  height: auto;
+  min-height: 54px;
+  padding-block: 8px;
+}
+
 html[data-platform="android"] .legal-page {
   padding-top: calc(clamp(20px, 5vw, 64px) + var(--android-safe-top));
   padding-right: calc(20px + var(--android-safe-right));

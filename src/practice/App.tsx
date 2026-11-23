@@ -6,11 +6,13 @@ import {
   LanguageContext,
 } from "../shared/i18n";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Capacitor } from "@capacitor/core";
 import * as Tabs from "@radix-ui/react-tabs";
 import {
   Activity,
   ArrowRight,
   BarChart3,
+  Bluetooth,
   Check,
   ChevronRight,
   CircleHelp,
@@ -57,7 +59,13 @@ import {
 } from "../score/model";
 import { generate } from "../generation/planner";
 import { Scorer, metrics } from "../scoring/engine";
-import { MidiBus, type MidiAdapter, type MidiEvent } from "../midi/adapter";
+import {
+  MidiBus,
+  type MidiAdapter,
+  type MidiEvent,
+  type MidiConnectionState,
+} from "../midi/adapter";
+import { MidiConnectionButton } from "./MidiConnectionButton";
 import { createMidiAdapter, midiUnavailableReason } from "../midi/platform";
 import { download } from "../platform/download";
 import { syncAndroidTheme } from "../platform/theme";
@@ -144,6 +152,28 @@ const labels = {
   },
 };
 export function App() {
+  const android = Capacitor.getPlatform() === "android";
+  const [midiConnection, setMidiConnection] = useState<MidiConnectionState>({
+    phase: "idle",
+    selectedId: "",
+  });
+  const midiConnectionRef = useRef(midiConnection);
+  const midiAction = useRef(false);
+  const updateMidiConnection = (connection: MidiConnectionState) => {
+    midiConnectionRef.current = connection;
+    setMidiConnection(connection);
+  };
+  const midiBusy = ["permission", "scanning", "connecting"].includes(
+    midiConnection.phase,
+  );
+  const midiSelecting =
+    midiConnection.phase === "permission" ||
+    midiConnection.phase === "connecting";
+  const bluetoothBusy =
+    midiConnection.phase === "permission" ||
+    midiConnection.phase === "scanning" ||
+    (midiConnection.phase === "connecting" &&
+      !!midiConnection.pendingId?.startsWith("ble:"));
   const [compactScore, setCompactScore] = useState(
     () =>
       typeof matchMedia === "function" &&
@@ -276,9 +306,21 @@ export function App() {
   useEffect(() => {
     const adapter = createMidiAdapter(
       bus,
-      (list, message) => {
+      (list, message, connection) => {
         setInputs(list.map((i) => ({ id: i.id, name: i.name })));
         setStatus(message);
+        if (connection) {
+          if (connection.selectedId !== midiConnectionRef.current.selectedId) {
+            if (connection.selectedId) void pausePractice(ref.current);
+            setSim(!connection.selectedId);
+          }
+          midiConnectionRef.current = connection;
+          setMidiConnection(connection);
+          setDevice(connection.selectedId);
+        } else if (midiAction.current) {
+          midiConnectionRef.current = { phase: "connecting", selectedId: "" };
+          setMidiConnection(midiConnectionRef.current);
+        }
       },
       () => {
         void pausePractice(ref.current);
@@ -290,9 +332,22 @@ export function App() {
       () => {
         void pausePractice(ref.current);
       },
+      () => !ref.current.engine.running,
     );
     hardware.current = adapter;
+    let cancelled = false;
+    void adapter.initialize?.().catch((e: unknown) => {
+      if (cancelled) return;
+      setStatus(String(e));
+      const connection: MidiConnectionState = {
+        phase: "failed",
+        selectedId: "",
+      };
+      midiConnectionRef.current = connection;
+      setMidiConnection(connection);
+    });
     return () => {
+      cancelled = true;
       void adapter.dispose();
     };
   }, [pausePractice]);
@@ -609,6 +664,16 @@ export function App() {
     render((x) => x + 1);
   };
   const connect = async () => {
+    if (
+      midiAction.current ||
+      ["permission", "scanning", "connecting"].includes(
+        midiConnectionRef.current.phase,
+      )
+    )
+      return;
+    midiAction.current = true;
+    updateMidiConnection({ phase: "permission", selectedId: device });
+    setStatus("Requesting MIDI permission…");
     void pausePractice(ref.current);
     try {
       await hardware.current?.enable();
@@ -616,13 +681,34 @@ export function App() {
       setDevice(input?.id ?? "");
       setSim(!input);
       if (input) setStatus("Piano connected");
+      updateMidiConnection({
+        phase: input ? "connected" : "idle",
+        selectedId: input?.id ?? "",
+      });
       setError("");
     } catch (e) {
       setStatus("MIDI connection failed");
       setError(String(e));
+      updateMidiConnection({ phase: "failed", selectedId: device });
+    } finally {
+      midiAction.current = false;
     }
   };
   const selectDevice = async (id: string) => {
+    if (
+      midiAction.current ||
+      ["permission", "connecting"].includes(midiConnectionRef.current.phase)
+    )
+      return;
+    midiAction.current = true;
+    updateMidiConnection({
+      phase: "connecting",
+      selectedId: device,
+      pendingId: id,
+    });
+    setStatus(
+      id.startsWith("ble:") ? "Connecting Bluetooth MIDI…" : "Connecting MIDI…",
+    );
     void pausePractice(ref.current);
     try {
       await hardware.current?.select(id);
@@ -631,13 +717,46 @@ export function App() {
       setSim(!input);
       setStatus(input ? "Piano connected" : "Piano disconnected");
       setError("");
+      updateMidiConnection({
+        phase: input ? "connected" : "idle",
+        selectedId: input?.id ?? "",
+      });
     } catch (e) {
       setDevice("");
       setSim(true);
       setStatus("MIDI connection failed");
       setError(String(e));
+      updateMidiConnection({ phase: "failed", selectedId: "" });
+    } finally {
+      midiAction.current = false;
     }
     render((x) => x + 1);
+  };
+  const discoverBluetooth = async () => {
+    if (
+      midiAction.current ||
+      ["permission", "scanning", "connecting"].includes(
+        midiConnectionRef.current.phase,
+      )
+    )
+      return;
+    midiAction.current = true;
+    updateMidiConnection({ phase: "permission", selectedId: device });
+    setStatus("Requesting Bluetooth permission…");
+    void pausePractice(ref.current);
+    try {
+      await hardware.current?.discoverBluetooth?.();
+      setError("");
+    } catch (e) {
+      setError(String(e));
+      setStatus(String(e));
+      updateMidiConnection({
+        phase: "failed",
+        selectedId: hardware.current?.input?.id ?? "",
+      });
+    } finally {
+      midiAction.current = false;
+    }
   };
   const filtered = sessions.filter(
     (s) =>
@@ -730,6 +849,7 @@ export function App() {
                 className="device-picker"
                 aria-label={tr("MIDI device")}
                 value={device}
+                disabled={midiSelecting}
                 onChange={(e) => selectDevice(e.target.value)}
               >
                 <option value="">{tr("Choose piano input")}</option>
@@ -740,21 +860,51 @@ export function App() {
                 ))}
               </select>
             )}
-            <button
-              className={`device-badge ${device ? "connected" : ""}`}
-              aria-label={tr("Connect MIDI")}
-              onClick={() => void connect()}
+            {android && (
+              <MidiConnectionButton
+                busy={bluetoothBusy}
+                disabled={midiBusy}
+                icon={<Bluetooth size={15} aria-hidden="true" />}
+                aria-label={tr("Discover Bluetooth MIDI")}
+                title={tr("Discover Bluetooth MIDI")}
+                onClick={() => void discoverBluetooth()}
+              />
+            )}
+            {!android && (
+              <MidiConnectionButton
+                busy={midiBusy}
+                icon={<Plug size={15} aria-hidden="true" />}
+                className={`device-badge ${device ? "connected" : ""}`}
+                aria-label={tr("Connect MIDI")}
+                onClick={() => void connect()}
+              >
+                {tr(
+                  device
+                    ? "MIDI connected"
+                    : sim
+                      ? "Connect MIDI"
+                      : "Connect your piano",
+                )}
+              </MidiConnectionButton>
+            )}
+            <span
+              className="midi-connection-status"
+              data-state={
+                midiBusy
+                  ? "pending"
+                  : midiConnection.phase === "failed"
+                    ? "failed"
+                    : device
+                      ? "connected"
+                      : "idle"
+              }
+              title={tr(status)}
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
             >
-              <span className="status-dot" />
-              {tr(
-                device
-                  ? "MIDI connected"
-                  : sim
-                    ? "Connect MIDI"
-                    : "Connect your piano",
-              )}
-              <Plug size={15} />
-            </button>
+              <span className="sr-only">{tr(status)}</span>
+            </span>
             <GitHubLink />
           </header>
           {tr(
@@ -1131,10 +1281,15 @@ export function App() {
                 </label>
                 <div className="connection">
                   <p>{tr(status)}</p>
-                  <button onClick={() => void connect()}>
-                    <Plug size={16} />
-                    {tr("Retry MIDI connection")}
-                  </button>
+                  {!android && (
+                    <MidiConnectionButton
+                      busy={midiBusy}
+                      icon={<Plug size={16} aria-hidden="true" />}
+                      onClick={() => void connect()}
+                    >
+                      {tr("Retry MIDI connection")}
+                    </MidiConnectionButton>
+                  )}
                   <label>
                     {tr("MIDI channel")}
                     <select
@@ -1327,6 +1482,14 @@ export function App() {
               language={lang}
               onLanguage={chooseLanguage}
               onConnect={() => void connect()}
+              connectionBusy={midiBusy}
+              bluetoothBusy={bluetoothBusy}
+              selectionBusy={midiSelecting}
+              onDiscoverBluetooth={
+                Capacitor.getPlatform() === "android"
+                  ? () => void discoverBluetooth()
+                  : undefined
+              }
               inputs={inputs}
               device={device}
               onSelectDevice={selectDevice}

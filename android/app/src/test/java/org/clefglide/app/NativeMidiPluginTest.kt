@@ -36,6 +36,7 @@ class NativeMidiPluginTest {
     private lateinit var output: MidiOutputPort
     private lateinit var deviceCallback: MidiManager.DeviceCallback
     private var openCallback: MidiManager.OnDeviceOpenedListener? = null
+    private var usbTimeout: Runnable? = null
 
     @Before fun setup() {
         loopers = mockStatic(Looper::class.java)
@@ -43,6 +44,10 @@ class NativeMidiPluginTest {
         handlers = mockConstruction(Handler::class.java) { handler, _ ->
             `when`(handler.post(any(Runnable::class.java))).thenAnswer {
                 it.getArgument<Runnable>(0).run()
+                true
+            }
+            `when`(handler.postDelayed(any(Runnable::class.java), eq(15_000L))).thenAnswer {
+                usbTimeout = it.getArgument(0)
                 true
             }
         }
@@ -93,9 +98,9 @@ class NativeMidiPluginTest {
         return info
     }
 
-    private fun select(): PluginCall {
+    private fun select(id: String = "4:0"): PluginCall {
         val call = mock(PluginCall::class.java)
-        `when`(call.getString("id")).thenReturn("4:0")
+        `when`(call.getString("id")).thenReturn(id)
         plugin.select(call)
         return call
     }
@@ -120,6 +125,7 @@ class NativeMidiPluginTest {
         assertEquals(1, inputs.length())
         assertEquals("4:0", inputs.getJSONObject(0).getString("id"))
         verify(manager, never()).openDevice(any(), any(), any())
+        verify(manager, never()).openBluetoothDevice(any(), any(), any())
     }
 
     @Test fun pauseClosesPortAndResumeOnlyRestartsDiscovery() {
@@ -207,5 +213,125 @@ class NativeMidiPluginTest {
         deviceCallback.onDeviceRemoved(usb)
         capture.value.onSend(bytes, 0, bytes.size, 2_000_000L)
         verify(listener, times(1)).resolve(any(JSObject::class.java))
+    }
+
+    private val bleId = "ble:01:02:03:04:05:06"
+    // Mockito's Java matchers return null; Kotlin APIs require non-null arguments.
+    private fun anyOpen(): (MidiDevice?, String?) -> Unit = any<(MidiDevice?, String?) -> Unit>() ?: { _, _ -> }
+    private fun bluetooth(): BluetoothMidiManager {
+        val ble = mock(BluetoothMidiManager::class.java)
+        `when`(ble.inputs).thenReturn(listOf(BluetoothMidiManager.Input(bleId, "Test piano (Bluetooth MIDI)")))
+        NativeMidiPlugin::class.java.getDeclaredField("bluetooth").apply { isAccessible = true }.set(plugin, ble)
+        return ble
+    }
+
+    @Test fun bluetoothAndUsbSharePickerAndSwitchClosesUsbBeforeBluetoothOpen() {
+        open()
+        val ble = bluetooth()
+        val call = mock(PluginCall::class.java)
+        plugin.start(call)
+        val state = ArgumentCaptor.forClass(JSObject::class.java)
+        verify(call).resolve(state.capture())
+        assertEquals(2, state.value.getJSONArray("inputs").length())
+        assertEquals(bleId, state.value.getJSONArray("inputs").getJSONObject(1).getString("id"))
+        select(bleId)
+        val order = inOrder(output, opened, ble)
+        order.verify(output).close()
+        order.verify(opened).close()
+        order.verify(ble).open(eq(bleId) ?: bleId, anyOpen())
+    }
+
+    @Test fun bluetoothUsesSharedParserForChordsNotesAndPedalWithNativeTimestamps() {
+        plugin.start(mock(PluginCall::class.java))
+        val ble = bluetooth()
+        val info = device(9, MidiDeviceInfo.TYPE_BLUETOOTH)
+        `when`(opened.info).thenReturn(info)
+        doAnswer {
+            it.getArgument<(MidiDevice?, String?) -> Unit>(1).invoke(opened, null)
+            null
+        }.`when`(ble).open(eq(bleId) ?: bleId, anyOpen())
+        val listener = mock(PluginCall::class.java)
+        `when`(listener.getString("eventName")).thenReturn("midi")
+        plugin.addListener(listener)
+        val selection = select(bleId)
+        val state = ArgumentCaptor.forClass(JSObject::class.java)
+        verify(selection).resolve(state.capture())
+        assertEquals(bleId, state.value.getString("selectedId"))
+        val capture = ArgumentCaptor.forClass(MidiReceiver::class.java)
+        verify(output).connect(capture.capture())
+        // Native MidiManager has already decoded BLE framing and timestamps.
+        val bytes = byteArrayOf(0x91.toByte(), 60, 90, 64, 90, 67, 90, 0xb1.toByte(), 64, 127,
+            0x91.toByte(), 60, 0, 0x81.toByte(), 64, 80, 67, 0, 0xb1.toByte(), 64, 0)
+        capture.value.onSend(bytes, 0, bytes.size, 123_000_000L)
+        val packets = ArgumentCaptor.forClass(JSObject::class.java)
+        verify(listener, times(8)).resolve(packets.capture())
+        assertEquals(listOf("on", "on", "on", "sustain", "off", "off", "off", "sustain"),
+            packets.allValues.map { it.getString("type") })
+        assertTrue(packets.allValues.all { it.getDouble("timestampMs") == 123.0 && it.getInt("channel") == 2 })
+        deviceCallback.onDeviceRemoved(info)
+        verify(output).close()
+        verify(opened).close()
+        capture.value.onSend(bytes, 0, bytes.size, 124_000_000L)
+        verify(listener, times(8)).resolve(any(JSObject::class.java))
+    }
+
+    @Test fun switchingToUsbRejectsPendingBluetoothAndClosesItsLateOpen() {
+        plugin.start(mock(PluginCall::class.java))
+        val ble = bluetooth()
+        var complete: ((MidiDevice?, String?) -> Unit)? = null
+        doAnswer { complete = it.getArgument(1); null }.`when`(ble).open(eq(bleId) ?: bleId, anyOpen())
+        val selection = select(bleId)
+        select("4:0")
+        verify(selection).reject("MIDI selection changed.")
+        val late = mock(MidiDevice::class.java)
+        complete!!(late, null)
+        verify(late).close()
+        verify(late, never()).openOutputPort(anyInt())
+        openCallback!!.onDeviceOpened(opened)
+        verify(output).connect(any(MidiReceiver::class.java))
+    }
+
+    @Test fun bluetoothWithoutSendingPortIsReleasedAndPauseStopsBluetoothResources() {
+        plugin.start(mock(PluginCall::class.java))
+        val ble = bluetooth()
+        val info = device(9, MidiDeviceInfo.TYPE_BLUETOOTH)
+        `when`(info.ports).thenReturn(emptyArray())
+        `when`(opened.info).thenReturn(info)
+        doAnswer { it.getArgument<(MidiDevice?, String?) -> Unit>(1).invoke(opened, null); null }
+            .`when`(ble).open(eq(bleId) ?: bleId, anyOpen())
+        val selection = select(bleId)
+        verify(selection).reject("Bluetooth MIDI device has no sending port. Choose another input.")
+        verify(opened).close()
+        lifecycle("handleOnPause")
+        verify(ble).pause()
+        lifecycle("handleOnStop")
+        verify(ble).stop()
+        lifecycle("handleOnResume")
+        verify(ble).resume()
+        verify(ble, times(1)).open(eq(bleId) ?: bleId, anyOpen())
+    }
+
+    @Test fun usbTimeoutReportsFailureRejectsPendingCallAndClosesLateDevice() {
+        plugin.start(mock(PluginCall::class.java))
+        val selection = select()
+        val connecting = mock(PluginCall::class.java)
+        plugin.start(connecting)
+        val state = ArgumentCaptor.forClass(JSObject::class.java)
+        verify(connecting).resolve(state.capture())
+        assertEquals("connecting", state.value.getString("phase"))
+        assertEquals("4:0", state.value.getString("pendingId"))
+        usbTimeout!!.run()
+        verify(selection).reject("USB MIDI connection timed out. Choose the input to retry.")
+        openCallback!!.onDeviceOpened(opened)
+        verify(opened).close()
+        verify(opened, never()).openOutputPort(anyInt())
+        val after = mock(PluginCall::class.java)
+        plugin.start(after)
+        verify(after).resolve(state.capture())
+        assertEquals("failed", state.value.getString("phase"))
+        assertEquals("", state.value.getString("pendingId"))
+        assertTrue(state.value.getString("status")!!.contains("timed out"))
+        verify(manager, times(1)).registerDeviceCallback(any(), any(Handler::class.java))
+        verify(manager, never()).openBluetoothDevice(any(), any(), any())
     }
 }

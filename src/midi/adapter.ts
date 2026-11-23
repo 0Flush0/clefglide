@@ -28,15 +28,31 @@ export interface MidiInput {
   name: string;
 }
 
-/** Platform hardware boundary. Construction must never request MIDI access. */
+export type MidiConnectionPhase =
+  "idle" | "permission" | "scanning" | "connecting" | "connected" | "failed";
+export interface MidiConnectionState {
+  phase: MidiConnectionPhase;
+  selectedId: string;
+  pendingId?: string;
+}
+
+/** Platform hardware boundary. Construction must never request MIDI permission. */
 export interface MidiAdapter {
   readonly input?: MidiInput;
   enable(): Promise<void>;
+  /** Android USB discovery only; never requests Bluetooth or browser permission. */
+  initialize?(): Promise<void>;
+  /** Optional native Android BLE discovery; never called automatically. */
+  discoverBluetooth?(): Promise<void>;
   select(id: string): void | Promise<void>;
   dispose(): void | Promise<void>;
 }
 
-export type MidiUpdate = (inputs: MidiInput[], status: string) => void;
+export type MidiUpdate = (
+  inputs: MidiInput[],
+  status: string,
+  connection?: MidiConnectionState,
+) => void;
 
 export class MidiBus {
   listeners = new Set<(e: MidiEvent) => void>();

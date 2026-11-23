@@ -428,7 +428,9 @@ main {
   min-width: 0;
 }
 .topbar {
-  height: 82px;
+  min-height: 82px;
+  height: auto;
+  flex-wrap: wrap;
   border-bottom: 1px solid var(--line);
   display: flex;
   align-items: center;
@@ -436,6 +438,36 @@ main {
   padding: 0 38px;
   background: var(--paper);
   gap: 10px;
+}
+.midi-spinner {
+  flex-shrink: 0;
+  animation: midi-spin 1s linear infinite;
+}
+@keyframes midi-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .midi-spinner {
+    animation: none;
+  }
+}
+.midi-connection-status {
+  flex: 0 0 8px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+.midi-connection-status[data-state="connected"] {
+  background: var(--green);
+}
+.midi-connection-status[data-state="pending"] {
+  background: #ae9471;
+}
+.midi-connection-status[data-state="failed"] {
+  background: #c55b52;
 }
 .breadcrumb {
   display: flex;
@@ -453,17 +485,6 @@ main {
   font-size: 11px;
   padding: 5px 13px;
   min-height: 34px;
-}
-.status-dot {
-  width: 7px;
-  height: 7px;
-  display: inline-block;
-  border-radius: 50%;
-  background: #ae9471;
-  margin-right: 4px;
-}
-.connected .status-dot {
-  background: #538969;
 }
 .page {
   padding: 33px 38px;
@@ -1672,8 +1693,9 @@ body:has(.range-dialog[open]) {
   font-size: 23px;
 }
 .topbar {
-  height: 54px;
-  padding: 0 24px;
+  height: auto;
+  min-height: 54px;
+  padding: 8px 24px;
 }
 .device-picker {
   max-width: 190px;
@@ -2016,8 +2038,9 @@ footer {
     margin: 0;
   }
   .topbar {
-    padding: 0 14px;
-    height: 48px;
+    padding: 6px 14px;
+    height: auto;
+    min-height: 48px;
   }
   .breadcrumb {
     font-size: 10px;

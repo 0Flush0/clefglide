@@ -10,6 +10,7 @@ import {
 import type { ReactNode } from "react";
 import type { MidiEvent } from "../midi/adapter";
 import { useTranslation, type Language } from "../shared/i18n";
+import { MidiConnectionButton } from "./MidiConnectionButton";
 
 function GuideLink({ href, children }: { href: string; children: ReactNode }) {
   return (
@@ -25,6 +26,10 @@ export function SettingsHelp({
   language,
   onLanguage,
   onConnect,
+  onDiscoverBluetooth,
+  connectionBusy = false,
+  bluetoothBusy = false,
+  selectionBusy = false,
   inputs,
   device,
   onSelectDevice,
@@ -38,6 +43,10 @@ export function SettingsHelp({
   language: Language;
   onLanguage: (language: Language) => void;
   onConnect: () => void;
+  onDiscoverBluetooth?: () => void;
+  connectionBusy?: boolean;
+  bluetoothBusy?: boolean;
+  selectionBusy?: boolean;
   inputs: { id: string; name: string }[];
   device: string;
   onSelectDevice: (id: string) => void;
@@ -92,7 +101,9 @@ export function SettingsHelp({
         <h2 id="keyboard-setup-title">{tr("1. Connect your keyboard")}</h2>
         <p>
           {tr(
-            "Choose a USB cable or Bluetooth MIDI. Use Chrome and open ClefGlide over HTTPS.",
+            onDiscoverBluetooth
+              ? "USB MIDI is discovered automatically. Use the Bluetooth button to discover BLE-MIDI devices."
+              : "Choose a USB cable or Bluetooth MIDI. Use Chrome and open ClefGlide over HTTPS.",
           )}
         </p>
         <div className="connection-methods">
@@ -134,68 +145,88 @@ export function SettingsHelp({
               {tr("Bluetooth MIDI")}
             </h3>
             <p>
-              {tr("Connect in a MIDI connector app first, then return here.")}
+              {tr(
+                onDiscoverBluetooth
+                  ? "Tap Discover Bluetooth MIDI, allow access, then choose your piano input."
+                  : "Connect in a MIDI connector app first, then return here.",
+              )}
             </p>
+            {onDiscoverBluetooth && (
+              <MidiConnectionButton
+                busy={bluetoothBusy}
+                disabled={connectionBusy}
+                icon={<Bluetooth size={17} aria-hidden="true" />}
+                onClick={onDiscoverBluetooth}
+              >
+                {tr("Discover Bluetooth MIDI")}
+              </MidiConnectionButton>
+            )}
             <ol>
               <li>
                 {tr(
                   "Enable Bluetooth MIDI (BLE-MIDI) on your keyboard, or attach a compatible Bluetooth MIDI adapter. Bluetooth audio alone does not send notes.",
                 )}
               </li>
-              <li>
-                {tr(
-                  "On the same computer or tablet running ClefGlide, open a compatible MIDI connector app and connect to your keyboard there. Bluetooth pairing alone may not create a MIDI input.",
-                )}
-              </li>
-              <li>
-                {tr(
-                  "Keep any MIDI bridge app running. Return to ClefGlide, allow MIDI access below, and choose the keyboard or the bridge’s MIDI port.",
-                )}
-              </li>
+              {!onDiscoverBluetooth && (
+                <li>
+                  {tr(
+                    "On the same computer or tablet running ClefGlide, open a compatible MIDI connector app and connect to your keyboard there. Bluetooth pairing alone may not create a MIDI input.",
+                  )}
+                </li>
+              )}
+              {!onDiscoverBluetooth && (
+                <li>
+                  {tr(
+                    "Keep any MIDI bridge app running. Return to ClefGlide, allow MIDI access below, and choose the keyboard or the bridge’s MIDI port.",
+                  )}
+                </li>
+              )}
             </ol>
-            <details className="help-inline-details">
-              <summary>{tr("Which connector do I use?")}</summary>
-              <div className="platform-guides">
-                <section>
-                  <h4>{tr("Android")}</h4>
-                  <p>
-                    {tr(
-                      "For example, Bluetooth MIDI Connect by ROCKRELAY connects BLE-MIDI devices to Android’s MIDI service. Open the app, allow the Bluetooth scanning permissions it requests, and select your keyboard before returning to Chrome.",
-                    )}
-                  </p>
-                  <GuideLink href="https://play.google.com/store/apps/details?id=bluetooth.midi.connect">
-                    {tr("Bluetooth MIDI Connect on Google Play")}
-                  </GuideLink>
-                </section>
-                <section>
-                  <h4>macOS</h4>
-                  <p>
-                    {tr(
-                      "Open Audio MIDI Setup, choose Window → Show MIDI Studio, open the Bluetooth configuration, and connect your keyboard. Then select it in ClefGlide in Chrome.",
-                    )}
-                  </p>
-                  <GuideLink href="https://support.apple.com/guide/audio-midi-setup/set-up-bluetooth-midi-devices-ams33f013765/mac">
-                    {tr("Apple’s Bluetooth MIDI guide")}
-                  </GuideLink>
-                </section>
-                <section>
-                  <h4>Windows</h4>
-                  <p>
-                    {tr(
-                      "Use a BLE-MIDI connector or bridge compatible with your Windows version and keyboard. If using MIDIberry with loopMIDI, create a virtual port in loopMIDI, choose your keyboard as MIDIberry’s input and that port as its output. Select the same port in ClefGlide. Keep both apps running.",
-                    )}
-                  </p>
-                  <div className="help-guide-links">
-                    <GuideLink href="https://apps.microsoft.com/detail/9n39720h2m05">
-                      MIDIberry
+            {!onDiscoverBluetooth && (
+              <details className="help-inline-details">
+                <summary>{tr("Which connector do I use?")}</summary>
+                <div className="platform-guides">
+                  <section>
+                    <h4>{tr("Android")}</h4>
+                    <p>
+                      {tr(
+                        "For example, Bluetooth MIDI Connect by ROCKRELAY connects BLE-MIDI devices to Android’s MIDI service. Open the app, allow the Bluetooth scanning permissions it requests, and select your keyboard before returning to Chrome.",
+                      )}
+                    </p>
+                    <GuideLink href="https://play.google.com/store/apps/details?id=bluetooth.midi.connect">
+                      {tr("Bluetooth MIDI Connect on Google Play")}
                     </GuideLink>
-                    <GuideLink href="https://www.tobias-erichsen.de/software/loopmidi.html">
-                      loopMIDI
+                  </section>
+                  <section>
+                    <h4>macOS</h4>
+                    <p>
+                      {tr(
+                        "Open Audio MIDI Setup, choose Window → Show MIDI Studio, open the Bluetooth configuration, and connect your keyboard. Then select it in ClefGlide in Chrome.",
+                      )}
+                    </p>
+                    <GuideLink href="https://support.apple.com/guide/audio-midi-setup/set-up-bluetooth-midi-devices-ams33f013765/mac">
+                      {tr("Apple’s Bluetooth MIDI guide")}
                     </GuideLink>
-                  </div>
-                </section>
-              </div>
-            </details>
+                  </section>
+                  <section>
+                    <h4>Windows</h4>
+                    <p>
+                      {tr(
+                        "Use a BLE-MIDI connector or bridge compatible with your Windows version and keyboard. If using MIDIberry with loopMIDI, create a virtual port in loopMIDI, choose your keyboard as MIDIberry’s input and that port as its output. Select the same port in ClefGlide. Keep both apps running.",
+                      )}
+                    </p>
+                    <div className="help-guide-links">
+                      <GuideLink href="https://apps.microsoft.com/detail/9n39720h2m05">
+                        MIDIberry
+                      </GuideLink>
+                      <GuideLink href="https://www.tobias-erichsen.de/software/loopmidi.html">
+                        loopMIDI
+                      </GuideLink>
+                    </div>
+                  </section>
+                </div>
+              </details>
+            )}
           </article>
         </div>
         <div className="help-connect">
@@ -203,19 +234,28 @@ export function SettingsHelp({
             <h3>{tr("Allow access, then play a key")}</h3>
             <p>
               {tr(
-                "Click Connect MIDI and allow access when Chrome asks. The first input connects automatically; choose another if needed.",
+                onDiscoverBluetooth
+                  ? "USB MIDI is discovered automatically. Use the Bluetooth button to discover BLE-MIDI devices."
+                  : "Click Connect MIDI and allow access when Chrome asks. The first input connects automatically; choose another if needed.",
               )}
             </p>
           </div>
-          <button className="primary" onClick={onConnect}>
-            <Plug size={17} aria-hidden="true" />
-            {tr("Connect MIDI")}
-          </button>
+          {!onDiscoverBluetooth && (
+            <MidiConnectionButton
+              busy={connectionBusy}
+              icon={<Plug size={17} aria-hidden="true" />}
+              className="primary"
+              onClick={onConnect}
+            >
+              {tr("Connect MIDI")}
+            </MidiConnectionButton>
+          )}
           {inputs.length > 0 && (
             <label className="help-input-picker">
               {tr("Piano input")}
               <select
                 value={device}
+                disabled={selectionBusy}
                 onChange={(event) => onSelectDevice(event.target.value)}
               >
                 <option value="">{tr("Choose piano input")}</option>
@@ -242,7 +282,9 @@ export function SettingsHelp({
         </div>
         <p className="help-compatibility">
           {tr(
-            "Android requires compatible hardware and Chrome. Safari and iPadOS MIDI are not supported by ClefGlide. Bluetooth support depends on your keyboard, operating system and connector app.",
+            onDiscoverBluetooth
+              ? "Bluetooth MIDI works directly in the Android app. Enable Bluetooth and BLE-MIDI on the piano, discover, then select its input. No connector app is needed."
+              : "Android requires compatible hardware and Chrome. Safari and iPadOS MIDI are not supported by ClefGlide. Bluetooth support depends on your keyboard, operating system and connector app.",
           )}
         </p>
       </section>
@@ -262,24 +304,30 @@ export function SettingsHelp({
             </li>
             <li>
               {tr(
-                "Bluetooth: check that the connector app shows your keyboard as connected and exposes a MIDI port. Keep bridge apps open, and disconnect the keyboard from other phones or tablets.",
+                onDiscoverBluetooth
+                  ? "Bluetooth: allow Nearby devices in Android settings (Location on Android 11 or earlier), turn Bluetooth on, and discover again. Disconnect the piano from other phones or apps first."
+                  : "Bluetooth: check that the connector app shows your keyboard as connected and exposes a MIDI port. Keep bridge apps open, and disconnect the keyboard from other phones or tablets.",
               )}
             </li>
             <li>
               {tr(
-                "Close other apps that may be using the MIDI port, then click Connect MIDI again. If Chrome still has an old device list, reload the page after connecting.",
+                onDiscoverBluetooth
+                  ? "Reconnect the USB cable or choose the input to retry. For Bluetooth, tap Discover Bluetooth MIDI. Practice stays paused until you press Start."
+                  : "Close other apps that may be using the MIDI port, then click Connect MIDI again. If Chrome still has an old device list, reload the page after connecting.",
               )}
             </li>
           </ul>
         </details>
-        <details className="help-disclosure">
-          <summary>{tr("Chrome blocked MIDI access")}</summary>
-          <p>
-            {tr(
-              "Open Chrome’s site controls beside the address bar, allow MIDI devices in the site permissions, and try Connect MIDI again. Use the HTTPS address; an ordinary HTTP address on your local network cannot request MIDI access.",
-            )}
-          </p>
-        </details>
+        {!onDiscoverBluetooth && (
+          <details className="help-disclosure">
+            <summary>{tr("Chrome blocked MIDI access")}</summary>
+            <p>
+              {tr(
+                "Open Chrome’s site controls beside the address bar, allow MIDI devices in the site permissions, and try Connect MIDI again. Use the HTTPS address; an ordinary HTTP address on your local network cannot request MIDI access.",
+              )}
+            </p>
+          </details>
+        )}
         <details className="help-disclosure">
           <summary>{tr("Connected, but no notes arrive")}</summary>
           <p>
