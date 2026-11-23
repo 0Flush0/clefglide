@@ -42,7 +42,10 @@ export function comfortableMap(mapped: number[], hand: Hand): boolean {
     )
   );
 }
-export function chromaticOptions(pos: HandState): string[][] {
+export function chromaticOptions(
+  pos: HandState,
+  allowedFingers: readonly number[] = [2, 3, 4],
+): string[][] {
   const alterations = pos.fingerToMidi.slice(1, 4).flatMap((midi) => {
     const base = pos.pitches.find((p) => Note.midi(p) === midi)!;
     return ([-1, 1] as const).flatMap((delta) => {
@@ -54,7 +57,7 @@ export function chromaticOptions(pos: HandState): string[][] {
   });
   return pos.fingerToMidi.map((midi, i) => {
     const base = pos.pitches.find((p) => Note.midi(p) === midi)!;
-    if (i === 0 || i === 4) return [base];
+    if (i === 0 || i === 4 || !allowedFingers.includes(i + 1)) return [base];
     return [
       base,
       ...[...new Set(alterations)].flatMap((pitch) => {

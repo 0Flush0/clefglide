@@ -1,0 +1,9 @@
+/** Parameter-driven API for future practice-mode composition. */
+export { generateConfigured } from "./engine";
+export { inspectGeneratorFeasibility } from "./feasibility";
+export { validateGeneratedPhrase } from "./phraseValidator";
+export type { GeneratedPhrase } from "./model";
+export * from "./config";
+/** Explicit saved-settings compatibility boundary. */
+export { generate } from "./planner";
+export { resolveSettings } from "./config/presets";

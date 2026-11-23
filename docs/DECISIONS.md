@@ -1,5 +1,11 @@
 # Implementation decisions
 
+## Parameter-driven generator architecture (behavior-preserving v5.2 refactor)
+
+- Generation algorithms consume a branded, validated, deeply readonly `GeneratorConfig`; labels resolve only at the compatibility/preset boundary. Melody, rhythm, harmony, fingering, rested movement, chromatic figures, chords and coverage have independent explicit parameters. Discriminated unions reject unsupported or contradictory feature branches, and cross-module validation checks budgets and limits before sampling.
+- The existing `generate(settings, seed, previous)` API retains the application/score/history contract. A separate `generateConfigured` API returns full parameter identity without legacy settings, preventing custom modules from silently masquerading as comparable historical exercises. Preferences, session/backup formats, UI and generator version remain unchanged.
+- Independent validation still reconstructs maps, transitions and movement constraints without planner helpers. Ninety-six pre-refactor cases compare three full consecutive phrases each, retaining PRNG order and complete stream state. See the [complete configuration inventory, invariants and extension guide](GENERATOR_CONFIG.md).
+
 ## Generator v5.2: physical key transitions
 
 - Reusing a finger within a position permits the same physical MIDI key, or a slide from a black key to either immediately adjacent white key. White-to-black, white-to-white and black-to-black changes with the same finger are rejected, including after ordinary rests. Explicit, independently validated rested hand relocations establish a new position as before. Written sharps/flats do not determine a key's physical color.

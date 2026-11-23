@@ -1,2 +1,2 @@
-// Independent difficulty presets shared by the generator and practice UI.
+// UI presets consumed by the practice controls and generator configuration resolver.
 export * from "../generation/difficulty";

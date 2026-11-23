@@ -171,7 +171,7 @@ describe("coverage-guided exploration", () => {
       );
       vi.spyOn(coverage, "coverageMoveWeight").mockReturnValue(1);
       vi.spyOn(coverage, "coveragePhraseShape").mockImplementation(
-        (_state, _position, shape) => shape,
+        (_state, _position, shape) => [...shape],
       );
       let baseline: Session[];
       try {

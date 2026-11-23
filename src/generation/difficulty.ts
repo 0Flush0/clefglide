@@ -1,4 +1,5 @@
 import type { Settings } from "../score/model";
+// Saved-settings/UI policy only. Core generation modules must use resolved parameters.
 export const jumpLevels = {
   small: { label: "Small", interval: 1, stepWeight: 7 },
   easy: { label: "Easy", interval: 2, stepWeight: 4 },
