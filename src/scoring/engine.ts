@@ -4,7 +4,8 @@ import {
   generatorConfigFingerprint,
   type ValidatedGeneratorConfig,
 } from "../generation/config";
-import { lifetimeNotes } from "../score/lifetimes";
+import { lifetimeNotes, attackEvents } from "../score/lifetimes";
+import { validateTieSegments } from "../score/ties";
 import { validateLifetimePlan } from "../score/lifetimeValidation";
 import { LifetimeTracker } from "./lifetimes";
 export { durationMetrics } from "./lifetimes";
@@ -23,6 +24,7 @@ export interface Result {
   simultaneous?: boolean;
 }
 export class Scorer {
+  private notationEvents?: ScoreEvent[];
   readonly lifetimes?: LifetimeTracker;
   private lifetimePaused = false;
   private lifetimeNoteCount = 0;
@@ -60,6 +62,14 @@ export class Scorer {
     public chordOnsetMs = DEFAULT_CHORD_ONSET_MS,
     public readonly config?: ValidatedGeneratorConfig,
   ) {
+    if (config?.notation.ties !== undefined && config.notation.ties !== false) {
+      this.validateTies(notes);
+      this.notationEvents = [...notes];
+      this.notes = attackEvents(notes);
+      notes = this.notes;
+    } else if (notes.some((e) => e.tie || noteheads(e).some((n) => n.tie))) {
+      throw new Error("Tie scoring requires the enabled tie configuration.");
+    }
     if (config?.noteLifetimes.kind === "explicit") {
       if (
         !Number.isFinite(settings.bpm) ||
@@ -76,6 +86,18 @@ export class Scorer {
       this.lifetimes = new LifetimeTracker(config.noteLifetimes, settings);
       this.lifetimeScoringContext = JSON.stringify(this.scoringContext());
     }
+  }
+  private validateTies(events: ScoreEvent[]) {
+    const policy = this.config?.notation.ties;
+    const errors = validateTieSegments(
+      events,
+      this.settings.beats,
+      [],
+      0,
+      undefined,
+      policy === false ? undefined : policy,
+    );
+    if (errors.length) throw new Error(errors.join(" "));
   }
   private validateLifetimeNotes(notes: ScoreEvent[]) {
     const records = lifetimeNotes(notes);
@@ -124,6 +146,10 @@ export class Scorer {
         "Start a new scorer to change the lifetime scoring clock or policy.",
       );
     if (this.lifetimes && this.lifetimeNoteCount !== this.notes.length) {
+      if (this.notationEvents)
+        throw new Error(
+          "Use appendNotes to append tied notation without duplicating attacks.",
+        );
       if (this.notes.length < this.lifetimeNoteCount)
         throw new Error(
           "Do not remove scored lifetime events from an active scorer.",
@@ -165,11 +191,19 @@ export class Scorer {
   /** Streaming preserves active releases even after the attack cursor reaches a phrase end. */
   appendNotes(notes: ScoreEvent[]) {
     this.syncLifetimeNotes();
+    let notation: ScoreEvent[] | undefined;
+    if (this.notationEvents) {
+      notation = [...this.notationEvents, ...notes];
+      this.validateAppendBoundary(notes, this.notationEvents);
+      this.validateTies(notation);
+      notes = attackEvents(notes);
+    }
     if (this.lifetimes) {
       this.validateAppendBoundary(notes);
       this.validateLifetimeNotes([...this.notes, ...notes]);
     }
     this.notes.push(...notes);
+    if (notation) this.notationEvents = notation;
     this.lifetimeNoteCount = this.notes.length;
   }
   get durationResults() {

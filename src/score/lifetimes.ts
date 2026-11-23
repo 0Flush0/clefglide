@@ -36,20 +36,34 @@ export function attachNoteLifetimes(
 /** One identity per attack, including all chord heads; never synthesizes ties. */
 export function lifetimeNotes(events: ScoreEvent[]): LifetimeNote[] {
   return events.flatMap((e) =>
-    noteheads(e).map((n) => {
-      if (!n.lifetime)
-        throw new Error(`Missing explicit lifetime for ${n.id}.`);
-      return {
-        id: n.id,
-        eventId: e.id,
-        midi: n.midi,
-        hand: n.hand,
-        finger: n.finger,
-        positionId: e.positionId,
-        lifetime: structuredClone(n.lifetime),
-      };
-    }),
+    noteheads(e)
+      .filter((n) => !n.tie || n.tie.index === 0)
+      .map((n) => {
+        if (!n.lifetime)
+          throw new Error(`Missing explicit lifetime for ${n.id}.`);
+        return {
+          id: n.id,
+          eventId: e.id,
+          midi: n.midi,
+          hand: n.hand,
+          finger: n.finger,
+          positionId: e.positionId,
+          lifetime: structuredClone(n.lifetime),
+        };
+      }),
   );
+}
+
+/** Scoring projection: continuation glyphs are never attacks, even in partial chords. */
+export function attackEvents(events: ScoreEvent[]): ScoreEvent[] {
+  return events.flatMap((e) => {
+    if (!noteheads(e).some((n) => n.tie)) return [e];
+    const heads = noteheads(e).filter((n) => !n.tie || n.tie.index === 0);
+    if (!heads.length) return [];
+    const attack = { ...e, ...heads[0], id: e.id, notes: heads };
+    if (!heads[0].tie) delete attack.tie;
+    return [attack];
+  });
 }
 
 /** Intended occupancy, not an observation of which finger the pianist used. */

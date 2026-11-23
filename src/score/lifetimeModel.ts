@@ -1,5 +1,16 @@
 import type { Hand } from "./model";
 
+/** Links engraved heads to one original MIDI attack. IDs are never pitch-derived. */
+export interface TieSegment {
+  lifetimeId: string;
+  attackEventId: string;
+  index: number;
+  count: number;
+  pattern: "subdivide" | "connect" | "carry";
+  previousId?: string;
+  nextId?: string;
+}
+
 /** Absolute integer ticks. A lifetime identifies one attack, not a tied glyph. */
 export interface NoteLifetime {
   voiceId: string;

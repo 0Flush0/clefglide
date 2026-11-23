@@ -30,6 +30,20 @@ export function inspectGeneratorFeasibility(c: ValidatedGeneratorConfig) {
   );
   const errors: string[] = [],
     warnings: string[] = [];
+  const ties = c.notation.ties;
+  if (
+    ties !== false &&
+    ties.chordTones !== "none" &&
+    (c.chords.kind !== "voicings" ||
+      c.chords.probability === 0 ||
+      !compatible.some(
+        (positions, i) =>
+          ties.voices.includes(`${hands[i]}:main`) && hasChord(c, positions),
+      ))
+  )
+    errors.push(
+      "The selected tie chord tones require a feasible, enabled harmonic voicing in an eligible voice.",
+    );
   for (let i = 0; i < hands.length; i++) {
     if (!lists[i].length)
       errors.push(

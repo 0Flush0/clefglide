@@ -2,6 +2,20 @@ import type { GeneratorConfig } from "./schema";
 
 const weighted = <T>(...values: T[]) =>
   values.map((value) => ({ value, weight: 1 }));
+/** Explicit opt-in; never composed into UI presets. */
+export const tieDefaults = {
+  kind: "enabled",
+  probability: 0.25,
+  segmentCounts: [2],
+  subdivisions: [240, 480, 960, 1920],
+  withinMeasure: true,
+  crossMeasure: true,
+  crossPhrase: false,
+  maxDurationTicks: 3840,
+  voices: ["right:main", "left:main"],
+  chordTones: "none",
+  patterns: weighted("subdivide", "connect"),
+} satisfies Exclude<GeneratorConfig["notation"]["ties"], false>;
 export const durationEvaluationDefaults = {
   kind: "evaluate",
   toleranceMs: 120,

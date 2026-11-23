@@ -35,6 +35,7 @@ import type { MovementDiagnostic } from "./model";
 import { inspectGeneratorFeasibility } from "./feasibility";
 import { nextLeapPreparation } from "./wideLeaps";
 import { attachNoteLifetimes } from "../score/lifetimes";
+import { planTies, validateTieCarry } from "./ties";
 export function generateConfigured(
   c: ValidatedGeneratorConfig,
   seed: string,
@@ -42,11 +43,15 @@ export function generateConfigured(
   // Internal legacy stream identity override; parameter-driven callers omit this.
   contextKey = generatorConfigFingerprint(c),
 ): GeneratedPhrase {
-  if (previous?.activeLifetimes?.length)
+  if (previous) validateTieCarry(c, previous, seed);
+  if (previous?.activeLifetimes?.length && c.notation.ties === false)
     throw new Error(
       "Shared-rhythm generation cannot consume held carry-in voices; author them with the core lifetime model.",
     );
-  if (c.wideLeaps.kind !== "disabled" && c.wideLeaps.probability > 0) {
+  if (
+    c.notation.ties !== false ||
+    (c.wideLeaps.kind !== "disabled" && c.wideLeaps.probability > 0)
+  ) {
     const { errors } = inspectGeneratorFeasibility(c);
     if (errors.length) throw new Error(errors.join(" "));
     if (
@@ -108,11 +113,22 @@ export function generateConfigured(
       diagnostics,
     );
     const { durations, noteCount } = barRhythm(c, b, state);
+    let soundedCount = noteCount;
+    if (b === 0 && initial.pendingTies?.length) {
+      const unit = Math.min(...c.rhythm.durations.map((d) => d.value));
+      const count = durations[0] / unit;
+      durations.splice(0, 1, ...Array.from({ length: count }, () => unit));
+      soundedCount += count - 1;
+    }
     let onset = 0;
     for (let j = 0; j < durations.length; j++) {
-      const rest = j >= noteCount;
+      const rest = j >= soundedCount;
       for (const h of state.hands) {
         const previousFingering = h.lastFingering ?? [];
+        const carry =
+          b === 0 && j === 0
+            ? initial.pendingTies?.find((p) => p.head.hand === h.hand)
+            : undefined;
         const finalAttack =
           b === c.notation.phraseBars - 1 && j === noteCount - 1;
         const choices = melodicChoices(c, h, chords[b], finalAttack);
@@ -133,8 +149,9 @@ export function generateConfigured(
           chords[b],
           b === c.notation.phraseBars - 1 && j === durations.length - 1,
         );
-        const index =
-          h.resolutionPitch && !(j === 0 && landings.has(h.hand))
+        const index = carry
+          ? h.lastIndex
+          : h.resolutionPitch && !(j === 0 && landings.has(h.hand))
             ? h.pitches.indexOf(h.resolutionPitch)
             : j === 0 && landings.has(h.hand)
               ? landings.get(h.hand)!
@@ -185,6 +202,7 @@ export function generateConfigured(
         };
         if (
           !rest &&
+          !carry &&
           !h.resolutionPitch &&
           !resolving &&
           !(j === 0 && landings.has(h.hand)) &&
@@ -238,6 +256,7 @@ export function generateConfigured(
   state.bar += c.notation.phraseBars;
   attachNoteLifetimes(events, c);
   if (c.noteLifetimes.kind === "explicit") state.activeLifetimes = [];
+  planTies(events, c, initial, state, seed);
   const preparation = nextLeapPreparation(c, state.bar);
   if (preparation) state.wideLeapPreparation = preparation;
   else delete state.wideLeapPreparation;

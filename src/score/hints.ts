@@ -60,7 +60,11 @@ export function inferFingeringHints(
   const notes = events
     .filter((e) => e.kind === "note")
     .sort((a, b) => a.bar - b.bar || a.onset - b.onset)
-    .flatMap((e) => noteheads(e).map((n) => ({ ...e, ...n })));
+    .flatMap((e) =>
+      noteheads(e)
+        .filter((n) => !n.tie || n.tie.index === 0)
+        .map((n) => ({ ...e, ...n })),
+    );
   const hints = notes.map((note) => {
     const position = positions.find(
       (p) => p.hand === note.hand && p.id === note.positionId,

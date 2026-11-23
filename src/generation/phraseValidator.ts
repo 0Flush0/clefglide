@@ -282,7 +282,12 @@ export function validateWithConfig(
         end += e.duration;
         if (
           e.kind === "note" &&
-          !c.rhythm.durations.some((d) => d.value === e.duration)
+          !c.rhythm.durations.some((d) => d.value === e.duration) &&
+          !(
+            c.notation.ties !== false &&
+            noteheads(e).some((n) => n.tie) &&
+            c.notation.ties.subdivisions.some((s) => s === e.duration)
+          )
         )
           errors.push("Note duration violates the resolved rhythm.");
         if (

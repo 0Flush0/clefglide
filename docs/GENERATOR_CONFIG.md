@@ -2,9 +2,9 @@
 
 The generator has two entry points. `generate(settings, seed, previous?)` in `src/generation/planner.ts` is the unchanged application compatibility API. It resolves saved settings through `config/presets.ts`, calls the parameter-driven engine, and returns the original `Phrase` shape. No UI control, preference schema, session schema, backup format or historical fingerprint changes in this refactor.
 
-`generateConfigured(config, seed, previous?)` in `engine.ts` accepts only a branded, deeply readonly `ValidatedGeneratorConfig`. It returns `GeneratedPhrase`, which carries the resolved config and a separate parameter fingerprint (`5.2.0:parameters:...` with both new modules disabled, `6.0.0:parameters:...` for wide leaps, `7.0.0:parameters:...` for explicit lifetimes) and deliberately has no legacy `settings` field. Custom parameters must not be recorded as an ordinary legacy-settings session: integrating such a future practice mode into history will require an explicit persistence/comparison design.
+`generateConfigured(config, seed, previous?)` in `engine.ts` accepts only a branded, deeply readonly `ValidatedGeneratorConfig`. It returns `GeneratedPhrase`, which carries the resolved config and a separate parameter fingerprint (`5.2.0:parameters:...` with optional modules disabled, `6.0.0:parameters:...` for wide leaps, `7.0.0:parameters:...` for explicit lifetimes without ties, `8.0.0:parameters:...` for enabled ties) and deliberately has no legacy `settings` field. Custom parameters must not be recorded as an ordinary legacy-settings session: integrating such a future practice mode into history will require an explicit persistence/comparison design.
 
-The engine orchestrates small modules: `initialHands.ts`, `melody.ts`, `rhythm.ts`, `harmony.ts`, `chromatic.ts`, `movement.ts`, `wideLeaps.ts`, `voicings.ts`, `rangeCoverage.ts`, `positionMaps.ts` and `ergonomics.ts`. `sampling.ts` supplies ordered weighted selection. They consume resolved parameters, not difficulty labels. `planner.ts`, `positions.ts`, `chords.ts` and `validator.ts` retain the old signatures/range-preview behavior as compatibility facades; core modules do not import those facades. `difficulty.ts` and `config/presets.ts` are preset/UI policy, not algorithms. `generation/index.ts` provides the public composition API.
+The engine orchestrates small modules: `initialHands.ts`, `melody.ts`, `rhythm.ts`, `harmony.ts`, `chromatic.ts`, `movement.ts`, `wideLeaps.ts`, `ties.ts`, `voicings.ts`, `rangeCoverage.ts`, `positionMaps.ts` and `ergonomics.ts`. `sampling.ts` supplies ordered weighted selection. They consume resolved parameters, not difficulty labels. `planner.ts`, `positions.ts`, `chords.ts` and `validator.ts` retain the old signatures/range-preview behavior as compatibility facades; core modules do not import those facades. `difficulty.ts` and `config/presets.ts` are preset/UI policy, not algorithms. `generation/index.ts` provides the public composition API.
 
 `phraseValidator.ts`, `wideLeapValidation.ts` and `lifetimeValidator.ts` independently reconstruct approved maps/options, harmony, transitions, movements, exact ticks, rhythm vocabulary, chords and boundary state. The `validator.ts` facade resolves policy for legacy callers. Validation does not call planner candidate, movement, rhythm, harmony, ergonomics or selection algorithms. Its physical checks and approved pattern reconstruction remain independent.
 
@@ -12,12 +12,16 @@ The engine orchestrates small modules: `initialHands.ts`, `melody.ts`, `rhythm.t
 
 - `GeneratorConfig` describes complete supported parameter data. The Zod schemas in `config/schema.ts` reject unknown fields, unknown feature kinds, unsupported capabilities, invalid values and cross-module contradictions.
 - `normalizeGeneratorConfig(unknown)` validates a complete object, clones it through Zod and deeply freezes it. The branded output is the only accepted engine input. Ordinary generation helpers can trust the normalized type rather than repeatedly parsing each note.
-- `resolveGeneratorConfig(overrides, base = generatorDefaults)` applies canonical defaults or a supplied preset base, then explicit overrides. Objects merge recursively; arrays replace completely, preserving order. An omitted/undefined override retains the base value. A changed `kind` replaces the entire union branch: supply the complete new branch, using `repositionDefaults`, `chromaticDefaults`, `chordDefaults`, `coverageDefaults`, `wideLeapDefaults`, `noteLifetimeDefaults` or `durationEvaluationDefaults`. Old branch properties never leak into a disabled branch.
+- `resolveGeneratorConfig(overrides, base = generatorDefaults)` applies canonical defaults or a supplied preset base, then explicit overrides. Objects merge recursively; arrays replace completely, preserving order. An omitted/undefined override retains the base value. A changed `kind` replaces the entire union branch: supply the complete new branch, using `repositionDefaults`, `chromaticDefaults`, `chordDefaults`, `coverageDefaults`, `wideLeapDefaults`, `noteLifetimeDefaults`, `durationEvaluationDefaults` or `tieDefaults`. Old branch properties never leak into a disabled branch.
 - `resolveSettings(settings, overrides?)` is the one-way legacy adapter. It first enforces the existing UI's jump and movement caps, maps the labels to parameter presets, then applies explicit parameter overrides. A future practice mode can compose a config directly without adopting these UI caps or labels.
 - Structural validation does not claim a particular keyboard range can realize every permitted shape. `inspectGeneratorFeasibility(config)` reports missing five-note positions, incompatible two-hand ranges and warnings for unavailable compatible variable positions, same-shape relocations or harmonic chord voicings. Its optional checks establish static possibilities, not a promise about sampled attacks/positions. Initialization rejects impossible positions with actionable errors. Optional chord/shift/spacing occurrence is a soft opportunity, just as before; infeasible optional candidates are omitted without widening ranges or weakening ergonomics, jumps or preparation.
 
 ```ts
-import { resolveGeneratorConfig, repositionDefaults, coverageDefaults } from "./config";
+import {
+  resolveGeneratorConfig,
+  repositionDefaults,
+  coverageDefaults,
+} from "./config";
 import { generateConfigured } from "./engine";
 
 const config = resolveGeneratorConfig({
@@ -41,8 +45,8 @@ Defaults below refer to `generatorDefaults`. For an inactive union module, its e
 | `notation.key` | `C` | `C`, `G`, `F`, `D`, major only; controls spelling, maps and harmony. |
 | `notation.beats` | `4` | `3` or `4` quarter-note beats per measure. Rhythm budgets must tile exactly after rests. |
 | `notation.phraseBars` | `4` | Literal capability, not a free length knob. Contours and progressions have exactly four entries. |
-| `notation.voices` | `shared-rhythm` | Literal supported topology. Both hands share attacks/durations. |
-| `notation.ties` | `false` | Literal capability; tied/sustained voice modeling is unsupported. |
+| `notation.voices`                     | `shared-rhythm`  | Both hands share the base rhythm; tie subdivision may add notation segments and partial-chord reattacks. Independent voices remain unsupported.    |
+| `notation.ties`                       | `false`          | `false` disables ties; a complete `{ kind: "enabled", ... }` branch enables the programmatic tie module below. Boolean `true` is rejected.         |
 | `hands.active` | `right` | `right`, `left`, `both`; paired hands need non-overlapping playable positions, even if configured ranges overlap. |
 | `hands.right.min`, `.max` | `60`, `67` | Integer MIDI 21–108, min ≤ max; active ranges require a five-note position in the chosen key. |
 | `hands.left.min`, `.max` | `48`, `55` | Same bounds/dependencies, independently retained. Structural bounds apply to both configured ranges; contextual playability only to enabled hands. |
@@ -113,7 +117,11 @@ The contour component is `max(minimumNoteWeight, contourPeakWeight − distance 
 | `wideLeaps.landingFingers` | `[1,2,3,4,5]` | Unique nonempty subset of integer fingers 1–5, in anatomical finger order for each hand. Each landing is one natural mapped note, unavailable in the old position; no chord, chromatic alteration or alternate-finger exception at the landing. |
 
 ```ts
-import { generateConfigured, resolveGeneratorConfig, wideLeapDefaults } from "./generation";
+import {
+  generateConfigured,
+  resolveGeneratorConfig,
+  wideLeapDefaults,
+} from "./generation";
 
 const config = resolveGeneratorConfig({
   hands: { right: { min: 21, max: 108 } },
@@ -167,8 +175,10 @@ Physical piano/teacher testing is still required for comfortable speed and lift 
 
 ```ts
 import {
-  generateConfigured, resolveGeneratorConfig,
-  noteLifetimeDefaults, durationEvaluationDefaults,
+  generateConfigured,
+  resolveGeneratorConfig,
+  noteLifetimeDefaults,
+  durationEvaluationDefaults,
 } from "./generation";
 import { Scorer, durationMetrics, metrics } from "./scoring/engine";
 
@@ -184,19 +194,26 @@ const config = resolveGeneratorConfig({
 const phrase = generateConfigured(config, "held-notes");
 // settings retains the existing runtime mode/BPM/offset/onset-tolerance contract.
 const scorer = new Scorer(
-  phrase.events.filter((event) => event.kind === "note"), settings, 120, config,
+  phrase.events.filter((event) => event.kind === "note"),
+  settings,
+  120,
+  config,
 );
 scorer.start(now);
 // Send normalized note-on, note-off and sustain events through scorer.input(event).
 // Continue scorer.tick(now) through release deadlines after the last attack.
-const pitchAndOnset = metrics(scorer.results, scorer.activeMs(now), settings.tolerance);
+const pitchAndOnset = metrics(
+  scorer.results,
+  scorer.activeMs(now),
+  settings.tolerance,
+);
 const durations = durationMetrics(scorer.durationResults);
 ```
 
 The score model's optional `NoteLifetime` is on each `Notehead`, mirrored by the event's primary `lifetime` (including legacy-shaped single-head events when explicitly authored). Its fields are:
 
 | Field | Meaning and validation |
-| --- | --- |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `voiceId` | Nonempty identity for a logical voice; a grouping label, not a tie, slur or MIDI channel assignment. Current generation emits `right:main`/`left:main`. |
 | `onsetTick` | Absolute nonnegative safe integer at 480 TPQ. Each attack has one globally unique notehead ID, independent of its phrase. |
 | `releaseTick` | Absolute intended logical sound-end tick, strictly after onset. |
@@ -209,7 +226,7 @@ A `LifetimePlan` can specify `startTick`, `endTick`, incoming `initial` attack r
 
 The current generator attaches lifetime metadata after all note/chord selection, consuming no random draws. Its explicit metadata still ends exactly at each existing event's end. `StreamState.activeLifetimes` is empty at generated phrase boundaries; nonempty carry-in voices are explicitly rejected by this shared-rhythm generator. `lifetimeValidator.ts` reconstructs expected metadata and checks the independent canonical interval validator without calling the projector. It rejects missing/contradictory metadata, implicit activation, held movements and altered boundary state. Held overlapping or cross-phrase voices are currently supported as authored core lifetime plans and scorer inputs, not as new generated exercises.
 
-`Scorer` retains its existing three constructor arguments; the optional fourth accepts the validated configuration. Enabled construction checks meter, tempo, metadata, onset ordering and occupancy. Pass sounded events, as in the existing application; rests stay in the score timeline. `appendNotes` accepts complete, future onset groups, validates the complete plan and preserves open releases. Ordinary growth of `notes` is also checked on the next input/tick. Do not mutate already validated events or remove scored events. To change mode, tempo, offset, onset tolerance or chord capture width, construct a new scorer; enabled scoring rejects a changed runtime clock/policy instead of mixing comparison identities. Hint/display changes remain independent. Append each note only at its attack, never again as a phrase-boundary continuation. The cursor can finish all attacks while releases are still pending; programmatic callers must continue forwarding note-offs/CC64 and ticking until duration outcomes are resolved or explicitly interrupt the attempt.
+`Scorer` retains its existing three constructor arguments; the optional fourth accepts the validated configuration. Enabled construction checks meter, tempo, metadata, onset ordering and occupancy. Pass sounded events, as in the existing application; rests stay in the score timeline. `appendNotes` accepts complete, future onset groups, validates the complete plan and preserves open releases. Ordinary growth of `notes` is also checked on the next input/tick. Do not mutate already validated events or remove scored events. To change mode, tempo, offset, onset tolerance or chord capture width, construct a new scorer; enabled scoring rejects a changed runtime clock/policy instead of mixing comparison identities. Hint/display changes remain independent. With ties disabled, append each note only at its attack. With ties enabled, pass complete sounded notation, including continuation segments, to construction and `appendNotes`; the scorer validates links and projects attacks internally. The cursor can finish all attacks while releases are still pending; programmatic callers must continue forwarding note-offs/CC64 and ticking until duration outcomes are resolved or explicitly interrupt the attempt.
 
 Release tracking associates accepted attacks with normalized source, channel and pitch. Duplicate ons, duplicate/stray offs and pedal messages never supply an attack or duplicate a note's outcome. Physical key release remains observable while pedal holds its sound. Sustain is binary CC64 ≥64, scoped to the source/channel. Pedal-up closes released logical voices but never keys still down. A fresh strike of a released, pedal-held pitch closes the preceding logical voice and opens a new attack identity; MIDI cannot measure separate acoustic tails on the same string. Sostenuto, half-pedal, acoustic decay, device identity beyond the normalized source/channel, and same-pitch polyphonic/unison attribution are not implemented. Events must have finite times and arrive in physical order; an off before its associated attack is rejected. MIDI adapters are unchanged.
 
@@ -219,9 +236,85 @@ Duration outcomes live in `scorer.durationResults`, separate from the unchanged 
 
 Input offset applies to attacks, releases and pedal observations. Timed targets use the score origin plus absolute ticks converted at BPM. Wait/benchmark opt-in targets use each accepted attack plus its intended hold duration, so waiting before an attack does not cause a duration failure. External `tick(now)` permits the same input-offset compensation before declaring an overdue release; all event timestamps must share the scorer's monotonic clock. Pausing shifts future timed expectations as before. Because physical key state cannot safely be reconstructed after a pause/disconnect, open unresolved durations become `interrupted`, physical/pedal occupancy clears, and resume starts observing fresh attacks. Release keys/pedal before resuming, or provide their current normalized state; this API cannot query physical device state after an interruption. No synthetic note-off or correct duration is awarded. Already observed correct/failed durations remain recorded. `disconnect(now)` and `finish(now)` use this same explicit interruption policy; hardware integration can continue using the existing `pause(now)` path.
 
-Enabled lifetime configurations use version **7.0.0** with every lifetime/evaluation parameter in the generator fingerprint, even when evaluation is disabled. Both disabled modules retain **5.2.0**, and wide leaps with lifetimes disabled retain **6.0.0**, including their prior fingerprint serialization order. `scorer.scoringFingerprint` additionally identifies mode, BPM, meter, offset, onset tolerance and chord capture width for enabled programmatic scoring. It is not a complete persisted session identity: a future session integration must also retain assistance state. Historical settings, session/backup schemas, fingerprints, results and UI replay stay untouched. Duration records are not silently inserted into or discarded through the legacy session format; programmatic consumers must retain/export them separately until a versioned custom-session persistence design exists.
+Enabled lifetime configurations without ties use version **7.0.0** with every lifetime/evaluation parameter in the generator fingerprint, even when evaluation is disabled. Both disabled modules retain **5.2.0**, and wide leaps with lifetimes disabled retain **6.0.0**, including their prior fingerprint serialization order. `scorer.scoringFingerprint` additionally identifies mode, BPM, meter, offset, onset tolerance and chord capture width for enabled programmatic scoring. It is not a complete persisted session identity: a future session integration must also retain assistance state. Historical settings, session/backup schemas, fingerprints, results and UI replay stay untouched. Duration records are not silently inserted into or discarded through the legacy session format; programmatic consumers must retain/export them separately until a versioned custom-session persistence design exists.
 
-Fully supported here: explicit attack/release/key-hold data, overlapping distinct-pitch core lifetimes, intended finger occupancy, canonical boundary carry, optional physical/sounding release scoring, per-head chord releases, repeated attacks, binary sustain, calibrated timing, interruptions and streaming. Still future work: ties/slurs and articulation engraving, projecting tied notation segments onto one attack, polyphonic/independent-voice generation and layout, general ergonomic validation of held voices and comfortable hand transitions. Configuration still rejects `notation.ties: true`, independent generated voices and unknown capabilities; attaching a voice label does not enable them. Release/pedal latency and comfortable held-note coordination still need physical piano testing. MIDI does not verify fingers or audible acoustic duration.
+Fully supported here: explicit attack/release/key-hold data, overlapping distinct-pitch core lifetimes, intended finger occupancy, canonical boundary carry, optional physical/sounding release scoring, per-head chord releases, repeated attacks, binary sustain, calibrated timing, interruptions and streaming. The tie module below adds explicit notation segments, engraving and attack suppression. Slurs, articulation engraving, independent-voice generation/layout and general held-voice ergonomic planning remain future work. Configuration still rejects `notation.ties: true`, independent generated voices and unknown capabilities; attaching a voice label does not enable them. Release/pedal latency and comfortable held-note coordination still need physical piano testing. MIDI does not verify fingers or audible acoustic duration.
+
+### Musical ties (programmatic API, version 8)
+
+Ties are **off in every existing preset and in `generatorDefaults`**. No UI, preferences, MIDI adapters or historical-session schemas enable them. A tie is multiple notated heads sharing one attack and one continuous lifetime. Equal pitches without explicit links remain repeated attacks. VexFlow `StaveTie` curves distinguish these from slurs.
+
+```ts
+import {
+  resolveGeneratorConfig,
+  generateConfigured,
+  tieDefaults,
+  noteLifetimeDefaults,
+  durationEvaluationDefaults,
+} from "../src/generation";
+
+const config = resolveGeneratorConfig({
+  noteLifetimes: {
+    ...noteLifetimeDefaults,
+    evaluation: {
+      ...durationEvaluationDefaults,
+      waitMode: "performed-duration",
+    },
+  },
+  notation: {
+    ties: {
+      ...tieDefaults,
+      probability: 0.4,
+      crossPhrase: true,
+      patterns: [
+        { value: "subdivide", weight: 2 },
+        { value: "connect", weight: 1 },
+        { value: "carry", weight: 1 },
+      ],
+    },
+  },
+});
+const first = generateConfigured(config, "ties-example");
+const next = generateConfigured(config, "ties-example", first.final);
+// Supply sounded events, including continuation glyphs, to Scorer with config.
+// Stream with scorer.appendNotes(next.events.filter(e => e.kind === "note")).
+```
+
+`notation.ties` accepts `false` or a complete enabled branch, exported as `tieDefaults`. Fields below are relative to `notation.ties`; defaults describe that helper. Ties require explicit note lifetimes with `keyHold: required`; attack-only lifetimes cannot describe this physical hold contract. Duration evaluation can remain disabled. Unknown fields/patterns, incomplete branches, duplicate entries, non-finite numbers and incompatible options are errors.
+
+| Parameter          | Enabled helper default       | Supported values and meaning                                                                                                                                                                                                                                                                                                                                                                                                |
+| --- | --- | --- |
+| `kind`             | `enabled`                    | Literal enabled branch; use `false` to disable the entire module.                                                                                                                                                                                                                                                                                                                                                           |
+| `probability`      | `0.25`                       | 0–1, once per eligible original source event, independently per eligible hand, after candidates exist. At most one pattern is selected there. Rests, claimed segments and missing common tones reduce opportunities, so this does not promise an exact observed percentage. Zero emits no new ties.                                                                                                                         |
+| `segmentCounts`    | `[2]`                        | Unique nonempty subset of `[2,3,4]`, including initial and continuation segments. Equal subdivision supports 2/4 when they tile a base duration; connection also supports 3. Carry requires 2. Compatible counts are sampled uniformly after pattern selection.                                                                                                                                                             |
+| `subdivisions`     | `[240,480,960,1920]`         | Unique nonempty subset of eighth/quarter/half/whole note ticks at 480 TPQ. Every tied segment uses an allowed length. Subdivision can use shorter lengths than `rhythm.durations`; connection uses their intersection. Carry requires the shortest base rhythm duration. Dotted notes, tuplets, sixteenths and irregular ticks are unsupported.                                                                             |
+| `withinMeasure`    | `true`                       | Permit adjacent tied segments within one measure. Required by subdivision. Connection checks every edge separately.                                                                                                                                                                                                                                                                                                         |
+| `crossMeasure`     | `true`                       | Permit tie edges across barlines. Cross-measure-only connection works with `withinMeasure: false` and no subdivision pattern.                                                                                                                                                                                                                                                                                               |
+| `crossPhrase`      | `false`                      | Permit committed carry into the next four-bar phrase. Enable exactly when selecting the `carry` pattern; also requires cross-measure permission and count 2. Requires diatonic generation, sounded phrase ending/opening slots and no conflicting boundary leap preparation.                                                                                                                                                |
+| `maxDurationTicks` | `3840`                       | Integer 480–15360 ticks, an upper bound on the **whole lifetime**, including its initial segment and future carry. The selected pattern/count/rhythm can impose a lower achievable maximum.                                                                                                                                                                                                                                 |
+| `voices`           | `["right:main","left:main"]` | Unique nonempty subset of these two hand voices; at least one must be active. Inactive entries allow that hand when configured active. Arbitrary or independent generated voices are rejected.                                                                                                                                                                                                                              |
+| `chordTones`       | `none`                       | `none`: single-note events only. `all`: every head, requiring the complete same set throughout a connection. `outer`: one uniformly selected lowest/highest head, outer in every participating chord. `any`: one uniformly selected eligible head. The latter two generate partial chord ties. Non-`none` choices require enabled, contextually feasible chord voicings in an eligible voice; single notes remain eligible. |
+| `patterns`         | `subdivide:1, connect:1`     | Unique weighted subset of `subdivide`, `connect`, `carry`, using finite relative weights 0.000001–1000. Only feasible candidates compete at a source event. Unsupported patterns are rejected.                                                                                                                                                                                                                              |
+
+Supported patterns:
+
+- **`subdivide`** replaces one planned note/chord event with equal shorter segments, preserving its exact total duration, pitches, position and fingers. Initial IDs remain; later IDs append a deterministic segment suffix. Selected heads share one lifetime. Untied chord tones deliberately reattack at the added segments, each with a shorter lifetime. The original base duration must fit the sounded measure budget, segment count and maximum duration.
+- **`connect`** joins a contiguous run of matching pitch/spelling/finger/position heads, within or across measures. It does not change pitches to manufacture matches. Other chord tones retain their attacks/releases. Rests, movement preparation, changed positions and already claimed segments break candidates. A configuration needs a feasible sounded run budget; actual occurrence depends on sampled matching heads.
+- **`carry`** supports a diatonic **single note** at the sounded phrase ending plus one continuation at the next phrase opening. The outgoing phrase commits the full release tick and next segment ID before returning. The next phrase consumes the same attack identity, pitch, spelling, finger and position. Its reserved opening duration is the shortest base rhythm duration: a longer sampled opening slot is tiled into that duration for the shared rhythm, with chords suppressed for the carrying hand's first segment. Following notes use the actual carried hand state. Carry requires the same seed/configuration fingerprint and never mutates the prior phrase or release target.
+
+The deterministic tie pass runs only when enabled and selects already playable mapped heads; it never retrofits fingers or invents shifts. Each phrase still receives independent validation. `TieSegment` records `lifetimeId` (original head/attack ID), `attackEventId`, zero-based `index`, total `count`, selected `pattern` and explicit `previousId`/`nextId` links. Every segment repeats the same complete `NoteLifetime`. Chord head IDs and segment IDs remain distinct; `ScoreEvent.tie` and `.lifetime` mirror its primary head. `pendingTies` carries the original head, committed next ID, duration, position and configuration fingerprint; `activeLifetimes` carries the original canonical attack. `lastNoteEnd` remains the notated timeline endpoint; lifetime occupancy tracks outstanding holds.
+
+`lifetimeNotes(events)` emits initial attacks only. `attackEvents(events)` removes continuation-only events and continued heads of partial chords for scoring. With ties enabled, pass **complete sounded notation**, including continuations, to `Scorer` construction and `appendNotes`. The scorer validates links before projecting attacks internally. Append complete future onset groups; direct growth of `scorer.notes` is rejected for tied streams. Construction needs the original attack; orphan continuations are rejected. Do not pass projected attack lists as complete notation or mutate previously supplied objects. Open outgoing carry is valid before the next segment arrives because its release target is already committed. Continue forwarding releases/pedal events and ticking after all attacks complete.
+
+The existing lifetime tracker expects one attack and continuous holding through the final target, applying configured tempo, offset and release tolerance. Tie boundaries require/reward no new attack. Retriggering cannot repair early release. Chord heads have separate outcomes. Binary sustain can prolong sound but does not excuse early **physical** release of a required key: `physical` evaluates the hold, `sounding` evaluates both physical hold and pedal-extended sound, and `forbid` records pedal violations. Pitch/onset metrics count attacks once and remain separate from duration metrics. Wait/benchmark stay pitch-only unless performed-duration evaluation is explicitly enabled. Pause/disconnect/finish retain the existing interruption policy.
+
+Notation uses sorted per-head chord indexes, full curves across visible measures and partial curves at off-screen incoming/outgoing links, including missing/evicted neighboring phrases. Continuation IDs remain available for highlighting. Continuation accidentals are suppressed without establishing the next measure's accidental state, so later untied chromatic attacks receive their own signs. All/Smart/reveal omit duplicate continuation finger labels. Hints still do not affect notes or scoring.
+
+Independent `score/ties.ts` validation reconstructs the segment graph, ownership, voice/pitch/finger/position equality, adjoining ticks, release coverage and permitted open endpoints. `generation/lifetimeValidator.ts` separately checks configured patterns, vocabularies, chord-tone policies, boundary permissions and pending state. Canonical lifetime validation checks finger occupancy, same-pitch collisions, movement preparation and final carry, counting each lifetime once. None of these validators calls tie candidate-selection functions.
+
+Enabled ties use **8.0.0**, including every tie and lifetime/evaluation field in the parameter fingerprint. Disabled ties retain exact prior 5.2/6/7 fingerprints, PRNG schedules, presets and seeded output. Legacy history remains separate, with no migration or reinterpretation. Both hands retain the base shared rhythm; tie subdivision can add notation segments and partial-chord reattacks without enabling independent-voice generation.
+
+Limitations: generated phrase carry is a two-segment diatonic single-note pattern. Cross-phrase chord/partial-chord chains, chromatic phrase carry, arbitrary chains spanning several phrases, finger substitution, independent generated voices, new rhythm vocabularies, slurs and articulation engraving remain unimplemented. A final chord is ineligible for carry and is never converted into a single note. No UI or custom-session persistence integration is added. Tests use simulated MIDI and actual VexFlow SVG rendering; physical piano/pedal testing has not been performed. Consistent planned fingering is not proof of human comfort or evidence of which fingers a player used.
 
 ### Chromatic figures and chords
 
@@ -269,7 +362,7 @@ Targets are sampled by region mass, then mapped to the nearest approved same-sha
 ## Existing UI preset resolution
 
 | Control | Explicit defaults selected |
-| --- | --- |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Note jumps Small/Easy/Medium/Large | Maximum steps **1/2/4/7**; step bonus **7/4/2/0**. Existing advanced interval may lower the cap. |
 | Movements Off/Easy/Medium/Hard | Fixed, or frequencies **0.25/0.55/0.85**, default distance **1/2/4**, eligible bars **[2]/[1,3]/[1,2,3]**. UI distance safety caps remain **2/3/4**. Numeric overrides resolve before core generation. Rested-alternate permission is retained for Medium/Hard, even with zero movement frequency. |
 | Spacing Off/Easy/Medium/Hard | Variable probability **0/0.3/0.6/0.85**; natural, then add thumb gap, index gap, two gaps cumulatively. All initial pattern weights 1. |
@@ -286,7 +379,7 @@ No tempo, scoring mode, input offset, timing tolerance, assistance display, visi
 - Same-finger changes permit the same physical key or black-to-immediately-adjacent-white slides. Spelling does not change physical key color. Chromatic options use single-semitone alterations, no double accidentals or outer-finger alterations. Fixed base maps never change mid-position.
 - Relocation must preserve shape, separate hands, honor both distance/jump limits, have a novel landing unavailable in the prior map, and have an explicit full-beat-or-longer rest and advance cue. Small shifts cannot enter a chunk. Wide leaps may enter only with carried preparation evidence. Hand crossing, overpassing and thumb-under are unsupported. Arbitrary ergonomic bounds cannot be overridden.
 - Chord distinctness, approved finger shapes, full harmonic sets, nine-semitone ceiling, conservative outer-black/inner-white exclusions and horizontal shape limits are safety rules. The factor 1.5 plus 0.5 key-width allowance is part of that physical restriction, not a distribution preference.
-- Four-bar chunk topology, shared-hand rhythmic attacks, diatonic triad qualities, deterministic ID conventions, contour/motif indexing, tie-free duration vocabulary and chromatic resolution precedence are supported algorithm/model contracts. Uniform selection among otherwise equally weighted compatible positions or chromatic options is the defined sampler, not an unexposed second weighting system. No arbitrary additional weighting is applied.
+- Four-bar chunk topology, shared-hand rhythmic attacks, diatonic triad qualities, deterministic ID conventions, contour/motif indexing, base untied duration vocabulary and chromatic resolution precedence are supported algorithm/model contracts. Uniform selection among otherwise equally weighted compatible positions or chromatic options is the defined sampler, not an unexposed second weighting system. No arbitrary additional weighting is applied.
 - FNV seed hashing and xorshift32 constants/state bounds are reproducibility machinery. Ordered candidate traversal and one-draw sampling (including singleton choices) are deliberately stable. The sampler does not add “helpful” rerolls or skip existing zero-probability draws where that would change seeded content.
 
 These checks establish consistency with the declared conservative model, not universal physical comfort. MIDI cannot verify which fingers a person uses.
@@ -303,6 +396,6 @@ New custom values can intentionally select different exercises. Their complete r
 
 ## Future capabilities that are not parameter switches
 
-Wide lifted leaps are implemented through the separate module documented above. Core note lifetimes, voice identities, occupancy and release scoring are implemented above. Ties and slurs still require notation-segment identity, attack suppression and engraving. Independent generated voices still require coordinated timelines, held-hand planning and polyphonic rendering; the core lifetime model and scorer can already accept authored overlapping voices. General crossings, thumb-under, alternate ergonomic shapes, new meters/keys/durations and non-major harmonic vocabularies require explicit model/algorithm/validator work before their schemas can be widened.
+Wide lifted leaps are implemented through the separate module documented above. Core note lifetimes, voice identities, occupancy and release scoring are implemented above. Opt-in ties now provide notation-segment identity, attack suppression and engraving as documented above. Slur evaluation remains unimplemented. Independent generated voices still require coordinated timelines, held-hand planning and polyphonic rendering; the core lifetime model and scorer can already accept authored overlapping voices. General crossings, thumb-under, alternate ergonomic shapes, new meters/keys/durations and non-major harmonic vocabularies require explicit model/algorithm/validator work before their schemas can be widened.
 
 Future modules can be added as new typed fields/unions with their own defaults, resolver composition and validators. Unsupported capabilities are rejected today; no placeholder configuration fields or plugin registry claim those algorithms exist.

@@ -48,7 +48,7 @@ const four = <T extends z.ZodType>(item: T) =>
   z.tuple([item, item, item, item]);
 const distribution = <T extends z.ZodType>(value: T) =>
   z.array(z.object({ value, weight }).strict()).min(1).max(64);
-const unique = <T>(items: T[]) =>
+const unique = (items: readonly unknown[]) =>
   new Set(items.map((item) => JSON.stringify(item))).size === items.length;
 const range = z
   .object({
@@ -78,7 +78,7 @@ export const melodySchema = z
   .strict();
 export const rhythmSchema = z
   .object({
-    /** Integer ticks at 480 TPQ; shared attacks for both hands, no ties. */
+    /** Integer ticks at 480 TPQ; shared base rhythm before optional tie notation. */
     durations: distribution(duration),
     breathBars: z.array(bar).max(4),
     breathBeats: beatRest,
@@ -219,6 +219,27 @@ export const coverageSchema = z.discriminatedUnion("kind", [
     })
     .strict(),
 ]);
+export const tiesSchema = z.union([
+  z.literal(false),
+  z
+    .object({
+      kind: z.literal("enabled"),
+      probability,
+      segmentCounts: z.array(z.number().int().min(2).max(4)).min(1).max(3),
+      subdivisions: z.array(duration).min(1).max(4),
+      withinMeasure: z.boolean(),
+      crossMeasure: z.boolean(),
+      crossPhrase: z.boolean(),
+      maxDurationTicks: z.number().int().min(480).max(15360),
+      voices: z
+        .array(z.enum(["right:main", "left:main"]))
+        .min(1)
+        .max(2),
+      chordTones: z.enum(["none", "all", "outer", "any"]),
+      patterns: distribution(z.enum(["subdivide", "connect", "carry"])),
+    })
+    .strict(),
+]);
 const schema = z
   .object({
     /** Capability tags reject unsupported models; they are not feature switches. */
@@ -228,7 +249,7 @@ const schema = z
         beats: z.union([z.literal(3), z.literal(4)]),
         phraseBars: z.literal(4),
         voices: z.literal("shared-rhythm"),
-        ties: z.literal(false),
+        ties: tiesSchema,
       })
       .strict(),
     hands: z
@@ -254,6 +275,98 @@ const schema = z
     const error = (path: (string | number)[], message: string) =>
       ctx.addIssue({ code: "custom", path, message });
     const lifetime = c.noteLifetimes;
+    const ties = c.notation.ties;
+    if (ties !== false) {
+      const patterns = ties.patterns.map((p) => p.value);
+      if (lifetime.kind !== "explicit" || lifetime.keyHold !== "required")
+        error(
+          ["notation", "ties"],
+          "Ties require explicit lifetimes with required key holds.",
+        );
+      for (const values of [
+        ties.segmentCounts,
+        ties.subdivisions,
+        ties.voices,
+        patterns,
+      ])
+        if (!unique(values))
+          error(
+            ["notation", "ties"],
+            "Tie selections must be unique; use pattern weights.",
+          );
+      if (
+        !ties.voices.some(
+          (v) => c.hands.active === "both" || v === `${c.hands.active}:main`,
+        )
+      )
+        error(["notation", "ties", "voices"], "No eligible active voice.");
+      if (
+        patterns.includes("subdivide") &&
+        (!ties.withinMeasure ||
+          !c.rhythm.durations.some((d) =>
+            ties.segmentCounts.some((count) =>
+              ties.subdivisions.some(
+                (s) =>
+                  s * count === d.value && d.value <= ties.maxDurationTicks,
+              ),
+            ),
+          ))
+      )
+        error(
+          ["notation", "ties", "patterns"],
+          "Subdivision requires a feasible equal-segment rhythm and within-measure ties.",
+        );
+      if (
+        patterns.includes("connect") &&
+        ((!ties.withinMeasure && !ties.crossMeasure) ||
+          !ties.segmentCounts.some((count) =>
+            ties.subdivisions.some(
+              (s) =>
+                c.rhythm.durations.some((d) => d.value === s) &&
+                s * count <= ties.maxDurationTicks,
+            ),
+          ))
+      )
+        error(
+          ["notation", "ties", "patterns"],
+          "Connection requires eligible rhythm segments, duration budget and a measure boundary policy.",
+        );
+      if (
+        ties.crossPhrase !== patterns.includes("carry") ||
+        (ties.crossPhrase &&
+          (!ties.crossMeasure ||
+            !ties.segmentCounts.includes(2) ||
+            !ties.subdivisions.some(
+              (s) => s === Math.min(...c.rhythm.durations.map((d) => d.value)),
+            ) ||
+            ties.maxDurationTicks <
+              2 * Math.min(...c.rhythm.durations.map((d) => d.value))))
+      )
+        error(
+          ["notation", "ties"],
+          "Cross-phrase ties require the carry pattern, cross-measure permission, two segments and the shortest rhythm subdivision within the duration budget.",
+        );
+      if (ties.crossPhrase && c.chromatic.kind !== "diatonic")
+        error(
+          ["notation", "ties"],
+          "Cross-phrase carry currently supports diatonic single notes only; disable chromatic neighbors.",
+        );
+      if (ties.chordTones !== "none" && c.chords.kind === "single-notes")
+        error(
+          ["notation", "ties", "chordTones"],
+          "Chord-tone selection requires enabled chord voicings.",
+        );
+      if (
+        ties.crossPhrase &&
+        c.wideLeaps.kind === "lifted-wide" &&
+        c.wideLeaps.probability > 0 &&
+        c.wideLeaps.eligibleBars.includes(0)
+      )
+        error(
+          ["notation", "ties"],
+          "Phrase carry conflicts with reserved wide-leap preparation at bar zero.",
+        );
+    }
     if (
       lifetime.kind === "explicit" &&
       lifetime.evaluation.kind === "evaluate"
@@ -417,6 +530,7 @@ const schema = z
           "A small repositioning landing cannot lie inside wide-leap preparation.",
         );
     }
+    const soundedBudgets: number[] = [];
     for (let b = 0; b < c.notation.phraseBars; b++) {
       let rest =
         c.movement.kind === "rested-reposition" &&
@@ -448,6 +562,81 @@ const schema = z
           ["rhythm", "durations"],
           `Durations must fill the ${c.notation.beats - rest}-beat sounded budget in bar ${b + 1}; include quarter or eighth notes or change rests/meter.`,
         );
+      soundedBudgets.push((c.notation.beats - rest) * TPQ);
+    }
+    if (ties !== false) {
+      if (
+        ties.patterns.some((p) => p.value === "subdivide") &&
+        !c.rhythm.durations.some(
+          (d) =>
+            soundedBudgets.some((b) => b >= d.value) &&
+            ties.segmentCounts.some((count) =>
+              ties.subdivisions.some(
+                (s) =>
+                  s * count === d.value && d.value <= ties.maxDurationTicks,
+              ),
+            ),
+        )
+      )
+        error(
+          ["notation", "ties"],
+          "No sounded budget can realize the selected subdivision pattern.",
+        );
+      if (ties.crossPhrase && soundedBudgets[3] !== c.notation.beats * TPQ)
+        error(
+          ["notation", "ties"],
+          "Cross-phrase carry requires a sounded phrase ending; remove the final preparation/breath rest.",
+        );
+      if (
+        ties.crossPhrase &&
+        soundedBudgets[0] < Math.min(...c.rhythm.durations.map((d) => d.value))
+      )
+        error(
+          ["notation", "ties"],
+          "Cross-phrase carry requires a sounded phrase opening.",
+        );
+      if (ties.patterns.some((p) => p.value === "connect")) {
+        const lengths = ties.subdivisions.filter((s) =>
+          c.rhythm.durations.some((d) => d.value === s),
+        );
+        const measure = c.notation.beats * TPQ;
+        const grid = Math.min(...c.rhythm.durations.map((d) => d.value));
+        const fits = (
+          tick: number,
+          remaining: number,
+          budget: number,
+          previousBar?: number,
+        ): boolean => {
+          if (remaining === 0) return true;
+          const bar = Math.floor(tick / measure),
+            onset = tick % measure;
+          if (
+            bar >= 4 ||
+            (previousBar !== undefined &&
+              (previousBar === bar ? !ties.withinMeasure : !ties.crossMeasure))
+          )
+            return false;
+          return lengths.some(
+            (length) =>
+              length <= budget &&
+              onset + length <= soundedBudgets[bar] &&
+              fits(tick + length, remaining - 1, budget - length, bar),
+          );
+        };
+        const possible = Array.from(
+          { length: (4 * measure) / grid },
+          (_, i) => i * grid,
+        ).some((start) =>
+          ties.segmentCounts.some((count) =>
+            fits(start, count, ties.maxDurationTicks),
+          ),
+        );
+        if (!possible)
+          error(
+            ["notation", "ties"],
+            "No sounded timeline can realize the selected connection pattern.",
+          );
+      }
     }
   });
 export type GeneratorConfig = z.infer<typeof schema>;

@@ -13,6 +13,7 @@ import {
   Beam,
   StaveConnector,
   Annotation,
+  StaveTie,
 } from "vexflow/bravura";
 import {
   TPQ,
@@ -112,6 +113,14 @@ export function Notation({
     ctx.setFont("Arial", 12);
     const barW = (w - 24) / settings.bars;
     const drawn: StaveNote[] = [];
+    const segments = new Map<
+      string,
+      {
+        note: StaveNote;
+        index: number;
+        head: ReturnType<typeof noteheads>[number];
+      }
+    >();
     for (let b = 0; b < settings.bars; b++) {
       const staves: Stave[] = [];
       const voices: Voice[] = [];
@@ -144,10 +153,14 @@ export function Notation({
             });
             note.setAttribute("id", e.id);
             heads.forEach((head, index) => {
-              const sign = accidentalState.attack(head.pitch);
+              segments.set(head.id, { note, index, head });
+              const sign = accidentalState.attack(
+                head.pitch,
+                (head.tie?.index ?? 0) > 0,
+              );
               if (sign) note.addModifier(new Accidental(sign), index);
               const show = selected.get(head.id)?.show;
-              if (show)
+              if (show && (head.tie?.index ?? 0) === 0)
                 note.addModifier(
                   new FretHandFinger(String(head.finger))
                     .setFont("Arial", 12, "bold")
@@ -199,6 +212,31 @@ export function Notation({
       format.format(voices, barW - (b === 0 ? 115 : 30));
       voices.forEach((v, i) => v.draw(ctx, staves[i]));
       beams.forEach((beam) => beam.setContext(ctx).draw());
+    }
+    // Draw once after every stave is formatted so curves can cross barlines.
+    // Missing endpoints deliberately produce VexFlow's partial ties at viewport edges.
+    for (const { note, index, head } of segments.values()) {
+      const t = head.tie;
+      if (!t) continue;
+      if (t.nextId) {
+        const next = segments.get(t.nextId);
+        new StaveTie({
+          firstNote: note,
+          lastNote: next?.note,
+          firstIndexes: [index],
+          lastIndexes: [next?.index ?? index],
+        })
+          .setContext(ctx)
+          .draw();
+      }
+      if (t.previousId && !segments.has(t.previousId))
+        new StaveTie({
+          lastNote: note,
+          firstIndexes: [index],
+          lastIndexes: [index],
+        })
+          .setContext(ctx)
+          .draw();
     }
     const svg = el.querySelector("svg");
     if (svg) {
