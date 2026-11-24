@@ -20,9 +20,7 @@ export function oppositeSweepEdge(
   const ids = [
     atCue,
     ...moves
-      .filter(
-        (m) => m.landingTick >= cue && m.cueTick <= end && m.landingTick <= end,
-      )
+      .filter((m) => m.landingTick >= cue && m.cueTick <= end)
       .flatMap((m) => [m.fromPositionId, m.toPositionId]),
   ];
   const pitches = positions

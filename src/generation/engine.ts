@@ -32,7 +32,7 @@ import { chordCandidatesForConfig } from "./voicings";
 import { playableTransition } from "./ergonomics";
 import { planRangeCoverage, recordRangeCoverage } from "./rangeCoverage";
 import type { MovementDiagnostic } from "./model";
-import { inspectGeneratorFeasibility } from "./feasibility";
+import { assertGeneratorFeasibility } from "./feasibility";
 import { nextLeapPreparation } from "./wideLeaps";
 import { attachNoteLifetimes } from "../score/lifetimes";
 import { planTies, validateTieCarry, carryHeadId } from "./ties";
@@ -117,12 +117,7 @@ function generateCore(
     c.notation.ties !== false ||
     (c.wideLeaps.kind !== "disabled" && c.wideLeaps.probability > 0)
   ) {
-    const { errors } = inspectGeneratorFeasibility(c);
-    if (errors.length) {
-      if (c.dynamicFingering || c.articulation)
-        throw new GeneratorContextInfeasibleError(errors.join(" "));
-      throw new Error(errors.join(" "));
-    }
+    assertGeneratorFeasibility(c);
     if (
       previous?.wideLeapPreparation &&
       previous.wideLeapPreparation.configFingerprint !==
@@ -132,7 +127,6 @@ function generateCore(
         "Wide-leap continuation requires the same configuration.",
       );
   }
-  const movement = c.movement;
   const state: StreamState = previous
     ? structuredClone(previous)
     : { rng: hash(seed), bar: 0, hands: [], hints: {} };
@@ -148,9 +142,7 @@ function generateCore(
   const available = new Map(
     state.hands.map((h) => [h.hand, positionsForConfig(c, h.hand)]),
   );
-  const usePreparation =
-    movement.kind === "rested-reposition" && movement.probability > 0;
-  const useCoverage = usePreparation && c.coverage.kind === "guided";
+  const useCoverage = c.coverage.kind === "guided";
   if (!useCoverage) delete state.coverage;
   else state.coverage ??= {};
   for (const h of useCoverage ? state.hands : []) {
@@ -177,31 +169,18 @@ function generateCore(
       c,
       seed,
       state,
-      new Map(
-        [...available].map(([hand, options]) => {
-          const preparation =
-            Math.max(
-              movement.kind === "rested-reposition" && movement.probability > 0
-                ? movement.preparationBeats
-                : 0,
-              c.wideLeaps.kind === "lifted-wide" && c.wideLeaps.probability > 0
-                ? c.wideLeaps.preparationBeats
-                : 0,
-            ) * TPQ;
-          const cue = bar * c.notation.beats * TPQ - preparation;
-          const occupied = (initial.activeLifetimes ?? []).some(
-            (n) =>
-              n.hand === hand &&
-              n.lifetime.keyHold.kind === "required" &&
-              n.lifetime.keyHold.releaseTick > cue,
-          );
-          return [hand, occupied ? [] : options];
-        }),
-      ),
+      available,
       b,
       positions,
       movements,
       diagnostics,
+      (from, _to, _pitch, _technique, cue) =>
+        !(initial.activeLifetimes ?? []).some(
+          (n) =>
+            n.hand === from.hand &&
+            n.lifetime.keyHold.kind === "required" &&
+            n.lifetime.keyHold.releaseTick > cue,
+        ),
     );
     const { durations, noteCount } = barRhythm(c, b, state);
     let soundedCount = noteCount;
@@ -487,7 +466,7 @@ function generateCore(
       ? { movementDiagnostics: diagnostics }
       : {}),
   };
-  const errors = validateGeneratedCore(p);
+  const errors = validateGeneratedCore(p, contextKey);
   if (errors.length) throw new Error(errors.join(" "));
   return p;
 }

@@ -12,7 +12,7 @@ import {
   generatorConfigFingerprint,
   type ValidatedGeneratorConfig,
 } from "./config";
-import { clearsOppositeEdge, oppositeSweepEdge } from "./movementEnvelope";
+import { oppositeSweepEdge } from "./movementEnvelope";
 import { voiceSpecs } from "./voiceConfig";
 
 type Plan = Omit<Phrase, "settings">;
@@ -237,96 +237,39 @@ export function validateWideSweeps(
 ): string[] {
   const errors: string[] = [];
   if (c.hands.active !== "both") return errors;
-  const extent = (h: HandState) => [
-    Math.min(...h.fingerToMidi),
-    Math.max(...h.fingerToMidi),
-  ];
-  for (const m of p.movements.filter(
-    (m) => m.technique === "lifted-wide-leap",
-  )) {
-    const from = p.positions.find(
-      (h) => h.hand === m.hand && h.id === m.fromPositionId,
-    );
-    const to = p.positions.find(
-      (h) => h.hand === m.hand && h.id === m.toPositionId,
-    );
-    if (!from || !to) continue;
-    if (c.independentVoices) {
-      const edge = oppositeSweepEdge(
-        m.hand,
-        p.initial.hands,
-        p.positions,
-        p.movements,
-        m.cueTick,
-        m.landingTick,
-      );
-      const prior = p.initial.independentVoices?.leapPreparations?.[m.hand];
-      const carriedEdge =
-        prior?.landingTick === m.landingTick ? prior.oppositeEdge : undefined;
-      if (
-        [edge, carriedEdge].some(
-          (limit) =>
-            !clearsOppositeEdge(from, limit) || !clearsOppositeEdge(to, limit),
-        )
+  const position = (hand: Hand, id: string) =>
+    p.positions.find((h) => h.hand === hand && h.id === id);
+  for (const move of p.movements) {
+    if (move.technique !== "lifted-wide-leap") continue;
+    const from = position(move.hand, move.fromPositionId);
+    const to = position(move.hand, move.toPositionId);
+    const other = p.initial.hands.find((h) => h.hand !== move.hand);
+    if (!from || !to || !other) continue;
+    const own = [...from.fingerToMidi, ...to.fingerToMidi];
+    const overlaps = (midis: number[]) =>
+      move.hand === "right"
+        ? Math.min(...own) <= Math.max(...midis)
+        : Math.max(...own) >= Math.min(...midis);
+    const opposing = p.movements.filter((m) => m.hand === other.hand);
+    const prior = opposing
+      .filter((m) => m.landingTick < move.cueTick)
+      .sort((a, b) => a.landingTick - b.landingTick)
+      .at(-1);
+    const active = prior ? position(other.hand, prior.toPositionId) : other;
+    const swept = opposing
+      .filter(
+        (m) => m.landingTick >= move.cueTick && m.cueTick <= move.landingTick,
       )
-        errors.push("Wide-leap travel envelopes collide with the other hand.");
-      for (const opposite of p.movements.filter(
-        (o) =>
-          o.hand !== m.hand &&
-          o.landingTick > m.landingTick &&
-          o.cueTick <= m.landingTick,
-      )) {
-        const destination = p.positions.find(
-          (h) => h.hand === opposite.hand && h.id === opposite.toPositionId,
-        );
-        if (
-          destination &&
-          !clearsOppositeEdge(
-            destination,
-            opposite.hand === "right"
-              ? Math.max(...from.fingerToMidi, ...to.fingerToMidi)
-              : Math.min(...from.fingerToMidi, ...to.fingerToMidi),
-          )
-        )
-          errors.push(
-            "Wide-leap travel envelopes collide with the other hand.",
-          );
-      }
-      continue;
-    }
-    const low = Math.min(extent(from)[0], extent(to)[0]),
-      high = Math.max(extent(from)[1], extent(to)[1]);
-    let other = p.initial.hands.find((h) => h.hand !== m.hand);
-    const check = (h?: HandState) => {
-      if (
-        !h ||
-        (m.hand === "right" ? low <= extent(h)[1] : high >= extent(h)[0])
-      )
-        errors.push("Wide-leap travel envelopes collide with the other hand.");
-    };
-    for (const o of [...p.movements]
-      .filter((o) => o.hand !== m.hand)
-      .sort((a, b) => a.landingTick - b.landingTick)) {
-      if (o.landingTick < m.cueTick) {
-        other = p.positions.find(
-          (h) => h.hand === o.hand && h.id === o.toPositionId,
-        );
-      }
-    }
-    check(other);
-    for (const o of p.movements.filter(
-      (o) =>
-        o.hand !== m.hand &&
-        o.landingTick >= m.cueTick &&
-        o.cueTick <= m.landingTick,
-    )) {
-      check(
-        p.positions.find((h) => h.hand === o.hand && h.id === o.fromPositionId),
-      );
-      check(
-        p.positions.find((h) => h.hand === o.hand && h.id === o.toPositionId),
-      );
-    }
+      .flatMap((m) => [m.fromPositionId, m.toPositionId])
+      .map((id) => position(other.hand, id));
+    const carried = p.initial.independentVoices?.leapPreparations?.[move.hand];
+    if (
+      [active, ...swept].some((h) => !h || overlaps(h.fingerToMidi)) ||
+      (carried?.landingTick === move.landingTick &&
+        carried.oppositeEdge !== undefined &&
+        overlaps([carried.oppositeEdge]))
+    )
+      errors.push("Wide-leap travel envelopes collide with the other hand.");
   }
   return errors;
 }

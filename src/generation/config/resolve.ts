@@ -1,4 +1,5 @@
 import { VERSION } from "../../score/model";
+import { smallLandingsNeedOverlapCheck } from "../voiceConfig";
 import { generatorDefaults } from "./defaults";
 import {
   generatorConfigSchema,
@@ -84,15 +85,43 @@ export function generatorConfigFingerprint(
   return `${generatorConfigVersion(config)}:parameters:${JSON.stringify(identity)}`;
 }
 export function generatorConfigVersion(config: ValidatedGeneratorConfig) {
-  if (config.articulation) return "12.0.0";
-  if (config.dynamicFingering) return "11.0.0";
-  if (config.independentVoices)
-    return config.wideLeaps.kind !== "disabled" ||
+  if (config.articulation) return "12.0.1";
+  const wide = config.wideLeaps;
+  const independent = config.independentVoices;
+  const wideEnabled = wide.kind === "lifted-wide" && wide.probability > 0;
+  const revised =
+    (!independent &&
+      wideEnabled &&
+      (config.coverage.kind === "guided" ||
+        (config.notation.ties !== false &&
+          config.movement.kind === "rested-reposition" &&
+          config.movement.probability > 0))) ||
+    (independent &&
+      ((!wideEnabled && smallLandingsNeedOverlapCheck(config)) ||
+        [independent.right, independent.left].some(
+          (group) =>
+            group &&
+            ((group.minPolyphony > 1 &&
+              config.chords.kind === "voicings" &&
+              config.chords.probability > 0) ||
+              group.voices.some(
+                (profile) =>
+                  profile.entryProbability > 0 && profile.activity === 0,
+              )),
+        ) ||
+        (config.fingering.variablePositionProbability === 0 &&
+          config.fingering.patterns.length > 1)));
+  let version = VERSION;
+  if (config.dynamicFingering) version = "11.0.0";
+  else if (independent)
+    version =
+      wide.kind !== "disabled" ||
       config.coverage.kind === "guided" ||
       config.fingering.allowRestedAlternates
-      ? "10.0.0"
-      : "9.0.0";
-  if (config.notation.ties !== false) return "8.1.0";
-  if (config.noteLifetimes.kind === "explicit") return "7.0.0";
-  return config.wideLeaps.kind === "disabled" ? VERSION : "6.0.0";
+        ? "10.0.0"
+        : "9.0.0";
+  else if (config.notation.ties !== false) version = "8.1.0";
+  else if (config.noteLifetimes.kind === "explicit") version = "7.0.0";
+  else if (wide.kind !== "disabled") version = "6.0.0";
+  return revised ? `${version.slice(0, -1)}1` : version;
 }

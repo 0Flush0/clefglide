@@ -62,15 +62,24 @@ export class ArticulationTimeline {
       ),
     );
     this.substituted = new Set(substitutions.map((s) => s.id));
-    const dynamicBoundary = config.dynamicFingering?.techniques.some(
+    const needsBoundaryContact = config.dynamicFingering?.techniques.some(
       ({ technique }) =>
         technique === "thumb-under" ||
         technique === "finger-over" ||
-        technique === "continuous-shift",
+        technique === "continuous-shift" ||
+        technique === "adjacent-reach",
+    );
+    const reachLandings = new Set(
+      events.flatMap(({ event }) =>
+        event.fingering?.technique === "adjacent-reach"
+          ? [`${voiceOf(event)}:${eventTick(event, config)}`]
+          : [],
+      ),
     );
     for (const { frame, event } of events) {
       const heads = noteheads(event);
       if (!heads.some((n) => (n.tie?.index ?? 0) === 0)) continue;
+      const voice = voiceOf(event);
       const start = eventTick(event, config);
       const end = Math.max(
         ...heads.map((n) => n.lifetime?.releaseTick ?? start + event.duration),
@@ -82,14 +91,14 @@ export class ArticulationTimeline {
         (frame.events.some(
           (e) =>
             e.hand === event.hand &&
-            voiceOf(e) !== voiceOf(event) &&
+            voiceOf(e) !== voice &&
             eventTick(e, config) < end &&
             noteheads(e).some((n) => (n.lifetime?.releaseTick ?? 0) > start),
         ) ||
           frame.initial.activeLifetimes?.some(
             (n) =>
               n.hand === event.hand &&
-              n.lifetime.voiceId !== voiceOf(event) &&
+              n.lifetime.voiceId !== voice &&
               n.lifetime.releaseTick > start &&
               n.lifetime.onsetTick < end,
           ));
@@ -117,9 +126,12 @@ export class ArticulationTimeline {
               (m) => isContinuousMovement(m) && m.source.eventId === event.id,
             ),
           ) ||
-          (!!dynamicBoundary && end === boundaryTick(frame.final, config)),
+          reachLandings.has(`${voice}:${end}`) ||
+          (!!needsBoundaryContact &&
+            voice.endsWith(":main") &&
+            heads.length === 1 &&
+            end === boundaryTick(frame.final, config)),
       };
-      const voice = voiceOf(event);
       const lane = this.lanes.get(voice) ?? [];
       lane.push(attack);
       this.lanes.set(voice, lane);

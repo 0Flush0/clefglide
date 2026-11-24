@@ -45,9 +45,12 @@ export function positionsForConfig(
     const pc = scale.find((pc) => Note.chroma(pc) === midi % 12);
     if (pc) pitches.push(`${pc}${Math.floor(midi / 12) - 1}`);
   }
-  const patterns = c.fingering.patterns.map(
-    ({ value }) => [value, spacingPatterns[value]] as const,
-  );
+  const patterns = c.fingering.patterns
+    .filter(
+      ({ value }) =>
+        value === "natural" || c.fingering.variablePositionProbability > 0,
+    )
+    .map(({ value }) => [value, spacingPatterns[value]] as const);
   return patterns.flatMap(([name, offsets]) =>
     Array.from({ length: Math.max(0, pitches.length - offsets[4]) }, (_, i) => {
       const ascending =

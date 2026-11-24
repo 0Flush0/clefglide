@@ -8,6 +8,7 @@ import {
 } from "./positionMaps";
 import { random } from "./random";
 import { chooseWeighted } from "./sampling";
+import { GeneratorContextInfeasibleError } from "./dynamicFeasibility";
 
 export function initialHands(
   c: ValidatedGeneratorConfig,
@@ -20,7 +21,7 @@ export function initialHands(
     positionsForConfig(c, hand).filter(accepts),
   );
   if (lists.some((xs) => !xs.length))
-    throw new Error(
+    throw new GeneratorContextInfeasibleError(
       "This range needs five consecutive notes in the chosen major key. Widen the range or change the key.",
     );
   const prefer = (xs: HandState[]) => {
@@ -48,7 +49,7 @@ export function initialHands(
     lists[1].filter((l) => separated(r, l)).map((l) => [r, l]),
   );
   if (!pairs.length)
-    throw new Error(
+    throw new GeneratorContextInfeasibleError(
       "Both hands need non-overlapping five-note positions. Lower the LH range or raise the RH range.",
     );
   let compatible = pairs;

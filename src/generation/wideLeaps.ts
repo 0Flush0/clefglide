@@ -170,16 +170,14 @@ export function planWideLeaps(
       });
       continue;
     }
-    const edge = voiceWindow
-      ? oppositeSweepEdge(
-          from.hand,
-          positions.slice(0, state.hands.length),
-          positions,
-          movements,
-          cue,
-          tick,
-        )
-      : undefined;
+    const edge = oppositeSweepEdge(
+      from.hand,
+      positions.slice(0, state.hands.length),
+      positions,
+      movements,
+      cue,
+      tick,
+    );
     let options = wideLandingOptions(c, from, available.get(from.hand)!).filter(
       ({ to, index }) =>
         movementSeparated(to, state, positions, movements, tick) &&
@@ -219,7 +217,6 @@ export function planWideLeaps(
       state,
     );
     if (
-      voiceWindow &&
       c.coverage.kind === "guided" &&
       random(state) >=
         coverageMoveWeight(

@@ -223,9 +223,7 @@ export function validateIndependentVoices(
         if (
           !after.active ||
           cursor > measure - restBeats * TPQ ||
-          (profile.activity === 0 &&
-            attack.length &&
-            !moveByHand(hand).some((m) => m.landingNoteId === e.id)) ||
+          (profile.activity === 0 && attack.length > 0) ||
           (!durations.some((d) => d.value === e.duration) &&
             !heads.some((n) => n.tie?.pattern === "subdivide"))
         )
@@ -301,7 +299,9 @@ export function validateIndependentVoices(
             n.written.octave !== written.oct ||
             n.written.accidental !== written.acc ||
             (!pos.pitches.includes(n.pitch) &&
-              (!profile.chromatic || c.chromatic.kind !== "neighbors")) ||
+              (!profile.chromatic ||
+                c.chromatic.kind !== "neighbors" ||
+                c.chromatic.probability === 0)) ||
             (pos.fingerToMidi[n.finger - 1] !== n.midi &&
               !pos.pitchOptions?.[n.finger - 1]?.includes(n.pitch) &&
               !(n === primary && alternate)) ||

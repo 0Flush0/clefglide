@@ -497,7 +497,8 @@ const schema = z
             : 1,
         );
         const overlap =
-          independent.maxOverlapTicks > 0 && independent.overlapProbability > 0;
+          independent.maxOverlapTicks >= TPQ / 2 &&
+          independent.overlapProbability > 0;
         if (
           group.minPolyphony > 1 &&
           group.minPolyphony >
@@ -759,11 +760,6 @@ const schema = z
           ["chords", "shapes"],
           "No selected progression can supply the enabled four-note harmonic extension.",
         );
-      if (c.chords.maxVoiceLeadingSteps > c.melody.maxIntervalSteps)
-        error(
-          ["chords", "maxVoiceLeadingSteps"],
-          "Voice leading cannot exceed the melodic interval limit.",
-        );
       if (
         chords.shapes.some((s) => s.value.length === 2) &&
         !chords.dyadIntervals.some((i) => i <= chords.maxSpanSemitones)
@@ -784,15 +780,11 @@ const schema = z
     if (
       c.coverage.kind === "guided" &&
       (c.movement.kind === "fixed" || c.movement.probability === 0) &&
-      !(
-        independent &&
-        c.wideLeaps.kind === "lifted-wide" &&
-        c.wideLeaps.probability > 0
-      )
+      !(c.wideLeaps.kind === "lifted-wide" && c.wideLeaps.probability > 0)
     )
       error(
         ["coverage"],
-        "Coverage guidance requires active rested repositioning or wide leaps with independent voices.",
+        "Coverage guidance requires active rested repositioning or wide leaps.",
       );
     const smallest = Math.min(...c.rhythm.durations.map((d) => d.value));
     const wide = c.wideLeaps;
@@ -925,6 +917,7 @@ const schema = z
           );
           const canSplitAttacks =
             ties !== false &&
+            ties.probability > 0 &&
             ties.voices.some((voice) => voice === id) &&
             ties.patterns.some((pattern) => pattern.value === "subdivide") &&
             (ties.chordTones === "any" || ties.chordTones === "outer") &&

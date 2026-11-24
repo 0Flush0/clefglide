@@ -2,7 +2,10 @@ import { afterEach, expect, it, vi } from "vitest";
 import { cleanup, render } from "@testing-library/react";
 import { createCanvas } from "@napi-rs/canvas";
 import { Notation } from "./Notation";
-import { defaults, noteheads } from "./model";
+import { defaults, noteheads, TPQ } from "./model";
+import { MidiBus, type MidiEvent } from "../midi/adapter";
+import { Scorer } from "../scoring/engine";
+import { articulatedDuet } from "../generation/examples";
 import {
   chordDefaults,
   generateConfigured,
@@ -195,5 +198,92 @@ it("renders slurs alongside ties and independent voices without changing tick ac
   );
   expect(container.querySelector("svg")?.textContent).toMatch(
     /[\uE4A0\uE4A1]/u,
+  );
+});
+
+it("engraves and scores a streamed wide leap over an independently carried bass chord", () => {
+  setup();
+  const config = resolveGeneratorConfig(
+    {
+      articulation: { evaluation: { kind: "evaluate" } },
+    },
+    articulatedDuet(),
+  );
+  const first = generateConfigured(config, "mixed-notation-midi");
+  const second = generateConfigured(config, first.seed, first.final);
+  expect(validateGeneratedPhrase(second, first)).toEqual([]);
+  const events = [...first.events, ...second.events];
+  const movements = [...first.movements, ...second.movements];
+  expect(movements.some((m) => m.technique === "lifted-wide-leap")).toBe(true);
+  expect(first.final.activeLifetimes?.length).toBeGreaterThan(1);
+  expect(events.some((e) => e.slur)).toBe(true);
+  const settings = {
+    ...defaults,
+    hand: "both" as const,
+    mode: "timed" as const,
+    bars: 2 as const,
+    bpm: 60,
+  };
+  const { container } = render(
+    <Notation
+      events={events}
+      hands={first.initial.hands}
+      positions={[...first.positions, ...second.positions]}
+      movements={movements}
+      settings={settings}
+      startBar={3}
+      reveal={false}
+    />,
+  );
+  expect(container.querySelector(".vf-stavetie path")).toBeTruthy();
+  const scorer = new Scorer(first.events, settings, 120, config);
+  const bus = new MidiBus();
+  const disconnect = bus.subscribe((event) => scorer.input(event));
+  scorer.start(0);
+  const tickMs = 60_000 / (settings.bpm * TPQ);
+  const midi: MidiEvent[] = events.flatMap((e) =>
+    noteheads(e).flatMap((n) => {
+      if (n.tie?.index) return [];
+      const life = n.lifetime!;
+      const release = e.articulation?.timing
+        ? life.onsetTick + e.articulation.timing.ticks
+        : life.releaseTick;
+      return [
+        { type: "on", tick: life.onsetTick },
+        { type: "off", tick: release },
+      ].map(({ type, tick }) => ({
+        type: type as "on" | "off",
+        time: scorer.origin + tick * tickMs,
+        pitch: n.midi,
+        velocity: type === "on" ? 80 : 0,
+        channel: 1,
+        source: "simulator",
+      }));
+    }),
+  );
+  // Equal score ticks still require the old key to release before a repeated attack.
+  midi.sort(
+    (a, b) =>
+      a.time - b.time || Number(a.type === "on") - Number(b.type === "on"),
+  );
+  const boundary =
+    scorer.origin + second.initial.bar * settings.beats * TPQ * tickMs;
+  for (const event of midi.filter((e) => e.time < boundary)) bus.emit(event);
+  scorer.appendNotes(second.events);
+  for (const event of midi.filter((e) => e.time >= boundary)) bus.emit(event);
+  disconnect();
+  expect(scorer.results).toHaveLength(midi.length / 2);
+  expect(
+    scorer.results.filter(
+      (r) => r.kind !== "correct" || Math.abs(r.errorMs ?? Infinity) > 1e-8,
+    ),
+  ).toEqual([]);
+  expect(scorer.durationResults.length).toBeGreaterThan(0);
+  expect(scorer.durationResults.every((r) => r.status === "correct")).toBe(
+    true,
+  );
+  expect(scorer.articulationResults.length).toBeGreaterThan(0);
+  expect(scorer.articulationResults.every((r) => r.status === "correct")).toBe(
+    true,
   );
 });

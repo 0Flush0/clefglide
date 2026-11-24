@@ -18,6 +18,7 @@ import type { GeneratedPhrase } from "./model";
 import { validateGeneratedLifetimes } from "./lifetimeValidator";
 import { validateIndependentVoices } from "./independentValidator";
 import { validateArticulation } from "./articulationValidator";
+import { validCoverageMemory } from "./rangeCoverage";
 import {
   hasMovementPreparation,
   validateWideLanding,
@@ -31,10 +32,19 @@ export function validateGeneratedPhrase(
   return [
     ...validateGeneratedCore(p),
     ...validateArticulation(p, p.config, previous),
+    ...(previous &&
+    (previous.seed !== p.seed ||
+      previous.configFingerprint !== p.configFingerprint ||
+      JSON.stringify(previous.final) !== JSON.stringify(p.initial))
+      ? ["Phrase continuation differs from the previous stream state."]
+      : []),
   ];
 }
-export function validateGeneratedCore(p: GeneratedPhrase): string[] {
-  const errors = validateCore(p, p.config);
+export function validateGeneratedCore(
+  p: GeneratedPhrase,
+  context = p.configFingerprint,
+): string[] {
+  const errors = validateCore(p, p.config, context);
   if (p.configFingerprint !== generatorConfigFingerprint(p.config))
     errors.push("Generator configuration fingerprint mismatch.");
   return errors;
@@ -43,12 +53,14 @@ export function validateGeneratedCore(p: GeneratedPhrase): string[] {
 export function validateWithConfig(
   p: Omit<Phrase, "settings">,
   c: ValidatedGeneratorConfig,
+  context: string,
 ): string[] {
-  return [...validateCore(p, c), ...validateArticulation(p, c)];
+  return [...validateCore(p, c, context), ...validateArticulation(p, c)];
 }
 function validateCore(
   p: Omit<Phrase, "settings">,
   c: ValidatedGeneratorConfig,
+  context: string,
 ): string[] {
   const errors = validateDynamicFingering(p, c);
   const ids = new Set<string>();
@@ -142,6 +154,8 @@ function validateCore(
     );
     if (
       !permitted.includes(offsets) ||
+      (c.fingering.variablePositionProbability === 0 &&
+        offsets !== "0,1,2,3,4") ||
       Math.max(...midis) - Math.min(...midis) > 10 ||
       pos.fingerToMidi.some(
         (n, i, mapped) =>
@@ -514,10 +528,9 @@ function validateCore(
             )
               errors.push("Invalid notehead spelling or planned finger.");
             if (
-              c.chromatic.kind === "diatonic" &&
-              !Scale.get(`${c.notation.key} major`).notes.includes(
-                Note.pitchClass(n.pitch),
-              )
+              (c.chromatic.kind === "diatonic" ||
+                c.chromatic.probability === 0) &&
+              !active.pitches.includes(n.pitch)
             )
               errors.push("Chromatic note with accidentals Off.");
           }
@@ -557,6 +570,7 @@ function validateCore(
             ];
             if (
               c.chords.kind === "single-notes" ||
+              c.chords.probability === 0 ||
               !allowed.includes(shape) ||
               !physical(map, hand) ||
               new Set(heads.map((n) => n.midi)).size !== heads.length ||
@@ -712,5 +726,58 @@ function validateCore(
   }
   errors.push(...validateWideSweeps(p, c), ...validateLeapReservation(p, c));
   errors.push(...validateGeneratedLifetimes(p, c));
+  const coverage = c.coverage;
+  if (coverage.kind === "guided") {
+    if (
+      !validCoverageMemory(p.final, context, coverage) ||
+      p.final.hands.some((hand) => {
+        const after = p.final.coverage![hand.hand]!;
+        const prior = p.initial.coverage?.[hand.hand];
+        const before =
+          prior?.context === context &&
+          prior.min === hand.min &&
+          prior.max === hand.max &&
+          prior.usage.length === coverage.regions
+            ? prior
+            : undefined;
+        if (after.min !== hand.min || after.max !== hand.max) return true;
+        const counts = Array<number>(coverage.regions).fill(0);
+        const notes = p.events
+          .filter((e) => e.hand === hand.hand)
+          .flatMap(noteheads);
+        for (const { midi } of notes) {
+          const i = Math.floor(
+            ((midi - hand.min) * coverage.regions) / (hand.max - hand.min + 1),
+          );
+          if (i >= 0 && i < counts.length) counts[i]++;
+        }
+        const initialHand = p.initial.hands.find((h) => h.hand === hand.hand);
+        const center =
+          initialHand &&
+          (initialHand.fingerToMidi[0] + initialHand.fingerToMidi[4]) / 2;
+        return (
+          (before &&
+            center !== undefined &&
+            before.remaining > 0 &&
+            Math.abs(center - before.target) >
+              coverage.reachedToleranceSemitones &&
+            (after.target !== before.target ||
+              after.remaining !== before.remaining - 1)) ||
+          after.usage.some(
+            (usage, i) =>
+              Math.abs(
+                usage -
+                  ((before?.usage[i] ?? 0) * coverage.decay +
+                    (counts[i] / Math.max(1, notes.length)) *
+                      (1 - coverage.decay)),
+              ) > 1e-12,
+          )
+        );
+      })
+    )
+      errors.push("Shared coverage state differs from the score.");
+  } else if (p.final.coverage) {
+    errors.push("Coverage state requires guided coverage.");
+  }
   return [...new Set(errors)];
 }

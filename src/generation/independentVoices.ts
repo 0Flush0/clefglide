@@ -42,15 +42,16 @@ import { chooseWeighted } from "./sampling";
 import { carryHeadId, planTies, validateTieCarry } from "./ties";
 import {
   positionFitsVoices,
+  smallLandingsNeedOverlapCheck,
   voiceAllows,
   voiceEventId,
   voiceSpecs,
 } from "./voiceConfig";
 import { validateGeneratedCore } from "./phraseValidator";
-import { inspectGeneratorFeasibility } from "./feasibility";
+import { assertGeneratorFeasibility } from "./feasibility";
 import type { GeneratedPhrase } from "./model";
 import { planVoicePreparation } from "./voicePreparation";
-import { clearsOppositeEdge, oppositeSweepEdge } from "./movementEnvelope";
+import { oppositeSweepEdge } from "./movementEnvelope";
 import {
   coveragePhraseShape,
   planRangeCoverage,
@@ -66,7 +67,6 @@ import {
 } from "./dynamicAttacks";
 import { beginFingering, finishFingering } from "./fingeringTimeline";
 import { planSubstitutions } from "./substitutions";
-import { GeneratorContextInfeasibleError } from "./dynamicFeasibility";
 
 type Key = Pick<Notehead, "midi" | "finger" | "hand">;
 type Occupied = Key & {
@@ -94,13 +94,7 @@ export function generateIndependent(
   const policy = c.independentVoices!;
   const specs = voiceSpecs(c);
   const fingerprint = generatorConfigFingerprint(c);
-  const feasibility = inspectGeneratorFeasibility(c);
-  if (feasibility.errors.length) {
-    const message = feasibility.errors.join(" ");
-    if (c.dynamicFingering || c.articulation)
-      throw new GeneratorContextInfeasibleError(message);
-    throw new Error(message);
-  }
+  assertGeneratorFeasibility(c);
   const context = JSON.stringify([seed, fingerprint]);
   const empty = {
     context,
@@ -172,6 +166,8 @@ export function generateIndependent(
     const fingeringPlan = { initial, events, positions, movements };
     const wideEnabled =
       c.wideLeaps.kind === "lifted-wide" && c.wideLeaps.probability > 0;
+    const constrainLandingOverlap =
+      wideEnabled || smallLandingsNeedOverlapCheck(c);
     const occupied: Occupied[] = (initial.activeLifetimes ?? []).map((n) => ({
       ...n,
       voice: n.lifetime.voiceId,
@@ -325,40 +321,31 @@ export function generateIndependent(
           const main = specs.find((v) => v.hand === from.hand)!;
           const voice = memories[main.id];
           const wide = technique === "lifted-wide-leap";
-          const edge =
-            wideEnabled && !wide
-              ? oppositeSweepEdge(
-                  from.hand,
-                  initial.hands,
-                  positions,
-                  movements,
-                  cue,
-                  barTick,
-                )
-              : undefined;
           return (
             voice.active &&
+            main.profile.activity > 0 &&
             voiceAllows(
               main.profile,
               Note.midi(pitch)!,
               to.fingerToMidi.indexOf(Note.midi(pitch)!) + 1,
             ) &&
             mainDurations(from.hand).some(
-              (d) => !wideEnabled || landingDurationAllowed(from.hand, d.value),
+              (d) =>
+                !constrainLandingOverlap ||
+                landingDurationAllowed(from.hand, d.value),
             ) &&
             (wide ||
               !voice.lastPitch ||
               Math.abs(diatonicIndex(pitch) - diatonicIndex(voice.lastPitch)) <=
                 (main.profile.maxIntervalSteps ?? c.melody.maxIntervalSteps)) &&
-            clearsOppositeEdge(from, edge) &&
-            clearsOppositeEdge(to, edge) &&
             !occupied.some(
               (key) =>
                 key.hand === from.hand &&
                 key.onset < barTick &&
                 key.release > cue,
             ) &&
-            (!wideEnabled || considersLandingDuringOverlap(from.hand))
+            (!constrainLandingOverlap ||
+              considersLandingDuringOverlap(from.hand))
           );
         },
         voiceWindow,
@@ -382,7 +369,7 @@ export function generateIndependent(
           (_, index) => cursors[(index + priority) % specs.length] === onset,
         );
         const landingLane =
-          wideEnabled && onset === 0
+          constrainLandingOverlap && onset === 0
             ? specs.findIndex(
                 ({ hand, id }, i) =>
                   cursors[i] === 0 && id.endsWith(":main") && moves.has(hand),
@@ -409,7 +396,7 @@ export function generateIndependent(
           (d) =>
             d.value <= soundedEnd - onset &&
             (landing === undefined ||
-              !wideEnabled ||
+              !constrainLandingOverlap ||
               landingDurationAllowed(hand, d.value)),
         );
         const active = occupied.filter(

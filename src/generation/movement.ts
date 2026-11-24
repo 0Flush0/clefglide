@@ -21,6 +21,7 @@ import {
   type AcceptsLanding,
   type VoiceLeapWindow,
 } from "./wideLeaps";
+import { clearsOppositeEdge, oppositeSweepEdge } from "./movementEnvelope";
 import type { MovementDiagnostic } from "./model";
 
 /** Plan only explicit, prepared relocations; unavailable opportunities stay put. */
@@ -75,6 +76,19 @@ export function planMovements(
         ) *
           TPQ;
       const other = state.hands.find((h) => h.hand !== from.hand);
+      const wideEnabled =
+        c.wideLeaps.kind === "lifted-wide" && c.wideLeaps.probability > 0;
+      const edge = wideEnabled
+        ? oppositeSweepEdge(
+            from.hand,
+            positions.slice(0, state.hands.length),
+            positions,
+            movements,
+            cue,
+            tick,
+          )
+        : undefined;
+      if (!clearsOppositeEdge(from, edge)) continue;
       // Only move when the old position cannot reach the landing pitch.
       const options = available.get(from.hand)!.flatMap((to) => {
         const distance =
@@ -84,15 +98,9 @@ export function planMovements(
           !distance ||
           Math.abs(distance) > movement.maxDistanceSteps ||
           (other && !separated(to, other)) ||
-          (c.wideLeaps.kind === "lifted-wide" &&
-            c.wideLeaps.probability > 0 &&
-            !movementSeparated(
-              to,
-              state,
-              positions,
-              movements,
-              bar * c.notation.beats * TPQ,
-            ))
+          (wideEnabled &&
+            !movementSeparated(to, state, positions, movements, tick)) ||
+          !clearsOppositeEdge(to, edge)
         )
           return [];
         return to.pitches.flatMap((pitch, index) => {

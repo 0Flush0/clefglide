@@ -186,11 +186,11 @@ describe("configuration boundary", () => {
         rhythm: { durations: [{ value: 960, weight: 1 }] },
       }),
     ).toThrow(/fill.*beat sounded budget/);
-    expect(() =>
+    expect(
       resolveGeneratorConfig({
         chords: { ...chordDefaults, maxVoiceLeadingSteps: 3 },
-      }),
-    ).toThrow(/Voice leading/);
+      }).chords,
+    ).toMatchObject({ maxVoiceLeadingSteps: 3 });
     expect(() =>
       resolveGeneratorConfig({
         chords: {

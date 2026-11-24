@@ -88,7 +88,7 @@ describe("parameter-driven articulation", () => {
       resolveGeneratorConfig({ articulation: false }, config),
       p.seed,
     );
-    expect(p.version).toBe("12.0.0");
+    expect(p.version).toBe("12.0.1");
     const stripped = p.events.map(({ slur, articulation, ...event }) => {
       void slur;
       void articulation;

@@ -15,7 +15,22 @@ import {
 import { chordCandidatesForConfig } from "./voicings";
 import { wideLandingOptions } from "./wideLeaps";
 import { positionFitsVoices, voiceAllows, voiceSpecs } from "./voiceConfig";
-import { dynamicFeasibility } from "./dynamicFeasibility";
+import {
+  dynamicFeasibility,
+  GeneratorContextInfeasibleError,
+} from "./dynamicFeasibility";
+
+// Resolved configurations are deeply frozen. Continuations and slur previews
+// can reuse the static map-space proof without caching mutable planner state.
+const generationVerdicts = new WeakMap<ValidatedGeneratorConfig, string>();
+export function assertGeneratorFeasibility(c: ValidatedGeneratorConfig) {
+  let error = generationVerdicts.get(c);
+  if (error === undefined) {
+    error = inspectGeneratorFeasibility(c).errors.join(" ");
+    generationVerdicts.set(c, error);
+  }
+  if (error) throw new GeneratorContextInfeasibleError(error);
+}
 
 /** Context-dependent feasibility is separate from structural configuration validity.
  * Chord/movement probabilities are opportunities, not promises that every shape fits. */
@@ -39,6 +54,7 @@ export function inspectGeneratorFeasibility(c: ValidatedGeneratorConfig) {
   const ties = c.notation.ties;
   if (
     ties !== false &&
+    ties.probability > 0 &&
     ties.chordTones !== "none" &&
     (c.chords.kind !== "voicings" ||
       c.chords.probability === 0 ||
@@ -164,10 +180,9 @@ export function inspectGeneratorFeasibility(c: ValidatedGeneratorConfig) {
         `${hands[i]} hand: no approved chord voicing fits these positions and harmonic plans; legal single notes will be retained.`,
       );
   }
-  (c.independentVoices && wideUnavailable.length < hands.length
-    ? warnings
-    : errors
-  ).push(...wideUnavailable);
+  (wideUnavailable.length < hands.length ? warnings : errors).push(
+    ...wideUnavailable,
+  );
   if (
     hands.length === 2 &&
     !lists[0].some((r) => lists[1].some((l) => separated(r, l)))
