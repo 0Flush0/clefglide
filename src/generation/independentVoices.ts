@@ -46,7 +46,7 @@ import {
   voiceEventId,
   voiceSpecs,
 } from "./voiceConfig";
-import { validateGeneratedPhrase } from "./phraseValidator";
+import { validateGeneratedCore } from "./phraseValidator";
 import { inspectGeneratorFeasibility } from "./feasibility";
 import type { GeneratedPhrase } from "./model";
 import { planVoicePreparation } from "./voicePreparation";
@@ -97,7 +97,8 @@ export function generateIndependent(
   const feasibility = inspectGeneratorFeasibility(c);
   if (feasibility.errors.length) {
     const message = feasibility.errors.join(" ");
-    if (c.dynamicFingering) throw new GeneratorContextInfeasibleError(message);
+    if (c.dynamicFingering || c.articulation)
+      throw new GeneratorContextInfeasibleError(message);
     throw new Error(message);
   }
   const context = JSON.stringify([seed, fingerprint]);
@@ -154,7 +155,7 @@ export function generateIndependent(
     const initial = structuredClone(previous ?? state);
     // Retries start with the same musical state and take another deterministic draw.
     const phrase = plan(state, initial);
-    const errors = validateGeneratedPhrase(phrase);
+    const errors = validateGeneratedCore(phrase);
     if (!errors.length) return phrase;
     reason = errors[0];
     rng = state.rng;

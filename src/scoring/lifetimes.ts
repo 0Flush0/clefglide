@@ -1,6 +1,8 @@
 import type { MidiEvent } from "../midi/adapter";
 import type { ValidatedGeneratorConfig } from "../generation/config";
 import { TPQ, type LifetimeNote, type Settings } from "../score/model";
+import type { ArticulationTiming } from "../score/articulationModel";
+import { performedLifetime } from "../score/lifetimes";
 
 export type ReleaseStatus = "pending" | "correct" | "early" | "late";
 export interface ReleaseResult {
@@ -22,10 +24,13 @@ interface Attempt {
   channel: string;
   key: string;
   attackMs: number;
+  velocity: number;
+  epoch: number;
   keyReleaseMs?: number;
   soundReleaseMs?: number;
   pedalViolation: boolean;
   interrupted: boolean;
+  interruptedAtMs?: number;
   result?: DurationResult;
 }
 type LifetimeConfig = Extract<
@@ -41,6 +46,11 @@ export class LifetimeTracker {
   private down = new Set<string>();
   private pedals = new Set<string>();
   private owners = new Map<string, Attempt>();
+  private epoch = 0;
+  latestMs = -Infinity;
+  get transportEpoch() {
+    return this.epoch;
+  }
   readonly evaluate: boolean;
   constructor(
     readonly config: LifetimeConfig,
@@ -131,7 +141,13 @@ export class LifetimeTracker {
     }
     this.tick(now);
   }
-  accept(note: LifetimeNote, e: MidiEvent, origin: number) {
+  accept(
+    note: LifetimeNote,
+    e: MidiEvent,
+    origin: number,
+    timing?: ArticulationTiming,
+    articulationOwnsTiming = false,
+  ) {
     if (this.attempts.has(note.id)) return;
     const now = e.time - this.settings.offset;
     const channel = `${e.source}:${e.channel}`,
@@ -141,6 +157,8 @@ export class LifetimeTracker {
       channel,
       key,
       attackMs: now,
+      velocity: e.velocity,
+      epoch: this.epoch,
       pedalViolation: this.pedals.has(channel),
       interrupted: false,
     };
@@ -149,6 +167,8 @@ export class LifetimeTracker {
     this.owners.set(key, a);
     if (this.evaluate && this.config.evaluation.kind === "evaluate") {
       const opts = this.config.evaluation;
+      if (articulationOwnsTiming && opts.pedalTreatment !== "forbid") return;
+      const performance = performedLifetime(note.lifetime, timing);
       const target = (tick: number) =>
         this.settings.mode === "timed"
           ? origin + (tick * 60000) / (TPQ * this.settings.bpm)
@@ -156,9 +176,9 @@ export class LifetimeTracker {
             ((tick - note.lifetime.onsetTick) * 60000) /
               (TPQ * this.settings.bpm);
       const physical =
-        note.lifetime.keyHold.kind === "required"
+        !articulationOwnsTiming && performance.keyHold.kind === "required"
           ? {
-              expectedMs: target(note.lifetime.keyHold.releaseTick),
+              expectedMs: target(performance.keyHold.releaseTick),
               status: "pending" as const,
             }
           : undefined;
@@ -170,7 +190,7 @@ export class LifetimeTracker {
         ...(opts.pedalTreatment === "sounding"
           ? {
               sound: {
-                expectedMs: target(note.lifetime.releaseTick),
+                expectedMs: target(performance.intendedReleaseTick),
                 status: "pending",
               },
             }
@@ -212,12 +232,14 @@ export class LifetimeTracker {
           ? "early"
           : phases.some((x) => x.status === "late")
             ? "late"
-            : phases.every((x) => x.status === "correct")
+            : (phases.length > 0 || a.keyReleaseMs !== undefined) &&
+                phases.every((x) => x.status === "correct")
               ? "correct"
               : "pending";
   }
   tick(now: number) {
     if (!Number.isFinite(now)) throw new Error("Invalid lifetime clock.");
+    this.latestMs = Math.max(now, this.latestMs);
     for (const a of this.live) {
       this.settle(a, now);
       if (a.soundReleaseMs !== undefined) this.live.delete(a);
@@ -231,6 +253,7 @@ export class LifetimeTracker {
     for (const a of this.live) {
       if (a.soundReleaseMs !== undefined || a.interrupted) continue;
       a.interrupted = true;
+      a.interruptedAtMs = this.latestMs;
       if (a.result?.status === "pending") {
         a.result.status = "interrupted";
         a.result.interruption = reason;
@@ -240,6 +263,7 @@ export class LifetimeTracker {
     this.pedals.clear();
     this.owners.clear();
     this.live.clear();
+    this.epoch++;
   }
 }
 

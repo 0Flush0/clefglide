@@ -12,7 +12,7 @@ import {
   spacingSignature,
   positionCenter,
 } from "./positionMaps";
-import { validateGeneratedPhrase } from "./phraseValidator";
+import { validateGeneratedCore } from "./phraseValidator";
 import {
   generatorConfigFingerprint,
   generatorConfigVersion,
@@ -36,7 +36,10 @@ import { inspectGeneratorFeasibility } from "./feasibility";
 import { nextLeapPreparation } from "./wideLeaps";
 import { attachNoteLifetimes } from "../score/lifetimes";
 import { planTies, validateTieCarry, carryHeadId } from "./ties";
-import { generateIndependent } from "./independentVoices";
+import {
+  generateIndependent,
+  GeneratorSearchExhaustedError,
+} from "./independentVoices";
 import {
   applyDynamicAttack,
   chooseDynamicAttack,
@@ -45,12 +48,58 @@ import {
 import { beginFingering, finishFingering } from "./fingeringTimeline";
 import { planSubstitutions } from "./substitutions";
 import { GeneratorContextInfeasibleError } from "./dynamicFeasibility";
+import { planArticulation } from "./articulation";
+import { articulationContext } from "./articulationConstraints";
+import { validateArticulation } from "./articulationValidator";
+
 export function generateConfigured(
   c: ValidatedGeneratorConfig,
   seed: string,
   previous?: StreamState,
   // Internal legacy stream identity override; parameter-driven callers omit this.
   contextKey = generatorConfigFingerprint(c),
+): GeneratedPhrase {
+  const policy = c.articulation;
+  if (
+    previous &&
+    (policy
+      ? previous.articulation?.context !==
+        articulationContext(seed, generatorConfigFingerprint(c))
+      : !!previous.articulation)
+  )
+    throw new GeneratorContextInfeasibleError(
+      "Articulation continuation requires the original seed and configuration.",
+    );
+  const coreState = previous && { ...previous };
+  if (coreState?.articulation) delete coreState.articulation;
+  const phrase = generateCore(c, seed, coreState, contextKey);
+  if (!policy) return phrase;
+  if (previous?.articulation)
+    phrase.initial.articulation = structuredClone(previous.articulation);
+  let next: GeneratedPhrase | undefined;
+  if (policy.slurs && policy.slurs.crossPhrase) {
+    try {
+      next = generateCore(c, seed, phrase.final, contextKey);
+    } catch (error) {
+      // A failed preview cannot invalidate the current core phrase.
+      if (!(
+        error instanceof GeneratorSearchExhaustedError ||
+        error instanceof GeneratorContextInfeasibleError
+      ))
+        throw error;
+    }
+  }
+  planArticulation(phrase, next);
+  const errors = validateArticulation(phrase, c);
+  if (errors.length) throw new Error(errors.join(" "));
+  return phrase;
+}
+
+function generateCore(
+  c: ValidatedGeneratorConfig,
+  seed: string,
+  previous: StreamState | undefined,
+  contextKey: string,
 ): GeneratedPhrase {
   if (c.independentVoices) return generateIndependent(c, seed, previous);
   if (previous?.independentVoices)
@@ -64,12 +113,13 @@ export function generateConfigured(
     );
   if (
     c.dynamicFingering ||
+    c.articulation ||
     c.notation.ties !== false ||
     (c.wideLeaps.kind !== "disabled" && c.wideLeaps.probability > 0)
   ) {
     const { errors } = inspectGeneratorFeasibility(c);
     if (errors.length) {
-      if (c.dynamicFingering)
+      if (c.dynamicFingering || c.articulation)
         throw new GeneratorContextInfeasibleError(errors.join(" "));
       throw new Error(errors.join(" "));
     }
@@ -437,7 +487,7 @@ export function generateConfigured(
       ? { movementDiagnostics: diagnostics }
       : {}),
   };
-  const errors = validateGeneratedPhrase(p);
+  const errors = validateGeneratedCore(p);
   if (errors.length) throw new Error(errors.join(" "));
   return p;
 }

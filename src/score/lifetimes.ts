@@ -6,6 +6,24 @@ import {
   type NoteLifetime,
 } from "./model";
 import type { ValidatedGeneratorConfig } from "../generation/config";
+import type { ArticulationTiming } from "./articulationModel";
+
+/** Project the modeled performance over a validated structural lifetime.
+ * Pedal-held sound comes from MIDI observation and is outside this plan. */
+export function performedLifetime(
+  lifetime: NoteLifetime,
+  timing?: ArticulationTiming,
+) {
+  const intendedDurationTicks = timing?.ticks ?? lifetime.durationTicks;
+  const intendedReleaseTick = timing
+    ? lifetime.onsetTick + intendedDurationTicks
+    : lifetime.releaseTick;
+  const keyHold =
+    timing && lifetime.keyHold.kind === "required"
+      ? { kind: "required" as const, releaseTick: intendedReleaseTick }
+      : lifetime.keyHold;
+  return { intendedDurationTicks, intendedReleaseTick, keyHold };
+}
 
 /** Projection only: no sampling, note selection, notation changes or PRNG draws. */
 export function attachNoteLifetimes(

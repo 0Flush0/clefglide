@@ -32,6 +32,11 @@ import {
   movementAnnotation,
 } from "./hints";
 import { AccidentalState } from "./pitch";
+import {
+  addArticulation,
+  drawSlurs,
+  type DrawnSlurMember,
+} from "./articulationNotation";
 export function Notation({
   events,
   hands,
@@ -115,6 +120,19 @@ export function Notation({
     ctx.setFont("Arial", 12);
     const barW = (w - 24) / settings.bars;
     const drawn: StaveNote[] = [];
+    const slurNotes: DrawnSlurMember[] = [];
+    const articulations: ReturnType<typeof addArticulation> = [];
+    const slurredAttacks = new Map(
+      [...hintEvents, ...events].flatMap((e) =>
+        e.slur && e.slur.index + 1 < e.slur.length
+          ? [[e.id, e.slur] as const]
+          : [],
+      ),
+    );
+    const slurEdges = new Map<
+      ScoreEvent["hand"],
+      { first: Stave; last: Stave }
+    >();
     const independent = events.some((e) => e.voiceId !== undefined);
     const segments = new Map<
       string,
@@ -138,6 +156,10 @@ export function Notation({
             .addKeySignature(settings.key)
             .addTimeSignature(`${settings.beats}/4`);
         stave.setContext(ctx).draw();
+        slurEdges.set(hand.hand, {
+          first: slurEdges.get(hand.hand)?.first ?? stave,
+          last: stave,
+        });
         staves.push(stave);
         const accidentalState = new AccidentalState(settings.key);
         const measureEvents = events.filter(
@@ -202,6 +224,24 @@ export function Notation({
                 ...(polyphonic ? { stemDirection: stem } : {}),
               });
               note.setAttribute("id", e.id);
+              if (e.articulation || e.slur)
+                articulations.push(...addArticulation(note, e, polyphonic));
+              if (e.slur)
+                slurNotes.push({ event: { ...e, slur: e.slur }, note });
+              const held = new Set(
+                heads.flatMap((head) => {
+                  const slur =
+                    head.tie?.index &&
+                    slurredAttacks.get(head.tie.attackEventId);
+                  return slur ? [slur] : [];
+                }),
+              );
+              for (const slur of held)
+                slurNotes.push({
+                  event: { ...e, slur },
+                  note,
+                  continuation: true,
+                });
               heads.forEach((head, index) => {
                 segments.set(head.id, { note, index, head });
                 const sign = independent
@@ -316,12 +356,19 @@ export function Notation({
           .setContext(ctx)
           .draw();
     }
+    const slurBounds = drawSlurs(ctx, slurNotes, slurEdges);
     const svg = el.querySelector("svg");
     if (svg) {
       const boxes = drawn.map((note) => note.getBoundingBox());
-      const top = Math.min(0, ...boxes.map((box) => box.getY() - 12));
+      boxes.push(...articulations.map((mark) => mark.getBoundingBox()));
+      const top = Math.min(
+        0,
+        ...slurBounds,
+        ...boxes.map((box) => box.getY() - 12),
+      );
       const bottom = Math.max(
         height,
+        ...slurBounds,
         ...boxes.map((box) => box.getY() + box.getH() + 12),
       );
       renderer.resize(w, bottom - top);

@@ -17,20 +17,36 @@ import {
 import type { GeneratedPhrase } from "./model";
 import { validateGeneratedLifetimes } from "./lifetimeValidator";
 import { validateIndependentVoices } from "./independentValidator";
+import { validateArticulation } from "./articulationValidator";
 import {
   hasMovementPreparation,
   validateWideLanding,
   validateWideSweeps,
   validateLeapReservation,
 } from "./wideLeapValidation";
-export function validateGeneratedPhrase(p: GeneratedPhrase): string[] {
-  const errors = validateWithConfig(p, p.config);
+export function validateGeneratedPhrase(
+  p: GeneratedPhrase,
+  previous?: GeneratedPhrase,
+): string[] {
+  return [
+    ...validateGeneratedCore(p),
+    ...validateArticulation(p, p.config, previous),
+  ];
+}
+export function validateGeneratedCore(p: GeneratedPhrase): string[] {
+  const errors = validateCore(p, p.config);
   if (p.configFingerprint !== generatorConfigFingerprint(p.config))
     errors.push("Generator configuration fingerprint mismatch.");
   return errors;
 }
 // Independent reconstruction: never calls planner selection/candidate helpers.
 export function validateWithConfig(
+  p: Omit<Phrase, "settings">,
+  c: ValidatedGeneratorConfig,
+): string[] {
+  return [...validateCore(p, c), ...validateArticulation(p, c)];
+}
+function validateCore(
   p: Omit<Phrase, "settings">,
   c: ValidatedGeneratorConfig,
 ): string[] {

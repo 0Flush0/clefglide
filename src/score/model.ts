@@ -1,6 +1,11 @@
 import { z } from "zod";
 import type { RangeCoverage } from "../generation/rangeCoverage";
 import type { NoteLifetime, LifetimeNote, TieSegment } from "./lifetimeModel";
+import type {
+  ArticulationBoundary,
+  ArticulationMark,
+  SlurMember,
+} from "./articulationModel";
 export type {
   NoteLifetime,
   LifetimeNote,
@@ -148,6 +153,8 @@ export interface FingerSubstitution {
 }
 export interface ScoreEvent {
   id: string;
+  articulation?: ArticulationMark;
+  slur?: SlurMember;
   /** Explicit on independent timelines, including rests. */
   voiceId?: string;
   kind: "note" | "rest";
@@ -178,6 +185,7 @@ export interface StreamState {
   coverage?: Partial<Record<Hand, RangeCoverage>>;
   activeLifetimes?: LifetimeNote[];
   dynamicFingering?: FingeringBoundary;
+  articulation?: ArticulationBoundary;
   independentVoices?: {
     context: string;
     voices: Record<string, VoiceState>;

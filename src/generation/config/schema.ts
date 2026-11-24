@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { TPQ } from "../../score/model";
 import { dynamicFingeringSchema } from "./dynamic";
+import { articulationSchema } from "./articulation";
 
 const probability = z.number().min(0).max(1);
 const weight = z.number().min(0.000001).max(1000);
@@ -358,6 +359,9 @@ const schema = z
     coverage: coverageSchema,
     wideLeaps: wideLeapSchema.default({ kind: "disabled" }),
     noteLifetimes: noteLifetimeSchema.default({ kind: "disabled" }),
+    articulation: z
+      .union([articulationSchema, z.literal(false).transform(() => undefined)])
+      .optional(),
     independentVoices: z
       .union([
         independentVoiceSchema,
@@ -373,6 +377,37 @@ const schema = z
     const ties = c.notation.ties;
     const independent = c.independentVoices;
     const dynamic = c.dynamicFingering;
+    const articulation = c.articulation;
+    if (articulation) {
+      if (lifetime.kind !== "explicit" || lifetime.keyHold !== "required")
+        error(
+          ["articulation"],
+          "Articulation requires explicit, required key-hold lifetimes.",
+        );
+      const hands =
+        c.hands.active === "both"
+          ? (["right", "left"] as const)
+          : [c.hands.active];
+      const active = hands.flatMap((hand) =>
+        independent
+          ? (independent[hand]?.voices ?? []).flatMap((v, i) =>
+              v.activity > 0 && v.entryProbability > 0
+                ? [`${hand}:${i ? i + 1 : "main"}`]
+                : [],
+            )
+          : [`${hand}:main`],
+      );
+      const slurs = articulation.slurs;
+      if (
+        [...articulation.voices, ...(slurs ? (slurs.voices ?? []) : [])].some(
+          (v) => !active.includes(v),
+        )
+      )
+        error(
+          ["articulation", "voices"],
+          "Select active, reachable voice IDs from the configured hands and voice model.",
+        );
+    }
     if (dynamic) {
       const hands =
         c.hands.active === "both" ? ["right", "left"] : [c.hands.active];
@@ -841,6 +876,38 @@ const schema = z
           `Durations must fill the ${c.notation.beats - rest}-beat sounded budget in bar ${b + 1}; include quarter or eighth notes or change rests/meter.`,
         );
       soundedBudgets.push((c.notation.beats - rest) * TPQ);
+    }
+    if (articulation?.slurs) {
+      const slurs = articulation.slurs;
+      if (slurs.crossPhrase && soundedBudgets.at(-1) !== c.notation.beats * TPQ)
+        error(
+          ["articulation", "slurs", "crossPhrase"],
+          "A slur cannot cross the required rest at the end of each phrase.",
+        );
+      // A safe upper bound: activity, repetition and movement can lower the
+      // realized number. Tie-enabled scores may split chord attacks further.
+      const capacity = Math.max(
+        ...(slurs.voices ?? articulation.voices).map((id) => {
+          const [hand, lane] = id.split(":") as ["left" | "right", string];
+          const profile =
+            independent?.[hand]?.voices[lane === "main" ? 0 : Number(lane) - 1];
+          const grid = Math.min(
+            ...(profile?.durations ?? c.rhythm.durations).map((d) => d.value),
+            ...(ties === false ? [] : ties.subdivisions),
+          );
+          const slots = soundedBudgets.map((budget) =>
+            Math.max(0, Math.floor(budget / grid)),
+          );
+          return slurs.crossMeasure
+            ? slots.reduce((sum, n) => sum + n, 0) * (slurs.crossPhrase ? 2 : 1)
+            : Math.max(...slots);
+        }),
+      );
+      if (slurs.lengths.some(({ value }) => value > capacity))
+        error(
+          ["articulation", "slurs", "lengths"],
+          "Each selected slur length must fit at least one eligible voice's grouping and rhythm budget.",
+        );
     }
     if (independent) {
       for (const hand of ["right", "left"] as const)

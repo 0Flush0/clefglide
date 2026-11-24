@@ -207,3 +207,56 @@ export function dynamicFingeringExample(
   });
   return resolveGeneratorConfig(overrides, base);
 }
+
+/** Quarter-note lines with touch, phrase-level portato and relative accents. */
+export function articulatedStudy(overrides: GeneratorOverrides = {}) {
+  const base = resolveGeneratorConfig({
+    rhythm: { durations: [{ value: 480, weight: 1 }], breathBars: [] },
+    noteLifetimes: noteLifetimeDefaults,
+    articulation: {
+      kind: "enabled",
+      voices: ["right:main"],
+      touch: [
+        { value: "natural", weight: 2 },
+        { value: "non-legato" },
+        { value: "staccato" },
+        { value: "staccatissimo" },
+        { value: "tenuto" },
+      ],
+      touchProbability: 0.5,
+      emphasis: [{ value: "accent", weight: 2 }, { value: "marcato" }],
+      emphasisProbability: 0.25,
+      persistence: 0.2,
+      slurs: {
+        probability: 0.55,
+        lengths: [{ value: 3 }, { value: 5 }],
+        styles: [{ value: "legato", weight: 3 }, { value: "portato" }],
+        crossPhrase: true,
+      },
+      evaluation: {
+        kind: "evaluate",
+        timingWeight: 1,
+        velocityWeight: 0.4,
+        waitMode: "velocity-only",
+      },
+    },
+  });
+  return resolveGeneratorConfig(overrides, base);
+}
+
+/** Legato treble against a separately timed bass voice with carried ties. */
+export function articulatedDuet() {
+  return resolveGeneratorConfig(
+    {
+      articulation: {
+        kind: "enabled",
+        voices: ["right:main"],
+        touch: [{ value: "legato" }],
+        touchProbability: 0.5,
+        slurs: { crossPhrase: true, lengths: [{ value: 3 }, { value: 5 }] },
+        interactions: { sustained: "allow", ties: "preserve-hold" },
+      },
+    },
+    movingTrebleWithHeldBass(),
+  );
+}

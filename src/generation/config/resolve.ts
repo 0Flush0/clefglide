@@ -70,6 +70,7 @@ export function generatorConfigFingerprint(
     noteLifetimes,
     independentVoices,
     dynamicFingering,
+    articulation,
     ...legacy
   } = config;
   const identity = {
@@ -78,10 +79,12 @@ export function generatorConfigFingerprint(
     ...(noteLifetimes.kind !== "disabled" ? { noteLifetimes } : {}),
     ...(independentVoices ? { independentVoices } : {}),
     ...(dynamicFingering ? { dynamicFingering } : {}),
+    ...(articulation ? { articulation } : {}),
   };
   return `${generatorConfigVersion(config)}:parameters:${JSON.stringify(identity)}`;
 }
 export function generatorConfigVersion(config: ValidatedGeneratorConfig) {
+  if (config.articulation) return "12.0.0";
   if (config.dynamicFingering) return "11.0.0";
   if (config.independentVoices)
     return config.wideLeaps.kind !== "disabled" ||

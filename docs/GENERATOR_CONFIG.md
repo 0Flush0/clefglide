@@ -2,7 +2,7 @@
 
 The generator has two entry points. `generate(settings, seed, previous?)` in `src/generation/planner.ts` is the unchanged application compatibility API. It resolves saved settings through `config/presets.ts`, calls the parameter-driven engine, and returns the original `Phrase` shape. No UI control, preference schema, session schema, backup format or historical fingerprint changes in this refactor.
 
-`generateConfigured(config, seed, previous?)` in `engine.ts` accepts only a branded, deeply readonly `ValidatedGeneratorConfig`. It returns `GeneratedPhrase`, which carries the resolved config and a separate parameter fingerprint. The existing versions are 5.2.0 for the original core, 6.0.0 for wide leaps, 7.0.0 for explicit lifetimes, 8.1.0 for shared-rhythm ties, 9.0.0 for the original independent scheduler, and 10.0.0 for independent voices with wide leaps, guided coverage or authored rested-alternate permission. Enabling `dynamicFingering` selects 11.0.0. Custom configurations require a separate history and comparison design before they can be saved as practice sessions.
+`generateConfigured(config, seed, previous?)` in `engine.ts` accepts only a branded, deeply readonly `ValidatedGeneratorConfig`. It returns `GeneratedPhrase`, which carries the resolved config and a separate parameter fingerprint. Versions are 5.2.0 for the original core, 6.0.0 for wide leaps, 7.0.0 for explicit lifetimes, 8.1.0 for shared-rhythm ties, 9.0.0 for the original independent scheduler, and 10.0.0 for independent voices with wide leaps, guided coverage or authored rested-alternate permission. Enabling `dynamicFingering` selects 11.0.0. Opting into `articulation` selects 12.0.0 and includes the resolved articulation policy in the fingerprint. Custom configurations use the programmatic API and require a separate history design before they can be saved as practice sessions.
 
 The engine orchestrates small modules: `initialHands.ts`, `melody.ts`, `rhythm.ts`, `harmony.ts`, `chromatic.ts`, `movement.ts`, `wideLeaps.ts`, `ties.ts`, `voicings.ts`, `rangeCoverage.ts`, `positionMaps.ts` and `ergonomics.ts`. `sampling.ts` supplies ordered weighted selection. They consume resolved parameters, not difficulty labels. `planner.ts`, `positions.ts`, `chords.ts` and `validator.ts` retain the old signatures/range-preview behavior as compatibility facades; core modules do not import those facades. `difficulty.ts` and `config/presets.ts` are preset/UI policy, not algorithms. `generation/index.ts` provides the public composition API.
 
@@ -59,7 +59,7 @@ const next = generateConfigured(config, "example", first.final);
 | Classification | Example and outcome |
 | --- | --- |
 | Contradictory | Minimum displacement greater than maximum, preparation shorter than the configured minimum travel time, required overlap with insufficient available keys, ties without required physical holds, or a minimum activity count above its rhythm budget. Configuration rejects these combinations. |
-| Architectural | Independent profiles require explicit physical lifetimes, fixed lane IDs and complete per-voice notation. Movement landings use one mapped main-voice note. Shared coverage uses small shifts. Overlapping ownership of one MIDI pitch, crossing hand envelopes, finger substitution, slurs and expressive articulation have no supported model here. |
+| Architectural | Independent profiles require explicit physical lifetimes, fixed lane IDs and complete per-voice notation. Movement landings use one mapped main-voice note. Shared coverage uses small shifts. Each MIDI pitch has at most one physical owner, and hand envelopes stay separated. See the dynamic fingering and articulation sections for their additional contact rules. |
 | Context-dependent | A range can contain legal starting maps while particular registers, occupied fingers, chord harmonies, holds or travel envelopes leave no candidate for a sampled opportunity. A static failure such as no compatible position pair can be proven from the map space. A failed finite schedule search only establishes budget exhaustion. |
 | Supported | A treble wide leap during a bass chord tie, asynchronous chromatic attacks over occupied voices, and per-hand guidance during independent small or wide relocations all use the canonical configuration and lifetime model. |
 
@@ -591,8 +591,95 @@ There is one intentional boundary tightening: malformed internal configurations 
 
 New custom values can intentionally select different exercises. Their complete resolved parameter fingerprint differs from legacy-settings comparison identities; the application continues using only the compatibility path. Changing the key/range/shape context of a continuing hand cannot silently reset/reposition it: start a new exercise when that state no longer fits.
 
-## Future capabilities that are not parameter switches
+## Articulation and slurs (12.0.0)
 
-Slurs and expressive articulation evaluation remain outside the generator. General finger and hand crossings, additional ergonomic shapes, new meters, keys and durations, and non-major harmonic vocabularies require explicit model and validator work before their schemas can be widened.
+Enable `articulation: { kind: "enabled", ... }` with `noteLifetimes: noteLifetimeDefaults` or another explicit policy with `keyHold: "required"`. Omission or `articulation: false` preserves versions, seeded output and fingerprints from 5.2 through 11. The settings-based practice entry point and its saved sessions and backups continue using their existing schemas. Keep a programmatic study's resolved config, seed, and stream state with its own records. Changes to seed or resolved config require a new stream.
+
+`ScoreEvent.duration` is the engraved duration in ticks. `NoteLifetime` describes baseline attack identity and lifetime, including any tie chain and its physical occupancy plan. The event's optional `articulation` holds semantic touch, emphasis and a performed timing target. Its independent `slur` field identifies a position in a voice-level group. `performedLifetime(head.lifetime, event.articulation?.timing)` in `src/score/lifetimes.ts` projects intended duration and nominal physical release onto a head. The release tracker observes actual attack, key release and logical pedal-held sound release separately. Measure budgets, ties, movement cues, pitch spelling and fingering remain governed by the original score. A slur connects distinct attacks, including legitimate reattacks on the same key.
+
+### Selection and grouping
+
+| Field | Values, defaults and effect |
+| --- | --- |
+| `voices` | Required nonempty list of unique active voice IDs. Use `right:main` and `left:main` for shared rhythm. Independently scheduled voices also accept suffixes `:2` through `:5` when configured with nonzero activity and entry probability. Applies to individual touch and emphasis and is the fallback for slurs. |
+| `touch` | Rules for `natural`, `legato`, `non-legato`, `staccato`, `staccatissimo` and `tenuto`. One rule at most per type and one chosen touch at most per attack. Default `[]`. Natural has no glyph or individual timing target. Bare legato and non-legato are unmarked touch exercises that model connection or separation to a contiguous successor in the same chunk. Staccato, staccatissimo and tenuto print their standard marks. |
+| `emphasis` | Rules for `accent` and `marcato`. Default `[]`. One emphasis may combine with a touch or either slur style. It applies to the complete attack, including any chord. |
+| Rule `value`, `probability`, `weight` | `value` selects the unique supported entry. On a fresh draw, each eligible rule passes its independent probability gate (0–1, default 1). Choose among passing rules by positive weight (up to 1000, default 1). A zero-probability rule is disabled. The same fields apply to the slur style rules. |
+| `touchProbability`, `emphasisProbability` | Overall fresh-draw opportunities per eligible event, 0–1, default 1 for each layer. Only layers with rules participate and require a positive chance with at least one positive-probability rule. A draw with no passing candidate leaves the layer empty. |
+| `persistence` | 0–1, default 0. Each layer first attempts to retain the preceding explicit mark with this probability, if it remains eligible and the two attacks are contiguous. Otherwise it takes a fresh draw. Rests and ineligible/differently styled attacks can break persistence. A boundary snapshot can carry a terminal mark into the next phrase opening. |
+| `slurs` | `false` by default. Pass an object to choose groups first, then choose compatible touch and emphasis for each attack. Slurs are contiguous, non-overlapping groups per voice. No nesting, overlapping groups within a voice, cross-voice slurs, or slurs over a rest. Independent voices can have concurrent groups. |
+| `slurs.voices` | Optional unique active lane IDs. Inherits `voices` when omitted. Independent of the eligibility list for individual marks when explicitly set. |
+| `slurs.probability` | Greater than 0 and at most 1, default 0.35. Chance to try a group at an unused starting attack. A successful draw still needs a feasible style and length. |
+| `slurs.lengths` | Unique `{ value, weight }` entries. Lengths are 2–16 attacks, default 2 and 3 with equal weights. Chords count as one attack and tie continuations consume no slots. After selecting a feasible style, sample among its feasible lengths by weight. |
+| `slurs.styles` | Weighted `legato` and/or `portato` rules, default legato with probability and weight 1. A legato slur supplies connection targets on internal edges unless the source has an explicit short or tenuto mark. These printed combinations use the individual duration target and retain the arc for phrasing. Explicit bare legato and non-legato touch choices apply outside slurs. Portato combines a slur with tenuto dashes and uses its own detached ratio on every member. Its touch slots are reserved for portato. |
+| `slurs.placement` | `auto` (default), `above` or `below`. Auto uses above for shared RH and below for shared LH. Independent lanes alternate above and below, starting above for the main lane. This stays stable when scrolling. |
+| `slurs.crossMeasure`, `slurs.crossPhrase` | Defaults true and false respectively. Cross-phrase groups require cross-measure permission and continuity after any carried tie. At most two adjacent generated chunks participate in one group. The overlay previews one core chunk on cloned state and commits the full crossing group when feasible. It verifies local membership on both sides. Keep the original `final` to continue and pass the previous phrase to `validateGeneratedPhrase(current, previous)` to compare the boundary commitment. |
+
+The articulation draw is independent of the core RNG. Unknown options, duplicate rules, inactive voices, impossible grouping lengths given the rhythm budget, and incompatible policies raise `GeneratorConfigurationError`. Registered contact and range constraints can make a structurally valid context infeasible, reported by `GeneratorContextInfeasibleError`. `GeneratorSearchExhaustedError` still reports the independent core's bounded search budget. A failed optional preview leaves the current phrase usable and does not commit its future slurs. A subsequent request for that core phrase reports any failure normally. Lack of a sampled safe articulation opportunity can produce unmarked notes or a phrase with no slur.
+
+### Timing and contact policy
+
+| Field | Values, defaults and effect |
+| --- | --- |
+| `timing.staccatissimo` | `{ min: 0.15, target: 0.25, max: 0.35 }`. Ratios of the attack's baseline lifetime. |
+| `timing.staccato` | `{ min: 0.35, target: 0.5, max: 0.65 }`. |
+| `timing.portato` | `{ min: 0.55, target: 0.7, max: 0.85 }`. |
+| `timing.tenuto` | `{ min: 0.9, target: 1, max: 1 }`. Protected holds accept this marking only with target 1 and an exact baseline tick range before scoring tolerance. |
+| Ratio constraints | `1/240 ≤ min ≤ target ≤ max ≤ 1`. The three detached maxima stay below 1. Nominal targets increase from staccatissimo through staccato and portato to tenuto. Choose the nearest whole target tick, and round the acceptable interval inward while including the target. The detached target leaves at least one tick between its release and baseline end. |
+| `timing.overlapTicks` | 1–239 integer ticks, default 24. Nominal physical overlap for an eligible legato edge at 480 ticks per quarter. |
+| `timing.separationTicks` | 1–239 integer ticks, default 48. Non-legato releases this many ticks before the next attack. |
+| `timing.connectedGapTicks` | 0–239 integer ticks, default 24. Maximum absolute release-to-next-attack difference before adding timing tolerance for a connected edge. It targets zero offset and does not promise literal overlap. |
+| `interactions.chords` | `allow` (default) or `exclude`. A mark applies to all heads in an eligible chord. Literal overlap checks every key and finger against the simultaneous contact set. |
+| `interactions.ties` | `exclude` (default) or `preserve-hold`. The latter permits emphasis, full-value tenuto or a connected slur involving an attack with uniform lifetime ends. Partial reattacks with held chord heads, unequal head releases and tie-only glyphs receive no articulation. The complete tie stays held through its intermediate glyphs. |
+| `interactions.sustained` | `allow` (default) or `exclude`. Exclusion removes opportunities whose baseline span intersects another voice of the same hand. With allowance, other voices and carries still constrain literal overlap and any protected hold. |
+| `interactions.continuous` | `connected` (default) or `exclude`. When allowed, thumb-under, finger-over and continuous-shift landings can use a connected edge through the transfer. The source remains held through its planned transfer. Portato and non-legato edges require a release before the next attack, so they cannot cross a continuous hand transfer. Lifted movements and required preparation rests break groups. |
+| `interactions.legatoFallback` | `connected` (default) or `omit`. Controls legato opportunities with repeated pitches, reused fingers, occupied contacts, register/position restrictions or across generated phrase boundaries. Connected continuous transfers use their separate policy above. |
+
+Literal overlap is confined to the same validated position within a chunk. The extended source uses mapped contacts. The check includes every concurrent key, finger, modeled reach and the maximum physical polyphony and inter-voice overlap caps. It reserves competing extensions in the same hand conservatively. Rested alternates, adjacent reaches, substitutions and their stabilizing holds remain subject to the core fingering plan. Substituted contacts and stabilizing holds keep their baseline release. Chunk-ending sources that could participate in a continuous move retain their baseline hold. Cross-chunk legato connections use a zero-offset model so they require no physical extension across the boundary.
+
+VexFlow engraves individual modifiers once per chord and draws a separate curve per slur. A rolling window with only part of a group gets a partial curve at the appropriate stave edge. If the window contains only tied continuation glyphs, include the original attack in `hintEvents` (or supply the full retained score as `events`) so notation can project that slur through the window. The tie engraver, accidental state, beam grouping and fingering annotations retain their own data. Very dense or high-register combinations still need player review for readability.
+
+### MIDI evaluation
+
+| Field | Values, defaults and effect |
+| --- | --- |
+| `evaluation.kind` | `disabled` by default. `evaluate` enables explicit observation-based results from `Scorer.articulationResults`. |
+| `evaluation.timingWeight`, `evaluation.velocityWeight` | 0–1000, defaults 1 and 0 respectively. A zero weight disables that dimension. At least one positive weight is required, with corresponding enabled markings. `articulationMetrics` reports timing and velocity separately and a per-observation weighted accuracy. |
+| `evaluation.waitMode` | `disabled` (default) or `velocity-only` with positive velocity weight. Wait and benchmark practice impose no articulation timing target. An independently enabled legacy wait-mode duration assessment still follows its own policy. |
+| `evaluation.tolerance.beatFraction`, `minMs`, `maxMs` | Fraction 0–0.5 and bounds 0–250 ms, defaults 0.035, 8 and 40. Convert the beat fraction at the scorer's tempo and clamp it to the ordered millisecond bounds. Expand duration ranges and connection thresholds by this tolerance. Overlap still requires a positive difference and separation a negative one. |
+| `evaluation.velocity.precedingAttacks` | Look back 1–64 score attacks in the same voice, default 8. Use the nearest earlier accepted unaccented attack of the same chord size, MIDI source/channel and uninterrupted transport epoch. Include unaccented attacks with other touch markings. |
+| `evaluation.velocity.accent`, `marcato` | Inclusive `{ min, max }` ratios of current to baseline MIDI velocity, both greater than 1 and at most 4. Default accent 1.08–1.45 and marcato 1.15–1.8. Velocity for a chord is its mean across accepted heads. A baseline requiring more than MIDI velocity 127 to reach the minimum is unobserved. |
+
+Timed duration uses each accepted attack's actual MIDI onset and physical release. Connection timing compares each source head release to the earliest accepted onset of the next complete event, including across appended chunks. Each chord must have its accepted heads within the configured capture window, from one source/channel and transport epoch. A late chord retry cannot retroactively rewrite the first accepted key edges. A repeated key needs a fresh physical off/on pair. Pedal-held sound neither substitutes for key release nor creates an attack. Pause, disconnect and finish interrupt live evidence, and comparisons across interrupted epochs are unobserved. A continuously held key can establish a late release once its threshold has passed. Undefined, unresolved or unobserved evidence contributes no accuracy denominator. Reports expose pending and unobserved counts separately. A missing pitch stays in pitch statistics.
+
+Pitch, onset and chord accuracy keep their existing rules and metrics. On styled events with timing targets, timed articulation owns the release comparison and the duration evaluator leaves that comparison out. A legacy pedal prohibition still records pedal evidence. With articulation timing evaluation disabled, the legacy duration evaluator uses the projected release target under its existing physical/sounding and timing policy. Unstyled events keep their legacy duration expectations. The scorer's fingerprint includes the generator config and runtime clock and capture settings. Practice history keeps its legacy comparison boundary.
+
+Velocity ratios are comparisons of observed MIDI data on a single device/channel, and logical sound release is inferred from note edges and CC64. Verify USB/BLE event order, retriggers under the sustain pedal, pedal release behavior, calibration and velocity response on physical keyboards. Player and teacher trials are required to assess phrasing, comfort and legibility at the configured tempo. The software model and simulator do not determine actual finger choice, acoustic loudness, tone quality, or expressive intention.
+
+### Programmatic examples
+
+`articulatedStudy(overrides?)` in [examples.ts](../src/generation/examples.ts) combines weighted touch, accents, legato, portato, cross-phrase grouping and optional evaluation. `articulatedDuet()` places slurred treble over a separately scheduled bass with carried ties and optional wide moves. Add `articulation` and `noteLifetimes: noteLifetimeDefaults` to `dynamicFingeringExample(techniques, overrides)` to study crossings with compatible contact targets.
+
+```ts
+import { generateConfigured, validateGeneratedPhrase } from "./generation";
+import { articulatedStudy } from "./generation/examples";
+import { Scorer, articulationMetrics } from "./scoring/engine";
+import { defaults } from "./score/model";
+
+const config = articulatedStudy();
+const first = generateConfigured(config, "articulated-study");
+const second = generateConfigured(config, first.seed, first.final);
+const errors = validateGeneratedPhrase(second, first);
+if (errors.length) throw new Error(errors.join(" "));
+
+const scorer = new Scorer(first.events, { ...defaults, mode: "timed" }, 120, config);
+scorer.appendNotes(second.events);
+// Drive start/tick/input/finish with the normal transport and MIDI event bus.
+const readMetrics = () => articulationMetrics(scorer.articulationResults);
+```
+
+## Future capabilities
+
+General finger and hand crossings, additional ergonomic shapes, other meters, keys and durations, and non-major harmonic vocabularies require explicit model and validator work before their schemas can be widened.
 
 Future modules can be added as new typed fields/unions with their own defaults, resolver composition and validators. Unsupported capabilities are rejected today; no placeholder configuration fields or plugin registry claim those algorithms exist.
