@@ -1,5 +1,11 @@
 import type { MidiEvent } from "../midi/adapter";
 import {
+  activeHands,
+  hasArticulation,
+  hasTies,
+  configForHand,
+} from "../generation/config/handParameters";
+import {
   TPQ,
   noteheads,
   type ScoreEvent,
@@ -76,18 +82,18 @@ export class Scorer {
   ) {
     if (
       config?.independentVoices ||
-      config?.articulation ||
-      (config?.notation.ties !== undefined && config.notation.ties !== false)
+      hasArticulation(config) ||
+      hasTies(config)
     ) {
       if (
-        config.notation.ties === false &&
+        !hasTies(config) &&
         notes.some((e) => e.tie || noteheads(e).some((n) => n.tie))
       )
         throw new Error("Tie scoring requires the enabled tie configuration.");
       this.validateTies(notes);
       this.notationEvents = [...notes];
       this.notes = attackEvents(notes);
-      if (config.independentVoices || config.articulation)
+      if (config?.independentVoices || config?.articulation)
         this.notes = this.notes.filter((e) => e.kind === "note");
       notes = this.notes;
     } else if (notes.some((e) => e.tie || noteheads(e).some((n) => n.tie))) {
@@ -122,19 +128,29 @@ export class Scorer {
       )
     )
       throw new Error("Articulation must annotate complete scored attacks.");
-    const policy = this.config?.notation.ties;
+    const config = this.config;
+    const policy = config
+      ? (event: ScoreEvent) => configForHand(config, event.hand).notation.ties
+      : undefined;
     const errors = validateTieSegments(
       events,
       this.settings.beats,
       [],
       0,
       undefined,
-      policy === false ? undefined : policy,
+      policy,
     );
     if (errors.length) throw new Error(errors.join(" "));
   }
   private validateArticulationNotes(events: ScoreEvent[]) {
-    validateScoredArticulation(events, this.config?.articulation);
+    const config = this.config;
+    if (config?.handParameters) {
+      for (const hand of activeHands(config))
+        validateScoredArticulation(
+          events.filter((event) => event.hand === hand),
+          configForHand(config, hand).articulation,
+        );
+    } else validateScoredArticulation(events, config?.articulation);
   }
   private validateLifetimeNotes(notes: ScoreEvent[]) {
     const records = lifetimeNotes(notes);
@@ -239,7 +255,7 @@ export class Scorer {
     let notation: ScoreEvent[] | undefined;
     if (this.notationEvents) {
       if (
-        this.config?.notation.ties === false &&
+        !hasTies(this.config) &&
         notes.some((e) => e.tie || noteheads(e).some((n) => n.tie))
       )
         throw new Error("Tie scoring requires the enabled tie configuration.");
@@ -263,21 +279,30 @@ export class Scorer {
     return this.lifetimes?.results ?? [];
   }
   get articulationResults() {
-    const policy = this.config?.articulation;
-    if (!policy || !this.lifetimes) return [];
+    const config = this.config;
+    const tracker = this.lifetimes;
+    if (!config || !hasArticulation(config) || !tracker) return [];
     this.syncLifetimeNotes();
-    return evaluateArticulation(
-      this.notes,
-      this.lifetimes,
-      policy,
-      this.settings,
-      this.chordOnsetMs,
-      new Set(
-        this.results
-          .filter((r) => r.kind === "miss" || r.kind === "skip")
-          .map((r) => r.id),
-      ),
-      !this.running && this.lifetimePaused,
+    return (config.handParameters ? activeHands(config) : [undefined]).flatMap(
+      (hand) => {
+        const policy = hand
+          ? configForHand(config, hand).articulation
+          : config.articulation;
+        if (!policy) return [];
+        return evaluateArticulation(
+          hand ? this.notes.filter((event) => event.hand === hand) : this.notes,
+          tracker,
+          policy,
+          this.settings,
+          this.chordOnsetMs,
+          new Set(
+            this.results
+              .filter((r) => r.kind === "miss" || r.kind === "skip")
+              .map((r) => r.id),
+          ),
+          !this.running && this.lifetimePaused,
+        );
+      },
     );
   }
   /** Runtime scoring context; future history must additionally retain assistance state. */
@@ -340,7 +365,7 @@ export class Scorer {
   }
   pause(now: number, reason: "pause" | "disconnect" | "finish" = "pause") {
     if (!this.running) return;
-    if (this.config?.articulation)
+    if (hasArticulation(this.config))
       this.lifetimes?.tick(now - this.settings.offset);
     this.lifetimes?.interrupt(reason);
     this.lifetimePaused = true;
@@ -537,7 +562,7 @@ export class Scorer {
           n.articulation?.timing,
           !!n.articulation?.timing &&
             isArticulationTimingEvaluated(
-              this.config?.articulation,
+              this.config && configForHand(this.config, n.hand).articulation,
               this.settings.mode,
             ),
         );
@@ -593,14 +618,14 @@ export class Scorer {
     this.advance(now);
   }
   private recordUnattemptedDuration(
-    n: { id: string; articulation?: ScoreEvent["articulation"] },
+    n: Pick<ScoreEvent, "id" | "hand" | "articulation">,
     status: "miss" | "skip",
   ) {
     const policy = this.lifetimes?.config.evaluation;
     if (
       !n.articulation?.timing ||
       !isArticulationTimingEvaluated(
-        this.config?.articulation,
+        this.config && configForHand(this.config, n.hand).articulation,
         this.settings.mode,
       ) ||
       (policy?.kind === "evaluate" && policy.pedalTreatment === "forbid")

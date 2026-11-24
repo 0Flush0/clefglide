@@ -11,8 +11,10 @@ import type {
   SlurStyle,
   Touch,
 } from "../score/articulationModel";
+import { activeHands, configForHand } from "./config/handParameters";
 import type { ValidatedGeneratorConfig } from "./config";
 import { boundaryTick, eventTick, voiceOf } from "./fingeringTimeline";
+import { overlapLimits } from "./voiceConfig";
 import { comfortableMap, isBlack, keyCenter } from "./ergonomics";
 
 export type ArticulationPolicy = NonNullable<
@@ -62,13 +64,14 @@ export class ArticulationTimeline {
       ),
     );
     this.substituted = new Set(substitutions.map((s) => s.id));
-    const needsBoundaryContact = config.dynamicFingering?.techniques.some(
-      ({ technique }) =>
-        technique === "thumb-under" ||
-        technique === "finger-over" ||
-        technique === "continuous-shift" ||
-        technique === "adjacent-reach",
-    );
+    const needsBoundaryContact = (event: ScoreEvent) =>
+      configForHand(config, event.hand).dynamicFingering?.techniques.some(
+        ({ technique }) =>
+          technique === "thumb-under" ||
+          technique === "finger-over" ||
+          technique === "continuous-shift" ||
+          technique === "adjacent-reach",
+      );
     const reachLandings = new Set(
       events.flatMap(({ event }) =>
         event.fingering?.technique === "adjacent-reach"
@@ -127,7 +130,7 @@ export class ArticulationTimeline {
             ),
           ) ||
           reachLandings.has(`${voice}:${end}`) ||
-          (!!needsBoundaryContact &&
+          (!!needsBoundaryContact(event) &&
             voice.endsWith(":main") &&
             heads.length === 1 &&
             end === boundaryTick(frame.final, config)),
@@ -271,18 +274,35 @@ export class ArticulationTimeline {
     );
     if (independent) {
       const voice = voiceOf(from.event);
-      const exceeds = (start: number, stop: number) =>
-        independent.overlapProbability === 0 ||
-        Math.min(end, stop) - Math.max(from.start, start) >
-          independent.maxOverlapTicks;
+      const exceeds = (
+        start: number,
+        stop: number,
+        hand: ScoreEvent["hand"],
+      ) => {
+        const limit = overlapLimits(independent, from.event.hand, hand);
+        return (
+          limit.probability === 0 ||
+          Math.min(end, stop) - Math.max(from.start, start) > limit.maxTicks
+        );
+      };
       if (
         others.some(
           ({ n }) =>
             n.lifetime!.voiceId !== voice &&
-            exceeds(n.lifetime!.onsetTick, n.lifetime!.releaseTick),
+            exceeds(n.lifetime!.onsetTick, n.lifetime!.releaseTick, n.hand),
         )
       )
         return false;
+      const competingTicks = this.config.handParameters
+        ? Math.max(
+            ticks,
+            ...activeHands(this.config).map(
+              (hand) =>
+                configForHand(this.config, hand).articulation?.timing
+                  .overlapTicks ?? 0,
+            ),
+          )
+        : ticks;
       // Reserve one extension per hand at a time. Competing extensions in
       // other hands must also fit the configured inter-voice overlap cap.
       if (
@@ -293,12 +313,16 @@ export class ArticulationTimeline {
               (attack, i) =>
                 attack.frame === from.frame &&
                 !attack.pinned &&
-                attack.end > to.start - ticks &&
+                attack.end > to.start - competingTicks &&
                 attack.end < end &&
                 attacks[i + 1] &&
                 this.adjacent(attack, attacks[i + 1]) &&
                 (attack.event.hand === from.event.hand ||
-                  exceeds(attack.start, attack.end + ticks)),
+                  exceeds(
+                    attack.start,
+                    attack.end + competingTicks,
+                    attack.event.hand,
+                  )),
             ),
         )
       )

@@ -13,6 +13,7 @@ import {
   generatorConfigFingerprint,
   type ValidatedGeneratorConfig,
 } from "./config";
+import { configForHand, hasTies } from "./config/handParameters";
 import { chooseWeighted } from "./sampling";
 import { random } from "./random";
 import { Note } from "tonal";
@@ -37,8 +38,7 @@ export function planTies(
   seed: string,
   movements: MovementPlan[] = [],
 ) {
-  const t = c.notation.ties;
-  if (t === false) return;
+  if (!hasTies(c)) return;
   const voiceOf = (e: ScoreEvent) => e.voiceId ?? `${e.hand}:main`;
   const tick = (e: ScoreEvent) => e.bar * c.notation.beats * TPQ + e.onset;
   const end = state.bar * c.notation.beats * TPQ;
@@ -53,14 +53,17 @@ export function planTies(
         continuous.some(
           (m) =>
             m.source.eventId === e.id &&
-            !c.dynamicFingering?.techniques.some(
+            !configForHand(c, m.hand).dynamicFingering?.techniques.some(
               (r) =>
                 r.technique === m.technique &&
                 "allowTiedSource" in r &&
                 r.allowTiedSource,
             ),
         )));
-  const selected = (heads: Notehead[]) => {
+  const selected = (
+    heads: Notehead[],
+    t: Exclude<ValidatedGeneratorConfig["notation"]["ties"], false>,
+  ) => {
     if (heads.length === 1) return heads;
     if (t.chordTones === "none") return [];
     if (t.chordTones === "all") return heads;
@@ -146,8 +149,10 @@ export function planTies(
       });
   }
   for (const voice of new Set(events.map(voiceOf))) {
-    if (!t.voices.some((id) => id === voice)) continue;
     const timeline = events.filter((e) => voiceOf(e) === voice);
+    const local = configForHand(c, timeline[0].hand);
+    const t = local.notation.ties;
+    if (t === false || !t.voices.some((id) => id === voice)) continue;
     for (let i = 0; i < timeline.length; i++) {
       const e = timeline[i],
         heads = noteheads(e);
@@ -174,7 +179,7 @@ export function planTies(
                 counts.map((value) => ({ value, weight: 1 })),
                 state,
               );
-              const chosen = selected(heads);
+              const chosen = selected(heads, t);
               const segments = Array.from({ length: count }, (_, index) => {
                 const part = structuredClone(e);
                 part.onset += (index * e.duration) / count;
@@ -289,7 +294,7 @@ export function planTies(
           const eligible = heads.filter(
             (n) =>
               Math.abs(diatonicIndex(n.pitch) - diatonicIndex(e.pitch)) <=
-                c.melody.maxIntervalSteps &&
+                local.melody.maxIntervalSteps &&
               (t.chordTones !== "outer" ||
                 n.midi === Math.min(...heads.map((h) => h.midi)) ||
                 n.midi === Math.max(...heads.map((h) => h.midi))),
@@ -379,7 +384,7 @@ export function validateTieCarry(
   seed: string,
 ) {
   const pending = state.pendingTies ?? [];
-  if (c.notation.ties === false) {
+  if (!hasTies(c)) {
     if (
       pending.length ||
       (c.independentVoices && state.activeLifetimes?.length)
@@ -393,13 +398,15 @@ export function validateTieCarry(
     const h = state.hands.find((h) => h.hand === p.head.hand);
     const n = p.head,
       l = n.lifetime;
+    const ties = configForHand(c, n.hand).notation.ties;
     const voice = l?.voiceId ?? `${n.hand}:main`;
     const eventId = voiceEventId(seed, state.bar, 0, voice);
     const lastFingering = c.independentVoices
       ? state.independentVoices?.voices[voice]?.lastFingering
       : h?.lastFingering;
     if (
-      !c.notation.ties.crossPhrase ||
+      ties === false ||
+      !ties.crossPhrase ||
       p.configFingerprint !== generatorConfigFingerprint(c) ||
       !h ||
       p.positionId !== h.id ||
@@ -412,14 +419,14 @@ export function validateTieCarry(
         !h.pitchOptions?.[n.finger - 1]?.includes(n.pitch) &&
         !(
           c.independentVoices &&
-          c.fingering.allowRestedAlternates &&
+          configForHand(c, n.hand).fingering.allowRestedAlternates &&
           isRestedAlternateAssignment(h, n, n.fingering)
         )) ||
       !tieSegmentSchema.safeParse(n.tie).success ||
       !noteLifetimeDataSchema.safeParse(l).success ||
       n.tie?.pattern !== "carry" ||
       n.tie.index >= n.tie.count - 1 ||
-      !c.notation.ties.segmentCounts.includes(n.tie.count) ||
+      !ties.segmentCounts.includes(n.tie.count) ||
       n.tie.nextId !== p.nextSegmentId ||
       ![eventId, `${eventId}:hold:${n.finger}`].includes(p.nextSegmentId) ||
       p.duration !== voiceUnit(c, voice) ||
@@ -427,7 +434,7 @@ export function validateTieCarry(
       l.onsetTick >= start ||
       l.releaseTick !== start + (n.tie.count - n.tie.index - 1) * p.duration ||
       l.durationTicks !== l.releaseTick - l.onsetTick ||
-      l.durationTicks > c.notation.ties.maxDurationTicks ||
+      l.durationTicks > ties.maxDurationTicks ||
       l.keyHold.kind !== "required" ||
       l.keyHold.releaseTick !== l.releaseTick
     )

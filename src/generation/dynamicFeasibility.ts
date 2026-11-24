@@ -1,5 +1,5 @@
 import { Note } from "tonal";
-import { TPQ, type HandState } from "../score/model";
+import { TPQ, type Hand, type HandState } from "../score/model";
 import type { ValidatedGeneratorConfig } from "./config";
 import {
   continuousPreparation,
@@ -25,6 +25,7 @@ export class GeneratorContextInfeasibleError extends Error {
 export function dynamicFeasibility(
   c: ValidatedGeneratorConfig,
   positions: HandState[][],
+  onlyHand?: Hand,
 ) {
   const policy = c.dynamicFingering;
   if (!policy) return [];
@@ -47,6 +48,7 @@ export function dynamicFeasibility(
   return policy.techniques.flatMap((rule) => {
     const possible = positions.some((list, index) =>
       list.some((from) => {
+        if (onlyHand && from.hand !== onlyHand) return false;
         const profiles = specs.filter(
           (v) =>
             v.hand === from.hand &&

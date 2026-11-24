@@ -1,4 +1,5 @@
 import { Note } from "tonal";
+import { configForHand } from "./config/handParameters";
 import {
   TPQ,
   type Hand,
@@ -22,7 +23,11 @@ export function planVoicePreparation(
   available: Map<Hand, HandState[]>,
 ): VoicePreparation[] {
   const wide = c.wideLeaps;
-  if (wide.kind !== "lifted-wide" || wide.probability === 0) return [];
+  if (
+    !c.handParameters &&
+    (wide.kind !== "lifted-wide" || wide.probability === 0)
+  )
+    return [];
   const specs = voiceSpecs(c);
   const measure = c.notation.beats * TPQ;
   const start = state.bar * measure;
@@ -32,6 +37,7 @@ export function planVoicePreparation(
     return window ? [{ ...window, hand }] : [];
   });
   const keepsActivityPossible = (candidate: VoicePreparation) => {
+    const local = configForHand(c, candidate.hand);
     const voiceWindows = [
       ...windows.filter((w) => w.hand === candidate.hand),
       candidate,
@@ -47,7 +53,7 @@ export function planVoicePreparation(
         )
         .every(({ id, durations, profile }) => {
           const unit = Math.min(...durations.map((d) => d.value));
-          const ties = c.notation.ties;
+          const ties = local.notation.ties;
           const attackUnit =
             ties !== false &&
             ties.probability > 0 &&
@@ -55,8 +61,8 @@ export function planVoicePreparation(
             ties.patterns.some((p) => p.value === "subdivide") &&
             (ties.chordTones === "any" || ties.chordTones === "outer") &&
             profile.chords &&
-            c.chords.kind === "voicings" &&
-            c.chords.probability > 0
+            local.chords.kind === "voicings" &&
+            local.chords.probability > 0
               ? Math.min(unit, ...ties.subdivisions)
               : unit;
           let sounded = 0,
@@ -64,7 +70,7 @@ export function planVoicePreparation(
           for (let bar = 0; bar < c.notation.phraseBars; bar++) {
             const barTick = phraseStart + bar * measure;
             const budget = Math.min(
-              measure - smallRestBeats(c, bar) * TPQ,
+              measure - smallRestBeats(local, bar) * TPQ,
               ...voiceWindows
                 .filter(
                   (w) =>
@@ -83,12 +89,30 @@ export function planVoicePreparation(
     );
   };
   for (const phraseStart of [start, end]) {
-    for (const bar of [...wide.eligibleBars].sort((a, b) => a - b)) {
+    const bars = [
+      ...new Set(
+        state.hands.flatMap(({ hand }) => {
+          const wide = configForHand(c, hand).wideLeaps;
+          return wide.kind === "lifted-wide" && wide.probability > 0
+            ? wide.eligibleBars
+            : [];
+        }),
+      ),
+    ].sort((a, b) => a - b);
+    for (const bar of bars) {
       const landingTick = phraseStart + bar * measure;
-      const cueTick = landingTick - wide.preparationBeats * TPQ;
-      if (cueTick < start || cueTick >= end) continue;
       for (const h of state.hands) {
         const { hand } = h;
+        const local = configForHand(c, hand);
+        const wide = local.wideLeaps;
+        if (
+          wide.kind !== "lifted-wide" ||
+          wide.probability === 0 ||
+          !wide.eligibleBars.includes(bar)
+        )
+          continue;
+        const cueTick = landingTick - wide.preparationBeats * TPQ;
+        if (cueTick < start || cueTick >= end) continue;
         const candidate = { hand, cueTick, landingTick };
         const main = specs.find((spec) => spec.hand === hand)!;
         if (
@@ -98,7 +122,7 @@ export function planVoicePreparation(
           (phraseStart === start &&
             !state.independentVoices!.voices[main.id].active) ||
           !main.durations.some(
-            (d) => d.value <= measure - smallRestBeats(c, bar) * TPQ,
+            (d) => d.value <= measure - smallRestBeats(local, bar) * TPQ,
           ) ||
           windows.some(
             (w) =>
@@ -122,7 +146,7 @@ export function planVoicePreparation(
         const opposite = state.hands.find((p) => p.hand !== hand);
         if (
           positions.some((from) =>
-            wideLandingOptions(c, from, positions).some(({ to, index }) => {
+            wideLandingOptions(local, from, positions).some(({ to, index }) => {
               const midi = Note.midi(to.pitches[index])!;
               return (
                 voiceAllows(

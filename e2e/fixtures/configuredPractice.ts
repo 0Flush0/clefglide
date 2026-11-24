@@ -7,12 +7,14 @@ export async function stageConfiguration(
   seed: string,
 ) {
   await page.getByLabel("Practice profile").selectOption("custom");
-  const editor = page.getByText("Generator parameters", { exact: true });
+  await page.getByRole("button", { name: "Edit music settings" }).click();
+  const expert = page.getByText("Expert settings", { exact: true });
+  const editor = page.getByText("Generator parameters (JSON)", { exact: true });
+  await expert.click();
   await editor.click();
   await page.getByLabel("GeneratorConfig JSON").fill(JSON.stringify(config));
   await page.getByRole("button", { name: "Use parameters" }).click();
   await editor.click();
-  await page.getByText("Advanced settings", { exact: true }).click();
   await page.getByLabel("Exercise seed").fill(seed);
-  await page.getByText("Advanced settings", { exact: true }).click();
+  await expert.click();
 }

@@ -8,7 +8,7 @@ ClefGlide is a piano sight-reading trainer for the browser and Android that gene
 
 ## Features
 
-- Guided fixed-position and Advanced custom profiles for seeded exercises with either hand or both hands. Advanced parameters include wide leaps, sustained notes, ties, independent voices, dynamic fingering and articulation.
+- [Guided learning paths and Advanced musical controls](docs/PRACTICE_CONFIGURATION.md) for seeded exercises with either hand or both hands. Advanced supports independent hand settings, reusable profiles and optional JSON editing.
 - Treble, bass and grand-staff notation with Smart Hints for finger placement and planned hand movements.
 - Wait, timed and benchmark scoring with either practice profile. Timed scoring includes a count-in and separate timing feedback.
 - Web MIDI in supported browsers, native USB and BLE-MIDI on Android, and a virtual piano for touch or computer keyboard practice.

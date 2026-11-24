@@ -103,7 +103,7 @@ const moving = {
   allowBlackKeys: true,
   allowTiedSource: true,
 };
-const dynamicRules = {
+export const dynamicRules = {
   "thumb-under": {
     technique: "thumb-under",
     ...moving,

@@ -1,13 +1,18 @@
 ﻿import "fake-indexeddb/auto";
 import { beforeEach, expect, it } from "vitest";
-import { db, record } from "./store";
+import { db, record, recordConfigured } from "./store";
 import {
   defaultProfiles,
   loadPracticePreferences,
   savePracticePreferences,
 } from "./preferences";
 import { defaults, v4SettingsSchema } from "../score/model";
-import { defaultPractice, type PracticeSetup } from "../practice/configuration";
+import {
+  atGuidedLevel,
+  defaultPractice,
+  type PracticeSetup,
+} from "../practice/configuration";
+import { curriculum, curriculumVersion } from "../practice/curriculum";
 import { movingTrebleWithHeldBass } from "../generation/examples";
 import { resolveGeneratorConfig } from "../generation/config";
 
@@ -117,4 +122,96 @@ it("persists the complete custom profile and merges concurrent playback preferen
     metronome: true,
   });
   expect(Object.isFrozen(restored.setup.config)).toBe(true);
+});
+
+it("stages an equivalent current level from a v1 selection while retaining its exercise and history", async () => {
+  const previous: PracticeSetup = {
+    profile: "guided",
+    config: resolveGeneratorConfig({ melody: { maxIntervalSteps: 3 } }),
+    options: { ...defaultPractice.options, bpm: 81, mode: "timed" },
+    level: { id: "right-skip", version: 1 },
+  };
+  const guided = defaultProfiles();
+  guided.right = previous;
+  const session = recordConfigured(
+    "legacy-study",
+    "v1",
+    previous,
+    2000,
+    false,
+    {
+      results: [
+        {
+          id: "v1-note",
+          pitch: 60,
+          hand: "right",
+          kind: "correct",
+          first: true,
+        },
+      ],
+      finished: true,
+      durationResults: [],
+      articulationResults: [],
+    },
+  );
+  await db.sessions.put(session);
+  await db.preferences.put({
+    id: "practice-v2",
+    guided,
+    guidedHand: "right",
+    setup: previous,
+    seed: "v1",
+  });
+  const restored = await loadPracticePreferences();
+  expect(restored.setup).toEqual(previous);
+  expect(restored.draft).toMatchObject({
+    level: { id: "right-skip", version: 2 },
+    options: { bpm: 60, mode: "timed" },
+  });
+  expect(restored.guided.right).toEqual(restored.draft);
+  expect(restored.guidedStages.right?.["rhythmic-fluency"]).toEqual(
+    restored.draft?.level,
+  );
+  expect(restored.guided.left).toEqual(guided.left);
+  expect(await db.sessions.get(session.id)).toEqual(session);
+});
+
+it("remembers each track's most recent staged level for every visited stage", async () => {
+  const guided = defaultProfiles();
+  await db.preferences.put({
+    id: "practice-v2",
+    setup: guided.right,
+    guided,
+    guidedHand: "right",
+  });
+
+  const select = (hand: keyof typeof curriculum, index: number) =>
+    atGuidedLevel(curriculum[hand][index], defaultPractice.options);
+  const earlier = select("right", 1);
+  const latest = select("right", 3);
+  const fluency = select("right", 11);
+  const leftFluency = select("left", 10);
+  const duet = select("both", 11);
+  for (const draft of [earlier, latest, fluency, leftFluency, duet]) {
+    await savePracticePreferences({ draft });
+  }
+  // Applying settings to the active exercise alone must not replace a staged selection.
+  await savePracticePreferences({ setup: earlier, metronome: true });
+  db.close();
+  await db.open();
+  const restored = await loadPracticePreferences();
+  expect(restored.guidedStages).toMatchObject({
+    right: {
+      foundations: latest.level,
+      "rhythmic-fluency": fluency.level,
+    },
+    left: { "rhythmic-fluency": leftFluency.level },
+    both: { coordination: duet.level },
+  });
+  expect(restored.guidedStages.left?.foundations).toEqual({
+    id: "left-read",
+    version: curriculumVersion,
+  });
+  expect(restored.draft).toEqual(duet);
+  expect(restored.setup).toEqual(earlier);
 });

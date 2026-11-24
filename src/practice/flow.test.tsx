@@ -373,7 +373,8 @@ it("excludes the rhythm count-in and pauses when the page is left", async () => 
     expect(ui.getByRole("button", { name: "Pause" })).toBeTruthy(),
   );
 
-  const countIn = (defaults.beats * 60_000) / defaults.bpm;
+  const bpm = (ui.getByLabelText("Tempo") as HTMLInputElement).valueAsNumber;
+  const countIn = (defaults.beats * 60_000) / bpm;
   clock += countIn - 1000;
   ui.rerender(<App />);
   expect(ui.getByRole("timer").textContent).toBe("03:00");

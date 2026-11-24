@@ -2,6 +2,7 @@ import { Note, Scale } from "tonal";
 import type { Hand, HandState } from "../score/model";
 import { chromaticOptions } from "./ergonomics";
 import type { ValidatedGeneratorConfig } from "./config";
+import { configForHand } from "./config/handParameters";
 /** Offsets in finger order, away from the thumb. No ring/little-finger gaps. */
 export const spacingPatterns = {
   natural: [0, 1, 2, 3, 4],
@@ -26,9 +27,13 @@ type PositionParameters = Pick<
   "hands" | "notation" | "fingering" | "chromatic"
 >;
 export function positionsForConfig(
-  c: PositionParameters,
+  config: PositionParameters | ValidatedGeneratorConfig,
   hand: Hand,
 ): HandState[] {
+  const c =
+    "handParameters" in config
+      ? configForHand(config as ValidatedGeneratorConfig, hand)
+      : config;
   const { min, max, clef } = c.hands[hand];
   // Also called on uncommitted form input, before Apply validates settings.
   if (

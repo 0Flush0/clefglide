@@ -8,6 +8,7 @@ import {
   type StreamState,
 } from "../score/model";
 import type { ValidatedGeneratorConfig } from "./config";
+import { configForHand, fingeringPolicies } from "./config/handParameters";
 import {
   permitsSubstitutionContact,
   preparationTicks,
@@ -123,9 +124,12 @@ export function planSubstitutions(
   state: StreamState,
   c: ValidatedGeneratorConfig,
 ) {
-  const policy = c.dynamicFingering;
-  const rule = policy?.techniques.find((r) => r.technique === "substitution");
-  if (!policy || !rule) return;
+  if (
+    !fingeringPolicies(c).some((policy) =>
+      policy.techniques.some((rule) => rule.technique === "substitution"),
+    )
+  )
+    return;
   const { attacks, segments } = substitutionContext(plan);
   const used: Partial<Record<ScoreEvent["hand"], number>> = {};
   const boundary = boundaryTick(state, c);
@@ -138,12 +142,16 @@ export function planSubstitutions(
     else groups.set(key, [segment]);
   }
   for (const group of groups.values()) {
+    const local = configForHand(c, group[0].e.hand);
+    const policy = local.dynamicFingering;
+    const rule = policy?.techniques.find((r) => r.technique === "substitution");
+    if (!policy || !rule) continue;
     const candidates = group.flatMap((segment) =>
       rule.fingerPairs.flatMap(([from, finger]) => {
         if (segment.head.finger !== from) return [];
         const value = legalHandoff(
           plan,
-          c,
+          local,
           rule,
           segment,
           attacks,
@@ -174,13 +182,7 @@ export function validateSubstitutions(
   c: ValidatedGeneratorConfig,
 ) {
   const errors: string[] = [];
-  const rule = c.dynamicFingering?.techniques.find(
-    (r) => r.technique === "substitution",
-  );
-  if (!rule)
-    return plan.events.some((e) => noteheads(e).some((n) => n.substitution))
-      ? ["Substitution requires the enabled fingering capability."]
-      : [];
+
   const { segments, attacks } = substitutionContext(plan);
   const byHand = new Map<string, { start: number; end: number }[]>();
   const ids = new Set<string>();
@@ -188,9 +190,17 @@ export function validateSubstitutions(
     const { head } = segment;
     const record = head.substitution;
     if (!record) continue;
+    const local = configForHand(c, head.hand);
+    const rule = local.dynamicFingering?.techniques.find(
+      (r) => r.technique === "substitution",
+    );
+    if (!rule) {
+      errors.push("Substitution requires the enabled fingering capability.");
+      continue;
+    }
     const legal = legalHandoff(
       plan,
-      c,
+      local,
       rule,
       segment,
       attacks,
@@ -213,7 +223,10 @@ export function validateSubstitutions(
     const start = legal.startTick;
     const end =
       head.lifetime!.releaseTick +
-      preparationTicks(rule.minimumRecoveryMs, c.dynamicFingering!.tempoBpm);
+      preparationTicks(
+        rule.minimumRecoveryMs,
+        local.dynamicFingering!.tempoBpm,
+      );
     if (windows.some((w) => w.start < end && w.end > start))
       errors.push("Finger substitution overlaps another same-hand transfer.");
     windows.push({ start, end });

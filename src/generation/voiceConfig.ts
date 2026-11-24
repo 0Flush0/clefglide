@@ -1,5 +1,6 @@
-import { TPQ, type HandState } from "../score/model";
+import { TPQ, type Hand, type HandState } from "../score/model";
 import type { ValidatedGeneratorConfig } from "./config";
+import { activeHands, configForHand } from "./config/handParameters";
 
 type IndependentConfig = NonNullable<
   ValidatedGeneratorConfig["independentVoices"]
@@ -8,24 +9,39 @@ export type VoiceProfile = NonNullable<
   IndependentConfig["right"]
 >["voices"][number];
 
+export function overlapLimits(
+  policy: IndependentConfig,
+  first: Hand,
+  second: Hand,
+) {
+  const group = first === second ? policy[first] : undefined;
+  return {
+    probability:
+      group?.withinHandOverlapProbability ?? policy.overlapProbability,
+    maxTicks: group?.maxWithinHandOverlapTicks ?? policy.maxOverlapTicks,
+  };
+}
+
 export function smallLandingsNeedOverlapCheck(c: ValidatedGeneratorConfig) {
   const policy = c.independentVoices;
   return (
     !!policy &&
-    c.movement.kind === "rested-reposition" &&
-    c.movement.probability > 0 &&
+    activeHands(c).some((hand) => {
+      const movement = configForHand(c, hand).movement;
+      return movement.kind === "rested-reposition" && movement.probability > 0;
+    }) &&
     (policy.overlapProbability < 1 ||
       policy.maxOverlapTicks < c.notation.beats * TPQ)
   );
 }
 
 export function voiceSpecs(c: ValidatedGeneratorConfig) {
-  return (["right", "left"] as const).flatMap((hand) =>
+  return activeHands(c).flatMap((hand) =>
     (c.independentVoices?.[hand]?.voices ?? []).map((profile, index) => ({
       hand,
       id: `${hand}:${index === 0 ? "main" : index + 1}`,
       profile,
-      durations: profile.durations ?? c.rhythm.durations,
+      durations: profile.durations ?? configForHand(c, hand).rhythm.durations,
     })),
   );
 }
@@ -66,7 +82,7 @@ export function positionFitsVoices(
   const profiles = group.voices.filter(
     (profile) => profile.entryProbability > 0 && profile.activity > 0,
   );
-  const chords = c.chords;
+  const chords = configForHand(c, position.hand).chords;
   const choices = profiles.map((profile) => {
     const fingers = position.fingerToMidi.flatMap((midi, index) =>
       voiceAllows(profile, midi, index + 1) ? [1 << index] : [],
@@ -91,10 +107,12 @@ export function positionFitsVoices(
   if (group.minPolyphony <= 1) return true;
   const enough = (mask: number) =>
     mask.toString(2).replaceAll("0", "").length >= group.minPolyphony;
-  if (
-    c.independentVoices!.overlapProbability === 0 ||
-    c.independentVoices!.maxOverlapTicks < TPQ / 2
-  )
+  const overlap = overlapLimits(
+    c.independentVoices!,
+    position.hand,
+    position.hand,
+  );
+  if (overlap.probability === 0 || overlap.maxTicks < TPQ / 2)
     return choices.some((fingers) => fingers.some(enough));
   // A lane can supply at most one attack at a time. Use finger masks as an
   // upper bound before sampling harmony, black-key depth and exact overlap.

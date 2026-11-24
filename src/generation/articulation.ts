@@ -1,3 +1,5 @@
+import { activeHands, configForHand } from "./config/handParameters";
+import type { Hand } from "../score/model";
 import type {
   ArticulationMark,
   SlurGroup,
@@ -19,12 +21,42 @@ import { chooseWeighted } from "./sampling";
 /** Overlay only. Each chunk gets independent deterministic draws and commits
  * at most one future chunk of slur membership. */
 export function planArticulation(p: GeneratedPhrase, next?: GeneratedPhrase) {
-  const policy = p.config.articulation!;
-  const timeline = new ArticulationTimeline(next ? [p, next] : [p], p.config);
+  const configs = p.config.handParameters ? activeHands(p.config) : [undefined];
+  const state: NonNullable<GeneratedPhrase["final"]["articulation"]> = {
+    context: articulationContext(p.seed, p.configFingerprint),
+    groups: [],
+    terminal: {},
+  };
+  for (const hand of configs) {
+    const local = planHandArticulation(p, next, hand);
+    if (!local) continue;
+    state.groups.push(...local.groups);
+    Object.assign(state.terminal, local.terminal);
+  }
+  p.final.articulation = state;
+}
+
+function planHandArticulation(
+  p: GeneratedPhrase,
+  next?: GeneratedPhrase,
+  hand?: Hand,
+) {
+  const config = hand ? configForHand(p.config, hand) : p.config;
+  const policy = config.articulation;
+  if (!policy) return;
+  const includes = (voice: string) => !hand || voice.startsWith(`${hand}:`);
+  const timeline = new ArticulationTimeline(next ? [p, next] : [p], config);
   const initial = p.initial.articulation;
   const boundary = boundaryTick(p.final, p.config);
   const rng = {
-    rng: hash(JSON.stringify(["articulation", p.seed, p.initial.bar])),
+    rng: hash(
+      JSON.stringify([
+        "articulation",
+        p.seed,
+        p.initial.bar,
+        ...(hand ? [hand] : []),
+      ]),
+    ),
   };
   const assigned = new Map<string, SlurMember>();
   const crossing: SlurGroup[] = [];
@@ -39,7 +71,8 @@ export function planArticulation(p: GeneratedPhrase, next?: GeneratedPhrase) {
   const slurs = policy.slurs;
   if (slurs) {
     for (const [voice, lane] of timeline.lanes) {
-      if (!(slurs.voices ?? policy.voices).includes(voice)) continue;
+      if (!includes(voice) || !(slurs.voices ?? policy.voices).includes(voice))
+        continue;
       for (const [index, from] of lane.entries()) {
         if (
           from.frame !== p ||
@@ -102,6 +135,7 @@ export function planArticulation(p: GeneratedPhrase, next?: GeneratedPhrase) {
     if (candidates.length) return chooseWeighted(candidates, rng);
   };
   for (const [voice, lane] of timeline.lanes) {
+    if (!includes(voice)) continue;
     let last = initial?.terminal[voice];
     for (const [index, attack] of lane.entries()) {
       if (attack.frame !== p) break;
@@ -150,9 +184,5 @@ export function planArticulation(p: GeneratedPhrase, next?: GeneratedPhrase) {
         terminal[voice] = last;
     }
   }
-  p.final.articulation = {
-    context: articulationContext(p.seed, p.configFingerprint),
-    groups: crossing,
-    terminal,
-  };
+  return { groups: crossing, terminal };
 }

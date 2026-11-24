@@ -1,3 +1,4 @@
+import { configForHand, hasTies } from "./config/handParameters";
 import { TPQ, noteheads, type Phrase, type LifetimeNote } from "../score/model";
 import {
   generatorConfigFingerprint,
@@ -41,7 +42,7 @@ export function validateGeneratedLifetimes(
   )
     errors.push("Missing lifetime boundary state.");
   // Carry-in ownership is supported only by the explicit tie module.
-  if (p.initial.activeLifetimes?.length && c.notation.ties === false)
+  if (p.initial.activeLifetimes?.length && !hasTies(c))
     errors.push(
       "Shared-rhythm generation cannot consume held carry-in voices.",
     );
@@ -63,7 +64,8 @@ export function validateGeneratedLifetimes(
       }
       const l = parsed.data;
       const onset = e.bar * c.notation.beats * TPQ + e.onset;
-      const tied = c.notation.ties !== false && n.tie !== undefined;
+      const tied =
+        configForHand(c, e.hand).notation.ties !== false && n.tie !== undefined;
       if (
         (!tied &&
           (l.onsetTick !== onset ||
@@ -89,7 +91,7 @@ export function validateGeneratedLifetimes(
         });
     }
   }
-  if (c.notation.ties === false) {
+  if (!hasTies(c)) {
     if (
       p.events.some((e) => e.tie || noteheads(e).some((n) => n.tie)) ||
       p.initial.pendingTies !== undefined ||
@@ -97,7 +99,6 @@ export function validateGeneratedLifetimes(
     )
       errors.push("Tie metadata requires the enabled tie capability.");
   } else {
-    const t = c.notation.ties;
     const start = p.initial.bar * c.notation.beats * TPQ,
       end = p.final.bar * c.notation.beats * TPQ;
     errors.push(
@@ -107,15 +108,17 @@ export function validateGeneratedLifetimes(
         p.initial.activeLifetimes,
         start,
         end,
-        t,
+        (event) => configForHand(c, event.hand).notation.ties,
       ),
     );
     for (const e of p.events) {
+      const local = configForHand(c, e.hand);
+      const t = local.notation.ties;
       const heads = noteheads(e);
       const voice = e.voiceId ?? `${e.hand}:main`;
       const durations =
         voiceSpecs(c).find((spec) => spec.id === voice)?.durations ??
-        c.rhythm.durations;
+        local.rhythm.durations;
       const unit = voiceUnit(c, voice);
       if (JSON.stringify(e.tie) !== JSON.stringify(heads[0]?.tie))
         errors.push("Primary tie differs from its notehead.");
@@ -123,6 +126,7 @@ export function validateGeneratedLifetimes(
         const s = n.tie!,
           l = n.lifetime!;
         if (
+          t === false ||
           t.probability === 0 ||
           !t.segmentCounts.includes(s.count) ||
           !t.subdivisions.some((s) => s === e.duration) ||
@@ -145,14 +149,15 @@ export function validateGeneratedLifetimes(
             (l.releaseTick - 1) / (c.notation.beats * TPQ),
           );
           if (
-            (firstBar === lastBar && !t.withinMeasure) ||
-            (firstBar !== lastBar && !t.crossMeasure)
+            (t !== false && firstBar === lastBar && !t.withinMeasure) ||
+            (t !== false && firstBar !== lastBar && !t.crossMeasure)
           )
             errors.push("Tie violates measure boundary permission.");
           const previous = p.events.find((event) =>
             noteheads(event).some((h) => h.id === s.previousId),
           );
           if (
+            t !== false &&
             previous &&
             (previous.bar === e.bar ? !t.withinMeasure : !t.crossMeasure)
           )
@@ -208,6 +213,7 @@ export function validateGeneratedLifetimes(
         const n = item.head,
           l = n.lifetime,
           s = n.tie;
+        const t = configForHand(c, n.hand).notation.ties;
         const owned = active.find((a) => a.id === s?.lifetimeId);
         const voice = l?.voiceId ?? `${n.hand}:main`;
         const eventId = voiceEventId(p.seed, state.bar, 0, voice);
@@ -215,6 +221,7 @@ export function validateGeneratedLifetimes(
           ? p.events.flatMap(noteheads).find((n) => n.id === item.nextSegmentId)
           : p.events.flatMap(noteheads).find((h) => h.id === n.id);
         if (
+          t === false ||
           !t.crossPhrase ||
           item.configFingerprint !== generatorConfigFingerprint(c) ||
           ![eventId, `${eventId}:hold:${n.finger}`].includes(

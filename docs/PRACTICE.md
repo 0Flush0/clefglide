@@ -4,12 +4,12 @@
 
 Choose a practice profile, note range, hand and clef. Select **Start practice**, then play the highlighted note or chord. Expand **Virtual piano** for touch input or use the computer keys `A W S E D F T G Y H U J K O L P ;`. The virtual piano uses the shared scoring engine and is silent.
 
-- **Guided** selects a fixed five-finger exercise with a small melodic interval limit. Choose your hands, ranges, clefs, key and meter.
-- **Advanced** opens a custom profile. Expand **Generator parameters** and edit or paste a complete `GeneratorConfig` JSON document. Select **Use parameters** to validate and stage it, then **Apply & generate** to play it. The editor starts with a complete configuration you can modify. See the [parameter reference and examples](GENERATOR_CONFIG.md).
+- **Guided** offers independent left-hand, right-hand and both-hands learning paths. Use the arrows or browse stages to choose any level. Each hand track remembers your selection.
+- **Advanced** keeps essential practice controls in the sidebar. Select **Edit music settings** to open the full-width musical controls below the score and virtual piano. Enable independent rhythm to edit the hands separately. Save configurations as named profiles or open **Expert settings** to edit the complete configuration as JSON. The [curriculum and control map](PRACTICE_CONFIGURATION.md) describes each section and its dependencies.
 
-Each profile supports **Wait for correct notes**, **Timed playing** and **Independent benchmark**. Choose the scoring mode under **Advanced settings**, where you can also set the clef, key, meter, seed, visible bars and MIDI timing settings. Dynamic fingering uses the configured playback tempo to plan preparation and transfers.
+Each profile supports **Wait for correct notes**, **Timed playing** and **Independent benchmark**. In Advanced, choose scoring in the sidebar and use **Expert settings** for clefs, the seed, visible bars and MIDI timing. In Guided, find those controls under **Advanced settings**. Dynamic fingering uses the configured playback tempo to plan preparation and transfers.
 
-Apply structural changes with **Apply & generate**, **New exercise**, or **Apply & play**. The last option starts the new exercise immediately. **Restart** reproduces the seed. Pause or select **Save & finish** to save progress.
+Apply structural changes with **Apply & generate**, **Apply changes** in the Advanced panel, **New exercise**, or **Apply & play**. The last option starts the new exercise immediately. **Restart** reproduces the seed. Pause or select **Save & finish** to save progress.
 
 ## Hints and scoring
 

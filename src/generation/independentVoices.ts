@@ -1,5 +1,10 @@
 import { Note } from "tonal";
 import {
+  activeHands,
+  configForHand,
+  fingeringPolicies,
+} from "./config/handParameters";
+import {
   TPQ,
   isContinuousMovement,
   noteheads,
@@ -42,6 +47,7 @@ import { chooseWeighted } from "./sampling";
 import { carryHeadId, planTies, validateTieCarry } from "./ties";
 import {
   positionFitsVoices,
+  overlapLimits,
   smallLandingsNeedOverlapCheck,
   voiceAllows,
   voiceEventId,
@@ -56,7 +62,7 @@ import {
   coveragePhraseShape,
   planRangeCoverage,
   recordRangeCoverage,
-  validCoverageMemory,
+  validIndependentCoverage,
 } from "./rangeCoverage";
 import { validVoiceLeapBoundary } from "./wideLeapValidation";
 import type { MovementDiagnostic } from "./model";
@@ -92,6 +98,7 @@ export function generateIndependent(
   previous?: StreamState,
 ): GeneratedPhrase {
   const policy = c.independentVoices!;
+  const dynamic = fingeringPolicies(c).length > 0;
   const specs = voiceSpecs(c);
   const fingerprint = generatorConfigFingerprint(c);
   assertGeneratorFeasibility(c);
@@ -115,12 +122,7 @@ export function generateIndependent(
   if (previous) validateTieCarry(c, previous, seed);
   if (previous && !validVoiceLeapBoundary(previous, c))
     throw new Error("Invalid independent wide-leap boundary preparation.");
-  if (
-    previous &&
-    (c.coverage.kind === "guided"
-      ? !validCoverageMemory(previous, context, c.coverage)
-      : previous.coverage !== undefined)
-  )
+  if (previous && !validIndependentCoverage(previous, context, c))
     throw new Error("Invalid independent register coverage state.");
   if (
     Object.keys(start.independentVoices.voices).length !== specs.length ||
@@ -143,7 +145,7 @@ export function generateIndependent(
     const state = structuredClone(start);
     state.rng = rng;
     if (!previous) state.hands = initialHands(c, state, accepts);
-    if (c.dynamicFingering) beginFingering(c, seed, state, !!previous);
+    if (dynamic) beginFingering(c, seed, state, !!previous);
     else if (state.dynamicFingering)
       throw new Error("Start a new stream to disable dynamic fingering.");
     const initial = structuredClone(previous ?? state);
@@ -152,11 +154,12 @@ export function generateIndependent(
     const errors = validateGeneratedCore(phrase);
     if (!errors.length) return phrase;
     reason = errors[0];
-    rng = state.rng;
+    rng = c.handParameters ? hash(`${rng}:retry`) : state.rng;
   }
   throw new GeneratorSearchExhaustedError(policy.maxAttempts, reason);
 
   function plan(state: StreamState, initial: StreamState): GeneratedPhrase {
+    const chunkRng = state.rng;
     const memories = state.independentVoices!.voices;
     const incoming = initial.pendingTies ?? [];
     const events: ScoreEvent[] = [];
@@ -164,8 +167,10 @@ export function generateIndependent(
     const movements: MovementPlan[] = [];
     const diagnostics: MovementDiagnostic[] = [];
     const fingeringPlan = { initial, events, positions, movements };
-    const wideEnabled =
-      c.wideLeaps.kind === "lifted-wide" && c.wideLeaps.probability > 0;
+    const wideEnabled = activeHands(c).some((hand) => {
+      const wide = configForHand(c, hand).wideLeaps;
+      return wide.kind === "lifted-wide" && wide.probability > 0;
+    });
     const constrainLandingOverlap =
       wideEnabled || smallLandingsNeedOverlapCheck(c);
     const occupied: Occupied[] = (initial.activeLifetimes ?? []).map((n) => ({
@@ -196,35 +201,55 @@ export function generateIndependent(
             positionsForConfig(c, h.hand).filter(accepts),
           ]),
         );
-    const coverage = c.coverage;
-    if (coverage.kind === "guided") {
+    for (const h of state.hands) {
+      const coverage = configForHand(c, h.hand).coverage;
+      if (coverage.kind !== "guided") continue;
       state.coverage ??= {};
-      for (const h of state.hands) {
-        const midis = targets
-          .get(h.hand)!
-          .filter((to) => spacingSignature(to) === spacingSignature(h))
-          .flatMap((to) => to.fingerToMidi);
-        state.coverage[h.hand] = planRangeCoverage(
-          state.coverage[h.hand],
-          {
-            min: Math.min(...midis),
-            max: Math.max(...midis),
-            context,
-            position: positionCenter(h),
-            destinations: targets
-              .get(h.hand)!
-              .filter((to) => spacingSignature(to) === spacingSignature(h))
-              .map(positionCenter),
-          },
-          state,
-          coverage,
-        );
-      }
+      const midis = targets
+        .get(h.hand)!
+        .filter((to) => spacingSignature(to) === spacingSignature(h))
+        .flatMap((to) => to.fingerToMidi);
+      state.coverage[h.hand] = planRangeCoverage(
+        state.coverage[h.hand],
+        {
+          min: Math.min(...midis),
+          max: Math.max(...midis),
+          context,
+          position: positionCenter(h),
+          destinations: targets
+            .get(h.hand)!
+            .filter((to) => spacingSignature(to) === spacingSignature(h))
+            .map(positionCenter),
+        },
+        state,
+        coverage,
+      );
     }
-    const { harmony, motif, shapes, chords } = planPhrase(c, state);
+    const { harmony, motif, shapes, chords } = planPhrase(
+      c,
+      c.handParameters
+        ? { ...state, rng: hash(`${seed}:${state.bar}:harmony`) }
+        : state,
+    );
+    const melodyPlans =
+      c.handParameters &&
+      new Map(
+        activeHands(c).map((hand) => {
+          const local = configForHand(c, hand).melody;
+          const rng = { rng: hash(`${seed}:${state.bar}:${hand}:melody`) };
+          return [
+            hand,
+            {
+              shape: chooseWeighted(local.contours, rng),
+              motif: chooseWeighted(local.motifs, rng),
+            },
+          ];
+        }),
+      );
     const voiceShapes = new Map(
       specs.map(({ hand, id, profile }) => {
-        const shape = shapes.get(hand)!;
+        const shape = melodyPlans?.get(hand)?.shape ?? shapes.get(hand)!;
+        const coverage = configForHand(c, hand).coverage;
         if (coverage.kind !== "guided") return [id, shape] as const;
         const h = state.hands.find((h) => h.hand === hand)!;
         const pitches = h.fingerToMidi.filter((m, i) =>
@@ -258,7 +283,8 @@ export function generateIndependent(
     for (let b = 0; b < c.notation.phraseBars; b++) {
       const bar = initial.bar + b,
         barTick = bar * measure;
-      const baseEnd = measure - smallRestBeats(c, b) * TPQ;
+      const baseEndFor = (hand: Hand) =>
+        measure - smallRestBeats(configForHand(c, hand), b) * TPQ;
       const restCues = (hand: Hand) =>
         windows
           .filter(
@@ -268,7 +294,8 @@ export function generateIndependent(
               w.cueTick < barTick + measure,
           )
           .map((w) => Math.max(0, w.cueTick - barTick));
-      const endFor = (hand: Hand) => Math.min(baseEnd, ...restCues(hand));
+      const endFor = (hand: Hand) =>
+        Math.min(baseEndFor(hand), ...restCues(hand));
       const mainDurations = (hand: Hand) =>
         specs
           .find((v) => v.hand === hand)!
@@ -337,7 +364,8 @@ export function generateIndependent(
             (wide ||
               !voice.lastPitch ||
               Math.abs(diatonicIndex(pitch) - diatonicIndex(voice.lastPitch)) <=
-                (main.profile.maxIntervalSteps ?? c.melody.maxIntervalSteps)) &&
+                (main.profile.maxIntervalSteps ??
+                  configForHand(c, from.hand).melody.maxIntervalSteps)) &&
             !occupied.some(
               (key) =>
                 key.hand === from.hand &&
@@ -361,7 +389,11 @@ export function generateIndependent(
         }
       }
       const cursors = specs.map(() => 0);
-      const priority = Math.floor(random(state) * specs.length);
+      const priority = Math.floor(
+        random(
+          c.handParameters ? { rng: hash(`${seed}:${bar}:priority`) } : state,
+        ) * specs.length,
+      );
       while (Math.min(...cursors) < measure) {
         // Earliest next event wins. Stable voice order resolves coincident attacks.
         const onset = Math.min(...cursors);
@@ -378,6 +410,12 @@ export function generateIndependent(
         const selectedLane =
           landingLane >= 0 ? landingLane : (lane + priority) % specs.length;
         const { hand, id, profile, durations } = specs[selectedLane];
+        const local = configForHand(c, hand);
+        const baseEnd = baseEndFor(hand);
+        const voiceMotif = melodyPlans?.get(hand)?.motif ?? motif;
+        const masterRng = state.rng;
+        if (c.handParameters)
+          state.rng = hash(`${seed}:${chunkRng}:${bar}:${onset}:${id}`);
         const h = state.hands.find((position) => position.hand === hand)!;
         const memory = memories[id];
         const tick = barTick + onset;
@@ -402,6 +440,19 @@ export function generateIndependent(
         const active = occupied.filter(
           (key) => key.release > tick && key.voice !== id,
         );
+        const permitsOverlap = () => {
+          if (!active.length) return true;
+          const limits = active.map((key) =>
+            overlapLimits(policy, hand, key.hand),
+          );
+          return (
+            limits.every(({ maxTicks }) => maxTicks > 0) &&
+            ((c.handParameters &&
+              limits.every(({ probability }) => probability === 1)) ||
+              random(state) <
+                Math.min(...limits.map(({ probability }) => probability)))
+          );
+        };
         const coincident = active.some((key) => key.onset === tick);
         const attackChance = Math.min(
           1,
@@ -411,7 +462,7 @@ export function generateIndependent(
           landing !== undefined ||
           (memory.active &&
             !otherLanding &&
-            (!c.dynamicFingering ||
+            (!local.dynamicFingering ||
               !movements.some(
                 (m) =>
                   m.hand === hand &&
@@ -420,9 +471,7 @@ export function generateIndependent(
               )) &&
             options.length > 0 &&
             random(state) < attackChance &&
-            (!active.length ||
-              (policy.maxOverlapTicks > 0 &&
-                random(state) < policy.overlapProbability)));
+            permitsOverlap());
         const duration =
           carry?.duration ??
           (options.length && memory.active && !otherLanding
@@ -482,7 +531,7 @@ export function generateIndependent(
           if (!heads.every((n) => voiceAllows(profile, n.midi, n.finger)))
             return false;
           if (
-            c.dynamicFingering &&
+            local.dynamicFingering &&
             newHeads.length &&
             sameHand.some((n) => n.restedAlternate)
           )
@@ -503,7 +552,7 @@ export function generateIndependent(
             active.some(
               (key) =>
                 Math.min(tick + duration, key.release) - tick >
-                policy.maxOverlapTicks,
+                overlapLimits(policy, hand, key.hand).maxTicks,
             )
           )
             return false;
@@ -578,14 +627,14 @@ export function generateIndependent(
           Math.min(
             4,
             voiceShapes.get(id)![b] +
-              motif[(onset / 240) % motif.length] +
-              c.melody.motifOffset,
+              voiceMotif[(onset / 240) % voiceMotif.length] +
+              local.melody.motifOffset,
           ),
         );
         const attack =
           !carry && canAttack && landing === undefined
             ? chooseDynamicAttack(
-                c,
+                local,
                 state,
                 fingeringPlan,
                 event,
@@ -596,7 +645,7 @@ export function generateIndependent(
                 b === c.notation.phraseBars - 1 &&
                   onset + duration === soundedEnd,
                 (n, position) => safe([n], position),
-                profile.maxIntervalSteps ?? c.melody.maxIntervalSteps,
+                profile.maxIntervalSteps ?? local.melody.maxIntervalSteps,
                 pos.resolutionPitch,
               )
             : undefined;
@@ -611,12 +660,15 @@ export function generateIndependent(
           const last =
             b === c.notation.phraseBars - 1 && onset + duration === soundedEnd;
           const interval =
-            profile.maxIntervalSteps ?? c.melody.maxIntervalSteps;
+            profile.maxIntervalSteps ?? local.melody.maxIntervalSteps;
           let startChoices = [0, 1, 2, 3, 4].filter((index) => {
             const midi = Note.midi(h.pitches[index])!;
             return voiceAllows(profile, midi, h.fingerToMidi.indexOf(midi) + 1);
           });
-          if (!pos.lastPitch && c.melody.startRegion === "largest-connected") {
+          if (
+            !pos.lastPitch &&
+            local.melody.startRegion === "largest-connected"
+          ) {
             const regions: number[][] = [[]];
             for (const i of startChoices) {
               const previous = regions.at(-1)!.at(-1);
@@ -636,7 +688,7 @@ export function generateIndependent(
             landing !== undefined
               ? [landing]
               : (pos.lastPitch
-                  ? melodicChoices(c, pos, chords[b], false)
+                  ? melodicChoices(local, pos, chords[b], false)
                   : startChoices
                 ).filter((index) => {
                   const pitch = h.pitches[index];
@@ -654,7 +706,7 @@ export function generateIndependent(
                     ])
                   );
                 });
-          if (last && c.melody.preferHarmonicEnding) {
+          if (last && local.melody.preferHarmonicEnding) {
             const harmonic = choices.filter((index) =>
               chords[b].includes(Note.pitchClass(h.pitches[index])),
             );
@@ -664,7 +716,7 @@ export function generateIndependent(
             const index =
               landing ??
               chooseWeighted(
-                melodicWeights(c, pos, choices, goal, chords[b], last),
+                melodicWeights(local, pos, choices, goal, chords[b], last),
                 state,
               );
             const pitch = h.pitches[index];
@@ -674,7 +726,7 @@ export function generateIndependent(
             );
             const chromatic = profile.chromatic
               ? planChromatic(
-                  c,
+                  local,
                   pos,
                   index,
                   false,
@@ -717,7 +769,7 @@ export function generateIndependent(
                 ? "REPEAT_NOTE"
                 : "PLAY_WITHIN_POSITION",
           });
-          const ties = c.notation.ties;
+          const ties = local.notation.ties;
           const addTones =
             !carry ||
             (ties !== false &&
@@ -730,17 +782,17 @@ export function generateIndependent(
             landing === undefined &&
             profile.chords &&
             !anchor.fingering &&
-            c.chords.kind === "voicings" &&
+            local.chords.kind === "voicings" &&
             !memory.resolutionPitch &&
             !pos.resolutionPitch &&
             h.pitches.includes(anchor.pitch) &&
-            random(state) < c.chords.probability
+            random(state) < local.chords.probability
           ) {
-            const chord = c.chords;
+            const chord = local.chords;
             const candidates = chordCandidatesForConfig(
               event,
               h,
-              c,
+              local,
               chords[b],
               pos.lastFingering?.map((n) => n.midi),
               carry ? [anchor] : [],
@@ -813,6 +865,7 @@ export function generateIndependent(
               attack?.movement?.technique ?? attack?.head.fingering?.technique,
             );
         }
+        if (c.handParameters) state.rng = masterRng;
         events.push(event);
         cursors[selectedLane] += duration;
       }
@@ -820,7 +873,7 @@ export function generateIndependent(
     state.bar += c.notation.phraseBars;
     attachNoteLifetimes(events, c);
     planTies(events, c, initial, state, seed, movements);
-    if (c.dynamicFingering) {
+    if (dynamic) {
       finishFingering(fingeringPlan, state, c);
       planSubstitutions(fingeringPlan, state, c);
     }
@@ -852,12 +905,14 @@ export function generateIndependent(
         state.independentVoices!.leapPreparations = pending;
       else delete state.independentVoices!.leapPreparations;
     }
-    if (coverage.kind === "guided") {
+    if (state.coverage) {
       const lifetimes = [
         ...(initial.activeLifetimes ?? []),
         ...lifetimeNotes(events),
       ];
       for (const { hand } of state.hands) {
+        const coverage = configForHand(c, hand).coverage;
+        if (coverage.kind !== "guided") continue;
         const heard = lifetimes.filter((n) => n.hand === hand);
         recordRangeCoverage(
           state.coverage![hand]!,
@@ -873,6 +928,7 @@ export function generateIndependent(
         );
       }
     }
+    if (c.handParameters) state.rng = hash(`${seed}:${state.bar}:continuation`);
     state.hints = inferFingeringHints(
       events,
       positions,
@@ -891,7 +947,7 @@ export function generateIndependent(
       events,
       positions,
       movements,
-      ...(c.wideLeaps.kind !== "disabled"
+      ...(wideEnabled || c.wideLeaps.kind !== "disabled"
         ? { movementDiagnostics: diagnostics }
         : {}),
       harmonies: harmony.map(

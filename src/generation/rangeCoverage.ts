@@ -145,6 +145,34 @@ export function recordRangeCoverage(
   );
 }
 
+import { configForHand } from "./config/handParameters";
+import type { ValidatedGeneratorConfig } from "./config";
+
+export function validIndependentCoverage(
+  state: StreamState,
+  context: string,
+  config: ValidatedGeneratorConfig,
+) {
+  const covered = state.hands.filter(
+    ({ hand }) => configForHand(config, hand).coverage.kind === "guided",
+  );
+  if (!covered.length) return state.coverage === undefined;
+  if (Object.keys(state.coverage ?? {}).length !== covered.length) return false;
+  return covered.every((hand) => {
+    const policy = configForHand(config, hand.hand).coverage;
+    const entry = state.coverage?.[hand.hand];
+    return (
+      policy.kind === "guided" &&
+      !!entry &&
+      validCoverageMemory(
+        { ...state, hands: [hand], coverage: { [hand.hand]: entry } },
+        context,
+        policy,
+      )
+    );
+  });
+}
+
 export function validCoverageMemory(
   state: StreamState,
   context: string,

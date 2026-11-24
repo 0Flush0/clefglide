@@ -86,6 +86,15 @@ export function generatorConfigFingerprint(
   return `${version}:parameters:${JSON.stringify(identity)}`;
 }
 export function generatorConfigVersion(config: ValidatedGeneratorConfig) {
+  if (
+    config.handParameters ||
+    [config.independentVoices?.left, config.independentVoices?.right].some(
+      (group) =>
+        group?.maxWithinHandOverlapTicks !== undefined ||
+        group?.withinHandOverlapProbability !== undefined,
+    )
+  )
+    return "13.0.0";
   if (config.articulation) return "12.0.1";
   const wide = config.wideLeaps;
   const independent = config.independentVoices;

@@ -83,9 +83,7 @@ test("timed practice streams independent voices, wide leaps and tied bass holds 
   expect(seed).toBeDefined();
   const phrases = stream(config, seed!, 3);
   await stageConfiguration(page, config, seed!);
-  await page.getByText("Advanced settings", { exact: true }).click();
   await page.getByLabel("Scoring mode").selectOption("timed");
-  await page.getByText("Advanced settings", { exact: true }).click();
   await page.getByRole("button", { name: "Apply & generate" }).click();
   await expect(page.getByTestId("notation").locator("svg")).toHaveAttribute(
     "data-staff-count",
@@ -115,11 +113,15 @@ test("timed practice streams independent voices, wide leaps and tied bass holds 
         add(lifetime.releaseTick, { midi: head.midi, down: false });
     }
   }
-  let previousMs = -config.notation.beats * 1000;
+  const bpm = Number(
+    await page.getByRole("slider", { name: "Tempo", exact: true }).inputValue(),
+  );
+  const beatMs = 60_000 / bpm;
+  let previousMs = -config.notation.beats * beatMs;
   let sawCarry = false;
   let sawWideCue = false;
   for (const [tick, edges] of [...trace].sort(([a], [b]) => a - b)) {
-    const ms = (tick * 1000) / TPQ;
+    const ms = (tick * beatMs) / TPQ;
     await page.clock.fastForward(ms - previousMs);
     previousMs = ms;
     const pitches = attacks.get(tick);
@@ -274,9 +276,9 @@ test("custom dynamic fingering and articulation survive streaming, hints, replay
     "data-pitches",
     before!,
   );
-  await page.getByText("Advanced settings", { exact: true }).click();
   await page.getByLabel("Scoring mode").selectOption("benchmark");
   await page.getByLabel("Practice profile").selectOption("guided");
+  await page.getByText("Advanced settings", { exact: true }).click();
   await expect(page.getByLabel("Scoring mode")).toHaveValue("benchmark");
   await page.getByRole("button", { name: "Apply & generate" }).click();
   await expect(page.getByRole("button", { name: "Reveal hint" })).toHaveCount(
@@ -285,11 +287,12 @@ test("custom dynamic fingering and articulation survive streaming, hints, replay
   await page.reload();
   await expect(page.getByLabel("Practice profile")).toHaveValue("guided");
   await page.getByLabel("Practice profile").selectOption("custom");
-  await page.getByText("Generator parameters", { exact: true }).click();
+  await page.getByRole("button", { name: "Edit music settings" }).click();
+  await page.getByText("Expert settings", { exact: true }).click();
+  await page.getByText("Generator parameters (JSON)", { exact: true }).click();
   expect(
     JSON.parse(await page.getByLabel("GeneratorConfig JSON").inputValue()),
   ).toEqual(config);
-  await page.getByText("Advanced settings", { exact: true }).click();
   await expect(page.getByLabel("Scoring mode")).toHaveValue("benchmark");
   expect(errors).toEqual([]);
 });

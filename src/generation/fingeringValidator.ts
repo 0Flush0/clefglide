@@ -7,6 +7,7 @@ import {
   type ScoreEvent,
 } from "../score/model";
 import type { ValidatedGeneratorConfig } from "./config";
+import { configForHand, fingeringPolicies } from "./config/handParameters";
 import {
   continuousTransfer,
   permitsAlternateContact,
@@ -35,7 +36,7 @@ export function configuredAlternate(
 ) {
   return (
     e.fingering &&
-    c.dynamicFingering?.techniques.some(
+    configForHand(c, e.hand).dynamicFingering?.techniques.some(
       (r) => r.technique === e.fingering?.technique,
     )
   );
@@ -46,7 +47,6 @@ export function validateDynamicFingering(
   p: Omit<Phrase, "settings">,
   c: ValidatedGeneratorConfig,
 ) {
-  const policy = c.dynamicFingering;
   const errors = validateSubstitutions(p, p.final, c);
   if (
     !validFingeringBoundary(c, p.seed, p.initial) ||
@@ -54,7 +54,7 @@ export function validateDynamicFingering(
   )
     return [...errors, "Invalid dynamic fingering boundary state."];
   const moves = p.movements.filter(isContinuousMovement);
-  if (!policy) {
+  if (!fingeringPolicies(c).length) {
     if (
       moves.length ||
       p.events.some(
@@ -75,7 +75,9 @@ export function validateDynamicFingering(
   for (const move of moves) {
     const e = byId.get(move.landingNoteId);
     const source = sourceAt(spans, move.hand, move.landingTick);
-    const rule = policy.techniques.find(
+    const local = configForHand(c, move.hand);
+    const policy = local.dynamicFingering;
+    const rule = policy?.techniques.find(
       (r) => r.technique === move.technique && "maxPositionSteps" in r,
     );
     const from = p.positions.find(
@@ -97,7 +99,7 @@ export function validateDynamicFingering(
       eventTick(e, c) !== move.landingTick ||
       move.cueTick !== source.start ||
       move.transferStartTick !==
-        move.landingTick - continuousTransfer(rule, policy.tempoBpm) ||
+        move.landingTick - continuousTransfer(rule, policy!.tempoBpm) ||
       e.positionId !== to.id ||
       noteheads(e).length !== 1 ||
       noteheads(e)[0].tie ||
@@ -116,7 +118,16 @@ export function validateDynamicFingering(
           s.start === move.landingTick,
       ) ||
       !permitsContinuousContact(rule, from, to, source, e) ||
-      !continuousWindow(p, spans, c, rule, from, to, source, move.landingTick)
+      !continuousWindow(
+        p,
+        spans,
+        local,
+        rule,
+        from,
+        to,
+        source,
+        move.landingTick,
+      )
     )
       errors.push(
         "Invalid continuous fingering movement, source or clearance.",
@@ -125,12 +136,14 @@ export function validateDynamicFingering(
   for (const e of [...p.events].sort(
     (a, b) => eventTick(a, c) - eventTick(b, c),
   )) {
+    const local = configForHand(c, e.hand);
+    const policy = local.dynamicFingering;
     const heads = noteheads(e);
     const primary = heads[0];
     const move = movesAt.get(e.id);
     const tag = e.fingering;
     if (tag || heads.some((n) => n.fingering)) {
-      const rule = policy.techniques.find(
+      const rule = policy?.techniques.find(
         (r) => r.technique === tag?.technique,
       );
       const pos = p.positions.find(
@@ -157,7 +170,7 @@ export function validateDynamicFingering(
           tag.expectedFinger,
           e.finger,
         ) ||
-        !alternateWindow(p, spans, c, rule, e.hand, start, e) ||
+        !alternateWindow(p, spans, local, rule, e.hand, start, e) ||
         spans.some(
           (s) =>
             s.hand === e.hand &&
@@ -172,7 +185,7 @@ export function validateDynamicFingering(
     const technique = move?.technique ?? tag?.technique;
     if (technique) {
       const run = nextRun(runs[e.hand], technique);
-      if (!runAllowed(policy, run))
+      if (!policy || !runAllowed(policy, run))
         errors.push("Dynamic fingering exceeds configured sequence limits.");
       runs[e.hand] = run;
     } else delete runs[e.hand];

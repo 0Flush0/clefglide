@@ -1,6 +1,8 @@
 # Generator configuration and architecture
 
-`generateConfigured(config, seed, previous?)` in `src/generation` is the production entry point for Guided and Advanced practice. Both profiles use the same `GeneratedPhrase` and pass its full `final` state into the next call. The `planner.ts` and `config/presets.ts` adapters are specific to 5.2.0 replay and its regression fixtures.
+`generateConfigured(config, seed, previous?)` in `src/generation` is the production entry point for Guided and Advanced practice. Both profiles use the same `GeneratedPhrase` and pass its full `final` state into the next call. The `planner.ts` and `config/presets.ts` adapters are specific to legacy migration, 5.2.0 replay and its regression fixtures.
+
+Version 13 adds scoped hand policies for independent rhythm. See the [practice configuration reference](PRACTICE_CONFIGURATION.md#hand-and-shared-settings) for override resolution, the shared coordination model and UI mapping.
 
 The engine accepts a branded, deeply readonly `ValidatedGeneratorConfig`. Each phrase carries the resolved config and its parameter fingerprint. Versions are 5.2.0 for the original core, 6.0.0 for wide leaps, 7.0.0 for explicit lifetimes, 8.1.0 for shared-rhythm ties, 9.0.0 for the original independent scheduler, and 10.0.0 for independent voices with wide leaps, guided coverage or authored rested-alternate permission. Enabling `dynamicFingering` selects 11.0.0. Opting into `articulation` selects 12.0.1 and includes the resolved articulation policy in the fingerprint. Selected older profiles use a patch identity when they exercise a corrected planner path. See the verification report below.
 
@@ -77,7 +79,7 @@ const second = generateConfigured(config, first.seed, first.final);
 const duet = generateConfigured(guidedIndependentDuet(), "guided-duet");
 ```
 
-To run an example in the app, serialize its resolved config with `JSON.stringify(config, null, 2)`. Paste the document into **Advanced → Generator parameters**, select **Use parameters** and then **Apply & generate**. Wait, timed and benchmark scoring apply to either practice profile. The custom profile, resolved configuration and applied seed persist locally. Launching a replay uses the session's seed and config without replacing saved practice preferences. [Practice guide](PRACTICE.md)
+To run an example in the app, serialize its resolved config with `JSON.stringify(config, null, 2)`. Choose **Advanced** and select **Edit music settings**. Open **Expert settings**, then **Generator parameters (JSON)**. Paste the document, select **Use parameters** and choose **Apply changes**. Wait, timed and benchmark scoring apply to either practice profile. The custom profile, resolved configuration and applied seed persist locally. Launching a replay uses the session's seed and config without replacing saved practice preferences. [Practice guide](PRACTICE.md)
 
 ## Complete parameter inventory
 

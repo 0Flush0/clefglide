@@ -1,3 +1,4 @@
+import { configForHand } from "./config/handParameters";
 import { Chord, Note } from "tonal";
 import {
   TPQ,
@@ -12,7 +13,7 @@ import {
   generatorConfigFingerprint,
   type ValidatedGeneratorConfig,
 } from "./config";
-import { voiceSpecs } from "./voiceConfig";
+import { overlapLimits, voiceSpecs } from "./voiceConfig";
 import { isRestedAlternateAssignment } from "./alternateFingering";
 import {
   hasMovementPreparation,
@@ -21,7 +22,10 @@ import {
   validateWideSweeps,
   voiceRests,
 } from "./wideLeapValidation";
-import { matchesCoverageUsage, validCoverageMemory } from "./rangeCoverage";
+import {
+  matchesCoverageUsage,
+  validIndependentCoverage,
+} from "./rangeCoverage";
 
 /** Reconstruct voice schedules and physical occupancy from score data, without sampling. */
 export function validateIndependentVoices(
@@ -37,16 +41,16 @@ export function validateIndependentVoices(
   const tick = (e: { bar: number; onset: number }) => e.bar * measure + e.onset;
   const context = JSON.stringify([p.seed, generatorConfigFingerprint(c)]);
   const alternateHolds = new Set<string>();
-  if (c.fingering.allowRestedAlternates)
-    for (const t of p.initial.pendingTies ?? []) {
-      const position = p.initial.hands.find((h) => h.hand === t.head.hand);
-      if (
-        position &&
-        t.head.tie &&
-        isRestedAlternateAssignment(position, t.head, t.head.fingering)
-      )
-        alternateHolds.add(t.head.tie.lifetimeId);
-    }
+  for (const t of p.initial.pendingTies ?? []) {
+    const position = p.initial.hands.find((h) => h.hand === t.head.hand);
+    if (
+      configForHand(c, t.head.hand).fingering.allowRestedAlternates &&
+      position &&
+      t.head.tie &&
+      isRestedAlternateAssignment(position, t.head, t.head.fingering)
+    )
+      alternateHolds.add(t.head.tie.lifetimeId);
+  }
   const black = (m: number) => [1, 3, 6, 8, 10].includes(m % 12);
   const center = (m: number) =>
     Math.floor(m / 12) * 7 +
@@ -108,6 +112,7 @@ export function validateIndependentVoices(
   }
   for (const spec of specs) {
     const { id, hand, profile, durations } = spec;
+    const local = configForHand(c, hand);
     const before = p.initial.independentVoices?.voices[id],
       after = p.final.independentVoices?.voices[id];
     if (
@@ -146,7 +151,7 @@ export function validateIndependentVoices(
     let chromaticPending = !!resolution;
     let attacks = 0,
       soundedTicks = 0;
-    const limit = profile.maxIntervalSteps ?? c.melody.maxIntervalSteps;
+    const limit = profile.maxIntervalSteps ?? local.melody.maxIntervalSteps;
     const allowed = (midi: number, finger: number) =>
       midi >= (profile.minMidi ?? 21) &&
       midi <= (profile.maxMidi ?? 108) &&
@@ -164,7 +169,7 @@ export function validateIndependentVoices(
     for (let bar = p.initial.bar; bar < p.final.bar; bar++) {
       let cursor = 0;
       const b = bar - p.initial.bar;
-      const movement = c.movement;
+      const movement = local.movement;
       const wideMove = moveByHand(hand).some(
         (m) =>
           m.technique === "lifted-wide-leap" && m.landingTick === bar * measure,
@@ -179,8 +184,8 @@ export function validateIndependentVoices(
         movement.probability > 0 &&
         movement.eligibleBars.includes(b + 1)
           ? movement.preparationBeats
-          : c.rhythm.breathBars.includes(b)
-            ? c.rhythm.breathBeats
+          : local.rhythm.breathBars.includes(b)
+            ? local.rhythm.breathBeats
             : 0;
       for (const e of timeline.filter((event) => event.bar === bar)) {
         const pos = positionAt(hand, tick(e));
@@ -213,9 +218,9 @@ export function validateIndependentVoices(
         const attack = heads.filter((n) => !n.tie || n.tie.index === 0);
         const continued = heads.filter((n) => (n.tie?.index ?? 0) > 0);
         if (
-          c.notation.ties !== false &&
-          (c.notation.ties.chordTones === "any" ||
-            c.notation.ties.chordTones === "outer") &&
+          local.notation.ties !== false &&
+          (local.notation.ties.chordTones === "any" ||
+            local.notation.ties.chordTones === "outer") &&
           heads.filter((n) => n.tie !== undefined).length > 1
         )
           errors.push("A partial chord may carry only one selected tone.");
@@ -236,7 +241,7 @@ export function validateIndependentVoices(
           !!primary &&
           hold !== undefined &&
           (configuredAlternate(c, e) ||
-            (c.fingering.allowRestedAlternates &&
+            (local.fingering.allowRestedAlternates &&
               !move &&
               heads.length === 1 &&
               (!e.fingering ||
@@ -300,8 +305,8 @@ export function validateIndependentVoices(
             n.written.accidental !== written.acc ||
             (!pos.pitches.includes(n.pitch) &&
               (!profile.chromatic ||
-                c.chromatic.kind !== "neighbors" ||
-                c.chromatic.probability === 0)) ||
+                local.chromatic.kind !== "neighbors" ||
+                local.chromatic.probability === 0)) ||
             (pos.fingerToMidi[n.finger - 1] !== n.midi &&
               !pos.pitchOptions?.[n.finger - 1]?.includes(n.pitch) &&
               !(n === primary && alternate)) ||
@@ -313,7 +318,7 @@ export function validateIndependentVoices(
             );
         }
         if (heads.length > 1) {
-          const chord = c.chords;
+          const chord = local.chords;
           const shape = heads
             .map((n) => n.finger)
             .sort()
@@ -432,45 +437,32 @@ export function validateIndependentVoices(
           lifetime: n.lifetime,
         });
     }
-  const coverage = c.coverage;
-  if (coverage.kind === "guided") {
-    if (
-      (start
-        ? !validCoverageMemory(p.initial, context, coverage)
-        : p.initial.coverage !== undefined) ||
-      !validCoverageMemory(p.final, context, coverage) ||
-      p.initial.hands.some((hand) => {
-        const before = p.initial.coverage?.[hand.hand];
-        const after = p.final.coverage![hand.hand]!;
-        const center =
-          (Math.min(...hand.fingerToMidi) + Math.max(...hand.fingerToMidi)) / 2;
-        return (
-          (before &&
-            (before.min !== after.min ||
-              before.max !== after.max ||
-              (before.remaining > 0 &&
-                Math.abs(before.target - center) >
-                  coverage.reachedToleranceSemitones &&
-                (before.target !== after.target ||
-                  before.remaining - 1 !== after.remaining)))) ||
-          !matchesCoverageUsage(
-            notes,
-            hand,
-            before,
-            after,
-            start,
-            end,
-            coverage,
-          )
-        );
-      })
-    )
-      errors.push(
-        "Independent coverage state differs from the sounding score.",
+  if (
+    (start
+      ? !validIndependentCoverage(p.initial, context, c)
+      : p.initial.coverage !== undefined) ||
+    !validIndependentCoverage(p.final, context, c) ||
+    p.initial.hands.some((hand) => {
+      const coverage = configForHand(c, hand.hand).coverage;
+      if (coverage.kind !== "guided") return false;
+      const before = p.initial.coverage?.[hand.hand];
+      const after = p.final.coverage![hand.hand]!;
+      const center =
+        (Math.min(...hand.fingerToMidi) + Math.max(...hand.fingerToMidi)) / 2;
+      return (
+        (before &&
+          (before.min !== after.min ||
+            before.max !== after.max ||
+            (before.remaining > 0 &&
+              Math.abs(before.target - center) >
+                coverage.reachedToleranceSemitones &&
+              (before.target !== after.target ||
+                before.remaining - 1 !== after.remaining)))) ||
+        !matchesCoverageUsage(notes, hand, before, after, start, end, coverage)
       );
-  } else if (p.initial.coverage || p.final.coverage) {
-    errors.push("Coverage state requires guided coverage.");
-  }
+    })
+  )
+    errors.push("Independent coverage state differs from the sounding score.");
   const boundaries = [
     ...new Set([
       start,
@@ -490,9 +482,10 @@ export function validateIndependentVoices(
       for (const other of held) {
         const overlap =
           Math.min(n.lifetime.releaseTick, other.lifetime.releaseTick) - at;
+        const limit = overlapLimits(policy, n.hand, other.hand);
         if (
           n.lifetime.voiceId !== other.lifetime.voiceId &&
-          (overlap > policy.maxOverlapTicks || policy.overlapProbability === 0)
+          (overlap > limit.maxTicks || limit.probability === 0)
         )
           errors.push("Different voices exceed the permitted overlap.");
       }
@@ -555,7 +548,7 @@ export function validateIndependentVoices(
   }
   for (const hand of ["right", "left"] as const) {
     const group = policy[hand];
-    if (!group) continue;
+    if (!group || !specs.some((voice) => voice.hand === hand)) continue;
     if (peak[hand] < group.minPolyphony || peak[hand] > group.maxPolyphony)
       errors.push(`${hand} hand did not meet the requested polyphony range.`);
     const lastMain = p.events
@@ -590,7 +583,7 @@ export function validateIndependentVoices(
       );
   }
   for (const m of p.movements) {
-    const movement = c.movement;
+    const movement = configForHand(c, m.hand).movement;
     const from = positionAt(m.hand, m.landingTick - 1),
       to = positionAt(m.hand, m.landingTick);
     const landing = p.events.find((e) => e.id === m.landingNoteId);

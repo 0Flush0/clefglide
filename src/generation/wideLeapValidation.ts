@@ -1,4 +1,5 @@
 import { Note } from "tonal";
+import { configForHand } from "./config/handParameters";
 import {
   TPQ,
   type HandState,
@@ -102,12 +103,12 @@ export function validVoiceLeapBoundary(
   state: StreamState,
   c: ValidatedGeneratorConfig,
 ) {
-  const wide = c.wideLeaps;
   const measure = c.notation.beats * TPQ;
   const boundary = state.bar * measure;
   return Object.entries(state.independentVoices?.leapPreparations ?? {}).every(
-    ([hand, window]) =>
-      !(
+    ([hand, window]) => {
+      const wide = configForHand(c, hand as Hand).wideLeaps;
+      return !(
         !window ||
         !state.hands.some((h) => h.hand === hand) ||
         wide.kind !== "lifted-wide" ||
@@ -132,7 +133,8 @@ export function validVoiceLeapBoundary(
             n.lifetime.keyHold.kind === "required" &&
             n.lifetime.keyHold.releaseTick > window.cueTick,
         )
-      ),
+      );
+    },
   );
 }
 
@@ -194,7 +196,7 @@ export function validateWideLanding(
   lastPitch?: string,
   lastEnd?: number,
 ) {
-  const w = c.wideLeaps;
+  const w = configForHand(c, m.hand).wideLeaps;
   if (w.kind !== "lifted-wide" || w.probability === 0) return false;
   const to = p.positions.find(
     (pos) => pos.hand === m.hand && pos.id === m.toPositionId,

@@ -109,6 +109,7 @@ const configuredSessionSchema = sessionBase.extend({
   kind: z.literal("configured"),
   generatorVersion: z.string().regex(/^\d+\.\d+\.\d+$/),
   setup: savedSetupSchema,
+  finished: z.boolean().optional(),
   durationResults: z.array(durationSchema),
   articulationResults: z.array(articulationSchema),
 });
@@ -169,6 +170,7 @@ export function recordConfigured(
   assistanceUsed: boolean,
   outcomes: {
     results: Result[];
+    finished?: boolean;
     durationResults: DurationResult[];
     articulationResults: ArticulationResult[];
   },

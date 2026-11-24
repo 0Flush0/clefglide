@@ -9,6 +9,17 @@ test("German first visit covers practice, help and progress and remembers langua
   await expect(page.getByLabel("Übungsprofil")).toBeVisible();
   await expect(page.getByTestId("placement-plan")).toContainText("Daumen auf");
   await expect(page.getByTestId("placement-plan")).toContainText("Beginne auf");
+  const profile = page.getByLabel("Übungsprofil");
+  await profile.selectOption("custom");
+  await page
+    .getByRole("button", { name: "Musikeinstellungen bearbeiten" })
+    .click();
+  await page.getByText("Melodie", { exact: true }).click();
+  await expect(page.getByLabel("Größtes Melodieintervall")).toHaveValue("1");
+  await expect(
+    page.getByRole("option", { name: "Sekunde", exact: true }),
+  ).toBeAttached();
+  await profile.selectOption("guided");
   await page.getByRole("tab", { name: "Einstellungen & Hilfe" }).click();
   await expect(
     page.getByRole("heading", { name: "Verbindungsprobleme lösen" }),

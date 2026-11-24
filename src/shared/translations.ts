@@ -1,5 +1,447 @@
 ﻿// English message keys remain stable across saved practice sessions.
 export const german: Record<string, string> = {
+  "Guided learning path": "Geführter Lernpfad",
+  "Level progression": "Stufenübersicht",
+  Level: "Stufe",
+  Stage: "Abschnitt",
+  "Saved setup": "Gespeicherte Einstellung",
+  "Previous stage": "Vorheriger Abschnitt",
+  "Next stage": "Nächster Abschnitt",
+  "Currently practising": "Aktuelle Übung",
+  "Selected for next exercise": "Für die nächste Übung ausgewählt",
+  "Up next": "Als Nächstes",
+  "Suggested tempo": "Empfohlenes Tempo",
+  "Browse stages and levels": "Abschnitte und Stufen durchsuchen",
+  "Guided stage": "Abschnitt",
+  "Level in stage": "Stufe im Abschnitt",
+  "Custom level settings": "Angepasste Stufeneinstellungen",
+  "Restore level settings": "Stufeneinstellungen wiederherstellen",
+  "Hand mobility": "Beweglichkeit",
+  Harmony: "Harmonie",
+  "Sustained playing": "Gehaltene Töne",
+  "Keyboard fluency": "Orientierung auf der Tastatur",
+  "Fingering fluency": "Sicherer Fingersatz",
+  Polyphony: "Mehrstimmigkeit",
+  Expression: "Ausdruck",
+  Mastery: "Meisterstufe",
+  "Rhythmic independence": "Rhythmische Unabhängigkeit",
+  "Paired mobility": "Bewegung beider Hände",
+  "Harmony and accompaniment": "Harmonie und Begleitung",
+  "Sustained parts": "Gehaltene Stimmen",
+  "Keyboard dialogue": "Wechselspiel auf der Tastatur",
+  "Independent fingering and voices": "Unabhängiger Fingersatz und Stimmen",
+  "Expressive dialogue": "Ausdruck im Wechselspiel",
+  "Read treble from middle C with a stable hand.":
+    "Lies im Violinschlüssel ab dem mittleren C mit stabiler Handlage.",
+  "Read bass near C3 with a stable hand.":
+    "Lies im Bassschlüssel um C3 mit stabiler Handlage.",
+  "Read longer skips, mixed note values, and new meters and key signatures.":
+    "Lies weitere Sprünge, gemischte Notenwerte sowie neue Takt- und Tonarten.",
+  "Follow prepared landings and expand from a single position into neighboring positions.":
+    "Folge vorbereiteten Landungen und erweitere eine feste Lage um benachbarte Lagen.",
+  "Read harmonic intervals and approved triad voicings as vertical shapes.":
+    "Erkenne harmonische Intervalle und zugelassene Dreiklangsgriffe als vertikale Formen.",
+  "Read release lengths, tied subdivisions, and partial chord holds.":
+    "Lies unterschiedliche Tondauern, gebundene Unterteilungen und gehaltene Akkordtöne.",
+  "Use wider register bands, prepared leaps, and chromatic neighbors.":
+    "Nutze größere Tonbereiche, vorbereitete Sprünge und chromatische Nebentöne.",
+  "Read explicit reaches, crossings, and changes of finger on a held key.":
+    "Lies eingezeichnete Reichbewegungen, Unter- und Übersätze sowie Fingerwechsel auf gehaltenen Tasten.",
+  "Separate two lines under one hand with independently held keys.":
+    "Trenne zwei Linien in einer Hand mit unabhängig gehaltenen Tasten.",
+  "Interpret release lengths, expressive grouping, and accent contrasts.":
+    "Interpretiere Tondauern, Ausdrucksgruppen und unterschiedliche Betonungen.",
+  "Combine wide travel, finger plans, voicing, sustained layers and expression in demanding studies.":
+    "Kombiniere weite Wege, Fingersätze, Griffe, gehaltene Stimmen und Ausdruck in anspruchsvollen Studien.",
+  "Read grand-staff shapes and coordinate common attacks and releases.":
+    "Lies Formen in beiden Systemen und koordiniere gemeinsame Anschläge und Freigaben.",
+  "Keep one hand playing through the other's distinct attacks and releases.":
+    "Spiele mit einer Hand weiter, während die andere unabhängig anschlägt und loslässt.",
+  "Read eighths, rests, and asymmetric rhythmic patterns on two timelines.":
+    "Lies Achtel, Pausen und asymmetrische Rhythmen in zwei getrennten Verläufen.",
+  "Prepare one hand's landing while the other maintains a line.":
+    "Bereite die Landung einer Hand vor, während die andere ihre Linie fortsetzt.",
+  "Read harmonic attacks under and above moving lines.":
+    "Lies harmonische Anschläge unter und über bewegten Linien.",
+  "Hold through ties and chord changes while the other hand keeps reading.":
+    "Halte Töne durch Bindungen und Akkordwechsel, während die andere Hand weiterliest.",
+  "Travel farther while preserving an independently available partner and chromatic line.":
+    "Lege weitere Wege zurück, während die andere Hand unabhängig bleibt und chromatische Linien erklingen.",
+  "Read explicit technique in one hand, then separate voices within a hand.":
+    "Lies markierte Techniken in einer Hand und trenne anschließend mehrere Stimmen in einer Hand.",
+  "Give each line its own touch, accents, and grouping.":
+    "Gib jeder Linie ihre eigenen Anschläge, Betonungen und Gruppen.",
+  "Combine independently demanding parts, wider travel, extended harmony and sustained expression.":
+    "Kombiniere eigenständig anspruchsvolle Stimmen, weite Wechsel, erweiterte Harmonie und ausdrucksvolle Haltetöne.",
+  Practised: "Geübt",
+  Completed: "Abgeschlossen",
+  Foundations: "Grundlagen",
+  "Rhythmic fluency": "Rhythmussicherheit",
+  "Touch and mobility": "Anschlag und Beweglichkeit",
+  Together: "Zusammenspiel",
+  Coordination: "Koordination",
+  "Independent lines": "Unabhängige Stimmen",
+  "Find the notes": "Noten finden",
+  "Wider intervals": "Größere Intervalle",
+  "Pairs of eighths": "Achtelpaare",
+  "Hold through a tie": "Haltebogen lesen",
+  "Read two notes": "Zwei Noten lesen",
+  "Detached touch": "Kurze Töne",
+  "Move after a breath": "Nach der Pause versetzen",
+  "Land together": "Gemeinsam anschlagen",
+  "Breathe together": "Gemeinsame Pausen",
+  "A slower bass": "Ein langsamerer Bass",
+  "Treble skips over bass steps": "Sprünge rechts, Schritte links",
+  "Eighths over a steady bass": "Achtel über einem gleichmäßigen Bass",
+  "Treble over tied bass": "Melodie über gehaltenem Bass",
+  "Read a short treble line in one five-finger position.":
+    "Lies eine kurze Melodie im Violinschlüssel in einer Fünffingerlage.",
+  "Read a short bass line in one five-finger position.":
+    "Lies eine kurze Melodie im Bassschlüssel in einer Fünffingerlage.",
+  "Recognize fourths within the same hand position.":
+    "Erkenne Quarten innerhalb derselben Handlage.",
+  "Read short eighth-note figures against a steady quarter-note pulse.":
+    "Lies kurze Achtelfiguren über einem gleichmäßigen Viertelpuls.",
+  "Carry a held note through its second written segment.":
+    "Halte einen Ton über den Haltebogen hinweg.",
+  "Read occasional harmonic thirds as a single attack.":
+    "Spiele gelegentlich zwei Töne im Terzabstand gleichzeitig.",
+  "Give marked attacks a shorter release while keeping the pulse.":
+    "Spiele markierte Töne kürzer und halte dabei den Puls.",
+  "Use the written landing cue to shift one scale step after a rest.":
+    "Versetze die Hand nach einer Pause um eine Tonleiterstufe und folge dabei dem eingezeichneten Hinweis.",
+  "Read two different pitches on the same pulse using two fixed positions.":
+    "Lies zwei unterschiedliche Töne im selben Puls aus zwei festen Handlagen.",
+  "Keep the hands aligned through longer notes and a shared rest.":
+    "Spiele längere Noten und eine gemeinsame Pause mit beiden Händen im selben Rhythmus.",
+  "Play two treble attacks for each bass pulse.":
+    "Spiele in der rechten Hand zwei Anschläge pro Basston.",
+  "Read thirds in the right hand while the slower left line stays stepwise.":
+    "Lies Terzen rechts, während links die langsamere Stimme in Schritten bleibt.",
+  "Fit occasional treble eighths around the slower bass attacks.":
+    "Spiele gelegentliche Achtel rechts über den langsameren Basstönen.",
+  "Keep the bass down through a tie while the treble continues.":
+    "Halte den Basston über den Haltebogen, während die rechte Hand weiterspielt.",
+  "Steps and thirds": "Schritte und Terzen",
+  "Quarter and half notes": "Viertel- und halbe Noten",
+  Fourths: "Quarten",
+  "Five-finger reading": "Fünffingerlage",
+  "Eighth notes": "Achtelnoten",
+  "Steady pulse": "Gleichmäßiger Puls",
+  "Ties within a bar": "Haltebögen im Takt",
+  "Mixed rhythm": "Gemischte Notenwerte",
+  "Two-note chords": "Zweiklänge",
+  "Harmonic thirds": "Terzen als Zweiklänge",
+  "Small hand shifts": "Kleine Lagewechsel",
+  "Staccato and thirds": "Staccato und Terzen",
+  "Grand staff": "Klaviernotation",
+  "Together attacks": "Gleichzeitige Anschläge",
+  "Shared rhythm": "Gemeinsamer Rhythmus",
+  "Two-hand rests": "Gemeinsame Pausen",
+  "Independent releases": "Unabhängiges Loslassen",
+  "Quarter notes over half notes": "Viertel über halben Noten",
+  "Asymmetric intervals": "Unterschiedliche Intervalle",
+  "Bass pulse": "Basspuls",
+  "Asymmetric subdivisions": "Unterschiedliche Unterteilungen",
+  "Bass ties": "Haltebögen im Bass",
+  "Asynchronous attacks": "Versetzte Anschläge",
+  "Use a range wide enough for two adjacent five-finger positions.":
+    "Wähle einen Tonbereich für zwei benachbarte Fünffingerlagen.",
+  "Use 4/4 for the regular half-note bass pulse.":
+    "Der regelmäßige Basspuls in halben Noten braucht einen 4/4-Takt.",
+  "Musical parameters": "Musikalische Parameter",
+  "Music settings": "Musikeinstellungen",
+  "Edit music settings": "Musikeinstellungen bearbeiten",
+  "Apply changes": "Änderungen anwenden",
+  "Unapplied changes": "Offene Änderungen",
+  "Settings applied": "Einstellungen angewendet",
+  "Review configuration": "Einstellungen prüfen",
+  "Edit rejected": "Änderung abgelehnt",
+  "Edit rejected. Open Music settings for details.":
+    "Änderung abgelehnt. Einzelheiten findest du in den Musikeinstellungen.",
+  "Expert settings": "Experteneinstellungen",
+  "Adjust score display, playback and input settings, or open the complete generator configuration.":
+    "Passe Notenanzeige, Wiedergabe und Eingabe an oder öffne die vollständige Generatorkonfiguration.",
+  "Generator parameters (JSON)": "Generatorparameter (JSON)",
+  "Edit the complete configuration, including harmony progressions, fingering rules and other technical settings.":
+    "Bearbeite die vollständige Konfiguration mit Akkordfolgen, Fingersatzregeln und weiteren technischen Einstellungen.",
+  "Replace staged settings with JSON":
+    "Offene Einstellungen durch JSON ersetzen",
+  "Reload JSON from staged settings": "Aktuelle Einstellungen als JSON laden",
+  "Settings changed while you were editing JSON. Choose which version to keep.":
+    "Die Einstellungen haben sich während der JSON-Bearbeitung geändert. Wähle die Version, die du behalten möchtest.",
+  "Key and meter apply to the whole score. Independent rhythm gives each hand its own timeline and settings.":
+    "Tonart und Taktart gelten für das ganze Stück. Mit eigenständigem Rhythmus erhält jede Hand ihren eigenen zeitlichen Ablauf und eigene Einstellungen.",
+  "Independent rhythm": "Eigenständiger Rhythmus",
+  "Independent rhythm also enables required key holds.":
+    "Eigenständiger Rhythmus aktiviert auch das Halten der Tasten.",
+  "Shared rhythm uses the original common settings. Switching removes the separate hand and voice settings from this draft.":
+    "Gemeinsamer Rhythmus verwendet die ursprünglichen gemeinsamen Einstellungen. Beim Wechsel werden die separaten Hand- und Stimmeinstellungen aus dem Entwurf entfernt.",
+  "Switch to shared rhythm": "Zu gemeinsamem Rhythmus wechseln",
+  "Shared overlap chance": "Gemeinsame Überlappungswahrscheinlichkeit",
+  "Shared overlap limit (beats)": "Gemeinsame Überlappungsgrenze (Schläge)",
+  "A hand inherits these overlap limits until you set its own under Voices and polyphony.":
+    "Diese Grenzen gelten auch für die Stimmen einer Hand, bis du unter Stimmen und Mehrstimmigkeit eigene Grenzen festlegst.",
+  "Note holds and duration": "Haltedauer und Tastenfreigabe",
+  "Release scoring and key-hold rules apply to the whole score. Ties and finger substitution require physical key holds.":
+    "Die Regeln für das Halten und Loslassen von Tasten gelten für das ganze Stück. Haltebögen und Fingerwechsel auf derselben Taste erfordern das Halten der Taste.",
+  "An active technique or independent rhythm requires physical key holds.":
+    "Eine aktive Technik oder der eigenständige Rhythmus erfordert das Halten der Tasten.",
+  "The controls below show the selected hand. Linked edits update each compatible setting in both hands.":
+    "Die Felder zeigen die gewählte Hand. Gekoppelte Änderungen gelten für beide Hände, sofern die jeweilige Einstellung verfügbar ist.",
+  "Replace the right-hand music and voice settings with the left hand’s? The right-hand range and clef stay in place.":
+    "Die Musik- und Stimmeinstellungen der rechten Hand durch die der linken ersetzen? Tonumfang und Schlüssel der rechten Hand bleiben erhalten.",
+  "Replace the left-hand music and voice settings with the right hand’s? The left-hand range and clef stay in place.":
+    "Die Musik- und Stimmeinstellungen der linken Hand durch die der rechten ersetzen? Tonumfang und Schlüssel der linken Hand bleiben erhalten.",
+  "Confirm copy": "Kopieren bestätigen",
+  "Music for both hands": "Musik für beide Hände",
+  "Left-hand music": "Musik für die linke Hand",
+  "Right-hand music": "Musik für die rechte Hand",
+  "Limit the distance between melody notes. Preference weights favor steps and repeated notes.":
+    "Begrenze den Abstand zwischen Melodietönen. Gewichte begünstigen Schritte und Tonwiederholungen.",
+  "Largest melodic interval": "Größtes Melodieintervall",
+  "Stepwise motion weight": "Gewicht für Tonschritte",
+  "Repeated-note weight": "Gewicht für Tonwiederholungen",
+  "End on a chord tone when possible": "Möglichst auf einem Akkordton enden",
+  "Choose the note values that can fill a bar. A voice can use its own rhythm.":
+    "Wähle Notenwerte, die einen Takt füllen können. Eine Stimme kann einen eigenen Rhythmus verwenden.",
+  "Note values": "Notenwerte",
+  "Voice note values": "Notenwerte dieser Stimme",
+  "Relative weights · longer bars mean more preference":
+    "Relative Gewichte · längere Balken zeigen eine stärkere Bevorzugung",
+  "Largest small shift": "Größter kleiner Lagenwechsel",
+  "Shortest hand leap": "Kleinster Handsprung",
+  "Longest hand leap": "Größter Handsprung",
+  "Largest interval into the landing note": "Größtes Intervall zum Zielton",
+  "Wide leap landings": "Zieltakte für weite Sprünge",
+  "Before bar 1": "Vor Takt 1",
+  "Landing fingers": "Finger für den Zielton",
+  "Register exploration needs a positive chance of moving. Turn it off before disabling the last movement.":
+    "Die Registererkundung braucht eine mögliche Bewegung. Schalte sie aus, bevor du die letzte Bewegung deaktivierst.",
+  "Five consecutive notes": "Fünf aufeinanderfolgende Töne",
+  "Gap between thumb and index": "Lücke zwischen Daumen und Zeigefinger",
+  "Gap between index and middle": "Lücke zwischen Zeige- und Mittelfinger",
+  "Two gaps below the middle finger": "Zwei Lücken bis zum Mittelfinger",
+  "Allow a different finger after a rest":
+    "Nach einer Pause einen anderen Finger erlauben",
+  "Connected shift": "Gebundener Lagenwechsel",
+  "Reach to an adjacent key": "Nachbartaste greifen",
+  "Alternate finger after a rest": "Anderer Finger nach einer Pause",
+  "Finger substitution": "Stummer Fingerwechsel",
+  "Finger substitution needs physical key holds. Enable alternates after a rest under Finger spacing.":
+    "Stumme Fingerwechsel erfordern das Halten der Tasten. Andere Finger nach einer Pause erlaubst du unter Fingerabstände.",
+  "Chromatic neighbor and passing notes":
+    "Chromatische Wechsel- und Durchgangstöne",
+  "Chromatic note chance": "Wahrscheinlichkeit chromatischer Töne",
+  "Continue to the next scale note": "Zum nächsten Tonleiterton weitergehen",
+  "Favor returning to the original note": "Rückkehr zum Ausgangston bevorzugen",
+  "Largest chord span": "Größter Akkordumfang",
+  "Largest voice-leading interval": "Größtes Intervall bei der Stimmführung",
+  "Chord fingerings": "Akkordfingersätze",
+  "Two-note intervals": "Zweistimmige Intervalle",
+  "Minor third": "Kleine Terz",
+  "Major third": "Große Terz",
+  "Perfect fourth": "Reine Quarte",
+  Tritone: "Tritonus",
+  "Perfect fifth": "Reine Quinte",
+  "Minor sixth": "Kleine Sexte",
+  "Major sixth": "Große Sexte",
+  "Triads need at least a fifth of span. Four-note chords need a sixth of span and a chord extension.":
+    "Dreiklänge benötigen mindestens eine Quinte Umfang. Vierklänge brauchen mindestens eine Sexte Umfang und eine Akkorderweiterung.",
+  "Minimum peak simultaneous keys":
+    "Mindestzahl gleichzeitig klingender Tasten am Höhepunkt",
+  "Weight for starting with another voice":
+    "Gewicht für gleichzeitige Stimmeinsätze",
+  "Largest interval in this voice": "Größtes Intervall dieser Stimme",
+  "Use melody limit": "Grenze der Melodie verwenden",
+  "Write ties": "Haltebögen setzen",
+  "Ties hold a note across written note values without a second attack.":
+    "Haltebögen verbinden Notenwerte zu einem gehaltenen Ton.",
+  "Enable required key holds under Note holds and duration.":
+    "Aktiviere das Halten der Tasten unter Haltedauer und Tastenfreigabe.",
+  "Enable a sounding voice under Voices and polyphony.":
+    "Aktiviere eine klingende Stimme unter Stimmen und Mehrstimmigkeit.",
+  "Natural touch": "Normaler Anschlag",
+  Accent: "Akzent",
+  "Tempo (BPM)": "Tempo (BPM)",
+  Value: "Wert",
+  Weight: "Gewicht",
+  "{n} chance": "Wahrscheinlichkeit für {n}",
+  "{n} octaves": "{n} Oktaven",
+  "{n} notes ({n})": "{n} Töne ({n})",
+  "Shared music and coordination": "Gemeinsame Musik und Koordination",
+  "Key and meter apply to the whole score. Independent rhythm gives each hand a separate timeline.":
+    "Tonart und Taktart gelten für die ganze Partitur. Beim unabhängigen Rhythmus hat jede Hand einen eigenen Zeitverlauf.",
+  "Between-hand overlap chance":
+    "Wahrscheinlichkeit für Überlappung zwischen Händen",
+  "Maximum between-hand overlap (beats)":
+    "Maximale Überlappung zwischen Händen (Schläge)",
+  "Use shared rhythm and discard separate hand settings":
+    "Gemeinsamen Rhythmus verwenden und getrennte Einstellungen verwerfen",
+  "Enable independent rhythm": "Unabhängigen Rhythmus aktivieren",
+  "Enable independent rhythm and required key holds":
+    "Unabhängigen Rhythmus und erforderliches Halten der Tasten aktivieren",
+  "Reset coordination": "Koordination zurücksetzen",
+  "Edit hand": "Hand bearbeiten",
+  "Link hand edits": "Einstellungen der Hände koppeln",
+  "Copy left parameters to right": "Linke Parameter nach rechts kopieren",
+  "Copy right parameters to left": "Rechte Parameter nach links kopieren",
+  "Editing a linked section gives both hands that section’s settings. Copying keeps each hand’s range and clef.":
+    "Beim Bearbeiten eines gekoppelten Abschnitts erhalten beide Hände dieselben Einstellungen für diesen Abschnitt. Beim Kopieren bleiben Tonbereich und Schlüssel erhalten.",
+  "Both hands share these settings. Enable independent rhythm to edit each hand separately.":
+    "Diese Einstellungen gelten für beide Hände. Aktiviere unabhängigen Rhythmus, um jede Hand einzeln einzustellen.",
+  Melody: "Melodie",
+  "Intervals count scale steps. Preferences change how often eligible notes are selected.":
+    "Intervalle werden in Tonleiterstufen gemessen. Vorlieben bestimmen, welche zulässigen Töne häufiger erscheinen.",
+  "Largest interval (scale steps)": "Größtes Intervall (Tonleiterstufen)",
+  "Stepwise preference": "Gewichtung für Schritte",
+  "Repeated-note preference": "Gewichtung für Tonwiederholungen",
+  "Prefer a harmonic ending": "Harmonischen Schluss bevorzugen",
+  "Rhythm and rests": "Rhythmus und Pausen",
+  "Larger weights favor a duration when it fits the remaining bar. Voice-specific durations take precedence.":
+    "Höhere Gewichte bevorzugen passende Notenwerte. Notenwerte einzelner Stimmen haben Vorrang.",
+  "Note values and weights": "Notenwerte und Gewichte",
+  "Eighth note": "Achtelnote",
+  "Quarter note": "Viertelnote",
+  "Half note": "Halbe Note",
+  "Whole note": "Ganze Note",
+  "Breath rests after": "Atempausen nach",
+  "Rest length": "Pausenlänge",
+  "One beat": "Ein Schlag",
+  "Two beats": "Zwei Schläge",
+  "Hand movement and register": "Handbewegung und Register",
+  "A lifted move needs a legal landing and reserved silence. Register exploration favors underused areas within the chosen range.":
+    "Ein abgehobener Wechsel braucht eine passende Landung und eine vorbereitende Pause. Die Registererkundung bevorzugt selten gespielte Bereiche.",
+  "Small repositioning": "Kleine Lagewechsel",
+  "Small shift chance": "Wahrscheinlichkeit kleiner Wechsel",
+  "Maximum small shift (scale steps)":
+    "Größter kleiner Wechsel (Tonleiterstufen)",
+  "Small shift landings": "Landungen kleiner Wechsel",
+  "Small shift preparation": "Vorbereitung kleiner Wechsel",
+  "Wide leaps": "Weite Sprünge",
+  "Wide leap chance": "Wahrscheinlichkeit weiter Sprünge",
+  "Minimum leap (scale steps)": "Kleinster Sprung (Tonleiterstufen)",
+  "Maximum leap (scale steps)": "Größter Sprung (Tonleiterstufen)",
+  "Leap preparation (beats)": "Sprungvorbereitung (Schläge)",
+  "Leap direction": "Sprungrichtung",
+  "Either direction": "Beide Richtungen",
+  Higher: "Aufwärts",
+  Lower: "Abwärts",
+  "Range edges": "Ränder des Tonbereichs",
+  "Explore underused registers": "Selten gespielte Register erkunden",
+  "Register exploration requires a nonzero chance of moving. Use Edit range to set the keyboard boundaries.":
+    "Für die Registererkundung müssen Lagewechsel möglich sein. Die Grenzen legst du unter „Bereich bearbeiten“ fest.",
+  "Only modeled maps that fit the hand’s range are eligible. Position probability is sampled at the start.":
+    "Nur geprüfte Fingerlagen im Tonbereich kommen infrage. Die Startlage wird zu Beginn gewählt.",
+  "Allowed position shapes": "Erlaubte Fingerlagen",
+  "Variable spacing chance": "Wahrscheinlichkeit variabler Fingerabstände",
+  "Permit tagged rested alternate fingering":
+    "Markierten Alternativfingersatz nach Pausen zulassen",
+  "Fingering techniques": "Fingersatztechniken",
+  "Only explicitly enabled techniques can occur. Eligibility depends on the tempo, preparation, held notes and fingering rules.":
+    "Nur ausgewählte Techniken können vorkommen. Tempo, Vorbereitung, gehaltene Töne und Fingersatzregeln entscheiden über ihren Einsatz.",
+  "Allowed techniques": "Erlaubte Techniken",
+  "Substitution requires physical key holds. Rested alternates require permission in Finger spacing.":
+    "Der Fingerwechsel auf einem Ton setzt gehaltene Tasten voraus. Alternativfingersätze nach Pausen brauchen eine Freigabe unter Fingerabstände.",
+  "Chromatic notes must fit the available fingers and resolve to a legal adjacent pitch.":
+    "Chromatische Töne müssen zu den verfügbaren Fingern passen und sich in einen zulässigen Nachbarton auflösen.",
+  "Chromatic neighbors": "Chromatische Nebentöne",
+  "Accidental chance": "Wahrscheinlichkeit für Vorzeichen",
+  "Passing resolution chance": "Wahrscheinlichkeit für Durchgangsauflösungen",
+  "Chromatic fingers": "Finger für chromatische Töne",
+  "Favor applied dominant tones": "Zwischendominanttöne bevorzugen",
+  "Favor mapped fingers": "Zugeordnete Finger bevorzugen",
+  "Chords and voicing": "Akkorde und Voicings",
+  "Voicings list the fingers used. Chord size, span, extensions and available pitches limit which shapes can sound.":
+    "Voicings zeigen die verwendeten Finger. Tonanzahl, Spannweite, Erweiterungen und verfügbare Töne bestimmen die möglichen Griffe.",
+  "Chord voicings": "Akkordgriffe",
+  "Chord chance": "Akkordwahrscheinlichkeit",
+  "Maximum chord span (semitones)": "Maximale Akkordspannweite (Halbtöne)",
+  "Maximum voice leading (scale steps)":
+    "Maximale Stimmführung (Tonleiterstufen)",
+  "Major chord extension": "Erweiterung von Durakkorden",
+  "Minor chord extension": "Erweiterung von Mollakkorden",
+  "Allowed voicings and weights": "Erlaubte Griffe und Gewichte",
+  "Two-note intervals (semitones)": "Zweiklangintervalle (Halbtöne)",
+  "Voices and polyphony": "Stimmen und Mehrstimmigkeit",
+  "Each independent voice has its own schedule and can have its own rhythm and eligible fingers.":
+    "Jede unabhängige Stimme hat einen eigenen Verlauf und kann eigene Notenwerte und Finger verwenden.",
+  "Enable independent rhythm under Shared music and coordination.":
+    "Aktiviere unabhängigen Rhythmus unter Gemeinsame Musik und Koordination.",
+  "Voice count": "Stimmenanzahl",
+  "Voice count applies to the selected hand.":
+    "Die Stimmenanzahl gilt für die gewählte Hand.",
+  "Minimum peak keys":
+    "Mindestanzahl gleichzeitig klingender Tasten am Höhepunkt",
+  "Maximum simultaneous keys": "Maximale Anzahl gleichzeitiger Tasten",
+  "Within-hand overlap chance":
+    "Wahrscheinlichkeit für Überlappung innerhalb einer Hand",
+  "Maximum within-hand overlap (beats)":
+    "Maximale Überlappung innerhalb einer Hand (Schläge)",
+  "Edit voice": "Stimme bearbeiten",
+  "Main voice": "Hauptstimme",
+  Voice: "Stimme",
+  "Voice activity": "Stimmaktivität",
+  "Voice entry chance": "Eintrittswahrscheinlichkeit",
+  "Voice exit chance": "Austrittswahrscheinlichkeit",
+  "Offbeat preference": "Gewichtung unbetonter Zählzeiten",
+  "Coincident attack preference": "Gewichtung gleichzeitiger Anschläge",
+  "Allowed voice fingers": "Erlaubte Finger der Stimme",
+  "Use a separate voice rhythm": "Eigenen Rhythmus für diese Stimme verwenden",
+  "Voice note values and weights": "Notenwerte und Gewichte der Stimme",
+  "Allow chords in this voice": "Akkorde in dieser Stimme zulassen",
+  "Allow accidentals in this voice": "Vorzeichen in dieser Stimme zulassen",
+  "Sustain and ties": "Gehaltene Töne und Haltebögen",
+  "Explicit key holds model note releases. Ties extend the hold through written segments in selected voices.":
+    "Gehaltene Tasten bestimmen den Zeitpunkt des Loslassens. Haltebögen verlängern Töne über mehrere Notenwerte in den ausgewählten Stimmen.",
+  "Required physical key holds": "Gehaltene Tasten erforderlich",
+  "Required key holds and duration assessment apply to both hands.":
+    "Gehaltene Tasten und die Bewertung der Dauer gelten für beide Hände.",
+  "Reset ties": "Haltebögen zurücksetzen",
+  "Assess performed duration": "Gespielte Dauer bewerten",
+  Ties: "Haltebögen",
+  "Enable required key holds before adding ties, articulation or finger substitution.":
+    "Aktiviere das Halten der Tasten vor Haltebögen, Artikulation oder Fingerwechsel auf einem Ton.",
+  "Tie chance": "Haltebogenwahrscheinlichkeit",
+  "Tied voices": "Stimmen mit Haltebögen",
+  "Maximum tie duration (beats)": "Maximale Haltebogendauer (Schläge)",
+  "Tied chord tones": "Gehaltene Akkordtöne",
+  "Single notes only": "Nur Einzeltöne",
+  "All tones": "Alle Töne",
+  "Outer tones": "Äußere Töne",
+  "Any tone": "Beliebiger Ton",
+  Articulation: "Artikulation",
+  "Markings apply to selected voices. Timed release and relative MIDI velocity can be assessed when their markings are present.":
+    "Zeichen gelten für die ausgewählten Stimmen. Bei passenden Zeichen lassen sich das Loslassen im Takt und die relative MIDI-Anschlagstärke bewerten.",
+  "Articulation markings": "Artikulationszeichen",
+  "Articulated voices": "Stimmen mit Artikulation",
+  "Touch types": "Anschlagsarten",
+  "Touch marking chance": "Wahrscheinlichkeit für Anschlagszeichen",
+  "Emphasis types": "Betonungsarten",
+  "Emphasis marking chance": "Wahrscheinlichkeit für Betonungszeichen",
+  "Slur groups": "Bindebögen",
+  "Slur chance": "Bindebogenwahrscheinlichkeit",
+  "Assess articulation performance": "Gespielte Artikulation bewerten",
+  "Custom profiles": "Eigene Profile",
+  "Save reusable music settings on this device or transfer them as JSON. Loading a profile stages it for the next exercise.":
+    "Speichere Einstellungen auf diesem Gerät oder übertrage sie als JSON. Ein geladenes Profil gilt ab der nächsten Übung.",
+  "Profile name": "Profilname",
+  "Save profile": "Profil speichern",
+  "Replace saved profile": "Gespeichertes Profil ersetzen",
+  "Saved profiles": "Gespeicherte Profile",
+  "Choose a profile": "Profil auswählen",
+  "Load profile": "Profil laden",
+  "Remove profile": "Profil entfernen",
+  "Export parameters": "Parameter exportieren",
+  "Import parameters": "Parameter importieren",
+  "Reset all Advanced parameters": "Alle erweiterten Parameter zurücksetzen",
+  "Reset section": "Abschnitt zurücksetzen",
+  "Profile saved.": "Profil gespeichert.",
+  "Profile removed.": "Profil entfernt.",
+  "Parameters staged.": "Parameter für die nächste Übung vorgemerkt.",
+  "Advanced parameters reset.": "Erweiterte Parameter zurückgesetzt.",
+  "Infeasible in the current context. {n}":
+    "Mit den aktuellen Einstellungen nicht umsetzbar. {n}",
   "Practice profile": "Übungsprofil",
   Guided: "Geführt",
   Advanced: "Erweitert",
@@ -21,8 +463,8 @@ export const german: Record<string, string> = {
     "Der Hinweis vor dem Spielen zeigt dir die Daumentaste und den Startfinger. Beginne mit dem geführten Profil für eine feste Fünftonlage.",
   "Choose Guided for fixed-position practice or Advanced to edit the generator parameters. Choose wait, timed or benchmark scoring with either profile.":
     "Wähle Geführt für Übungen in fester Handlage oder Erweitert, um die Generatorparameter zu bearbeiten. Beide Profile unterstützen Warten, Spielen im Takt und den unabhängigen Test.",
-  "Choose Edit range to select the lowest and highest piano keys for each hand; middle C is C4. Apply saves the range for your next exercise. Clefs, key, meter, timing calibration and MIDI diagnostics are in Advanced settings.":
-    "Wähle Bereich bearbeiten, um die tiefste und höchste Taste für jede Hand festzulegen. Das mittlere C ist C4. Übernehmen speichert den Bereich für die nächste Übung. Schlüssel, Tonart, Taktart, Timing-Kalibrierung und MIDI-Diagnose findest du unter Erweiterte Einstellungen.",
+  "Choose Edit range to select the lowest and highest piano keys for each hand. Middle C is C4. Apply saves the range for your next exercise. In Guided, open Advanced settings for clefs and timing calibration. In Advanced, use Edit music settings to open the musical controls and Expert settings.":
+    "Wähle Bereich bearbeiten, um die tiefste und höchste Taste pro Hand festzulegen. Das mittlere C ist C4. Übernehmen speichert den Bereich für die nächste Übung. In Geführt findest du Schlüssel und Timing-Kalibrierung unter Erweiterte Einstellungen. In Erweitert öffnest du über Musikeinstellungen bearbeiten die musikalischen Felder und die Experteneinstellungen.",
   "Advanced parameters can enable wide leaps, sustained notes, ties, independent voices, dynamic fingering and articulation. Every generated phrase must pass the configured musical and hand-position rules.":
     "Mit erweiterten Parametern kannst du weite Sprünge, gehaltene Töne, Haltebögen, unabhängige Stimmen, dynamische Fingersätze und Artikulation aktivieren. Jede erzeugte Phrase muss die gewählten musikalischen Regeln und Handlagenregeln erfüllen.",
   "MIDI observations cover played pitches, timing, releases and velocity. The fingering plan follows software constraints, and comfort varies by pianist.":
@@ -139,8 +581,8 @@ export const german: Record<string, string> = {
   "Open Chrome’s site controls beside the address bar, allow MIDI devices in the site permissions, and try Connect MIDI again. Use the HTTPS address; an ordinary HTTP address on your local network cannot request MIDI access.":
     "Öffne die Website-Einstellungen neben der Chrome-Adressleiste, erlaube dort MIDI-Geräte und versuche erneut MIDI verbinden. Nutze die HTTPS-Adresse; eine normale HTTP-Adresse im lokalen Netzwerk kann keinen MIDI-Zugriff anfordern.",
   "Connected, but no notes arrive": "Verbunden, aber es kommen keine Noten an",
-  "Try another piano input; some keyboards expose several ports. In Practice → Advanced settings, leave MIDI channel on All channels unless you need a specific channel. For Bluetooth bridges, check that the keyboard input is routed to the same port selected in ClefGlide.":
-    "Probiere einen anderen Eingang; manche Keyboards stellen mehrere Ports bereit. Lass unter Üben → Erweiterte Einstellungen den MIDI-Kanal auf Alle Kanäle, sofern du keinen bestimmten brauchst. Prüfe bei Bluetooth-Bridges, ob das Keyboard an den in ClefGlide gewählten Port weitergeleitet wird.",
+  "Try another piano input if your keyboard exposes several ports. Keep MIDI channel on All channels unless you need a specific channel. Find it under Advanced settings in Guided practice or Expert settings in Advanced practice. For Bluetooth bridges, check that the keyboard input is routed to the port selected in ClefGlide.":
+    "Probiere bei mehreren Anschlüssen einen anderen Eingang. Lass den MIDI-Kanal auf Alle Kanäle, sofern du keinen bestimmten brauchst. Du findest ihn in Geführt unter Erweiterte Einstellungen und in Erweitert unter Experteneinstellungen. Prüfe bei Bluetooth-Bridges, ob das Keyboard an den in ClefGlide gewählten Port weitergeleitet wird.",
   "In Practice, the Before you play banner shows where to put your thumb and which finger starts. Begin with one hand and leave Hand movements and Finger spacing Off for a fixed five-note position.":
     "Unter Üben zeigt Vor dem Spielen, wo dein Daumen liegt und welcher Finger beginnt. Starte mit einer Hand und lass Handbewegungen und Fingerabstände auf Aus für eine feste Fünftonposition.",
   "Start with Wait for correct notes: the score waits while you find each pitch. Release a key before playing it again. Try Timed playing when you are ready to follow a steady beat.":

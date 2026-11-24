@@ -1,12 +1,14 @@
 import type { Hand, HandState } from "../score/model";
 import type { ValidatedGeneratorConfig } from "./config";
+import { configForHand } from "./config/handParameters";
+
 import {
   positionsForConfig,
   separated,
   spacingSignature,
   spacingPatterns,
 } from "./positionMaps";
-import { random } from "./random";
+import { hash, random } from "./random";
 import { chooseWeighted } from "./sampling";
 import { GeneratorContextInfeasibleError } from "./dynamicFeasibility";
 
@@ -24,15 +26,16 @@ export function initialHands(
     throw new GeneratorContextInfeasibleError(
       "This range needs five consecutive notes in the chosen major key. Widen the range or change the key.",
     );
-  const prefer = (xs: HandState[]) => {
-    const spaced = random(state) < c.fingering.variablePositionProbability;
+  const prefer = (xs: HandState[], rng = state) => {
+    const local = configForHand(c, xs[0].hand);
+    const spaced = random(rng) < local.fingering.variablePositionProbability;
     const selected = xs.filter(
       (p) => (spacingSignature(p) !== "0,1,2,3,4") === spaced,
     );
     return selected.length ? selected : xs;
   };
   const weight = (p: HandState) =>
-    c.fingering.patterns.find(
+    configForHand(c, p.hand).fingering.patterns.find(
       (pattern) =>
         spacingPatterns[pattern.value].join(",") === spacingSignature(p),
     )!.weight;
@@ -52,6 +55,21 @@ export function initialHands(
     throw new GeneratorContextInfeasibleError(
       "Both hands need non-overlapping five-note positions. Lower the LH range or raise the RH range.",
     );
+  if (
+    c.handParameters &&
+    lists[0].every((r) => lists[1].every((l) => separated(r, l)))
+  ) {
+    const seed = state.rng;
+    return lists.map((list) => {
+      const rng = { rng: hash(`${seed}:position:${list[0].hand}`) };
+      return structuredClone(
+        chooseWeighted(
+          prefer(list, rng).map((p) => ({ value: p, weight: weight(p) })),
+          rng,
+        ),
+      );
+    });
+  }
   let compatible = pairs;
   for (let i = 0; i < hands.length; i++) {
     const allowed = new Set(prefer(compatible.map((pair) => pair[i])));

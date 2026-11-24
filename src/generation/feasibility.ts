@@ -1,10 +1,6 @@
+import { activeHands, configForHand } from "./config/handParameters";
 import { Chord, Note, Scale } from "tonal";
-import {
-  TPQ,
-  type Hand,
-  type HandState,
-  type ScoreEvent,
-} from "../score/model";
+import { TPQ, type HandState, type ScoreEvent } from "../score/model";
 import type { ValidatedGeneratorConfig } from "./config";
 import {
   positionsForConfig,
@@ -35,8 +31,7 @@ export function assertGeneratorFeasibility(c: ValidatedGeneratorConfig) {
 /** Context-dependent feasibility is separate from structural configuration validity.
  * Chord/movement probabilities are opportunities, not promises that every shape fits. */
 export function inspectGeneratorFeasibility(c: ValidatedGeneratorConfig) {
-  const hands: Hand[] =
-    c.hands.active === "both" ? ["right", "left"] : [c.hands.active];
+  const hands = activeHands(c);
   const lists = hands.map((hand) =>
     positionsForConfig(c, hand).filter((pos) => positionFitsVoices(c, pos)),
   );
@@ -53,36 +48,34 @@ export function inspectGeneratorFeasibility(c: ValidatedGeneratorConfig) {
   const voices = voiceSpecs(c);
   const ties = c.notation.ties;
   if (
+    !c.handParameters &&
     ties !== false &&
     ties.probability > 0 &&
     ties.chordTones !== "none" &&
-    (c.chords.kind !== "voicings" ||
-      c.chords.probability === 0 ||
-      !compatible.some((positions, i) =>
-        c.independentVoices
-          ? voices.some(
-              (v) =>
-                v.hand === hands[i] &&
-                v.profile.chords &&
-                ties.voices.some((id) => id === v.id) &&
-                hasChord(
-                  c,
-                  positions,
-                  (heads) =>
-                    heads.length <=
-                      c.independentVoices![v.hand]!.maxPolyphony &&
-                    heads.every((n) =>
-                      voiceAllows(v.profile, n.midi, n.finger),
-                    ),
-                ),
-            )
-          : ties.voices.includes(`${hands[i]}:main`) && hasChord(c, positions),
-      ))
+    !compatible.some((positions, i) =>
+      c.independentVoices
+        ? voices.some(
+            (v) =>
+              v.hand === hands[i] &&
+              v.profile.chords &&
+              ties.voices.some((id) => id === v.id) &&
+              hasChord(
+                configForHand(c, v.hand),
+                positions,
+                (heads) =>
+                  heads.length <= c.independentVoices![v.hand]!.maxPolyphony &&
+                  heads.every((n) => voiceAllows(v.profile, n.midi, n.finger)),
+              ),
+          )
+        : ties.voices.includes(`${hands[i]}:main`) && hasChord(c, positions),
+    )
   )
     errors.push(
       "The selected tie chord tones require a feasible, enabled harmonic voicing in an eligible voice.",
     );
+  const configuration = c;
   for (let i = 0; i < hands.length; i++) {
+    const c = configForHand(configuration, hands[i]);
     if (!lists[i].length)
       errors.push(
         c.independentVoices
@@ -96,6 +89,30 @@ export function inspectGeneratorFeasibility(c: ValidatedGeneratorConfig) {
     )
       warnings.push(
         `${hands[i]} hand: no approved variable position fits; the conventional position option will be used.`,
+      );
+    const localTies = c.notation.ties;
+    if (
+      configuration.handParameters &&
+      localTies &&
+      localTies.probability > 0 &&
+      localTies.chordTones !== "none" &&
+      localTies.voices.some((id) => id.startsWith(`${hands[i]}:`)) &&
+      !voices.some(
+        (v) =>
+          v.hand === hands[i] &&
+          v.profile.chords &&
+          localTies.voices.some((id) => id === v.id) &&
+          hasChord(
+            c,
+            compatible[i],
+            (heads) =>
+              heads.length <= c.independentVoices![v.hand]!.maxPolyphony &&
+              heads.every((n) => voiceAllows(v.profile, n.midi, n.finger)),
+          ),
+      )
+    )
+      errors.push(
+        `${hands[i]} hand: tied chord tones require a feasible voicing in an eligible voice.`,
       );
     const movement = c.movement;
     const wide = c.wideLeaps;
@@ -180,9 +197,10 @@ export function inspectGeneratorFeasibility(c: ValidatedGeneratorConfig) {
         `${hands[i]} hand: no approved chord voicing fits these positions and harmonic plans; legal single notes will be retained.`,
       );
   }
-  (wideUnavailable.length < hands.length ? warnings : errors).push(
-    ...wideUnavailable,
-  );
+  (wideUnavailable.length < hands.length && !c.handParameters
+    ? warnings
+    : errors
+  ).push(...wideUnavailable);
   if (
     hands.length === 2 &&
     !lists[0].some((r) => lists[1].some((l) => separated(r, l)))
@@ -190,7 +208,14 @@ export function inspectGeneratorFeasibility(c: ValidatedGeneratorConfig) {
     errors.push(
       "Both hands need separate positions; widen the ranges or lower the left range.",
     );
-  errors.push(...dynamicFeasibility(c, compatible));
+  if (c.handParameters) {
+    for (const hand of hands)
+      errors.push(
+        ...dynamicFeasibility(configForHand(c, hand), compatible, hand).map(
+          (message) => `${hand} hand: ${message}`,
+        ),
+      );
+  } else errors.push(...dynamicFeasibility(c, compatible));
   return { errors, warnings };
 }
 
@@ -201,6 +226,7 @@ function hasChord(
     heads: ReturnType<typeof chordCandidatesForConfig>[number],
   ) => boolean = () => true,
 ) {
+  if (c.chords.kind !== "voicings" || c.chords.probability === 0) return false;
   const scale = Scale.get(`${c.notation.key} major`).notes;
   const degrees = [...new Set(c.harmony.progressions.flatMap((p) => p.value))];
   return positions.some((pos) =>

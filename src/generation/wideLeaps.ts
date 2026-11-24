@@ -1,4 +1,5 @@
 import { Note } from "tonal";
+import { configForHand } from "./config/handParameters";
 import {
   TPQ,
   type HandState,
@@ -136,18 +137,19 @@ export function planWideLeaps(
   acceptsLanding: AcceptsLanding,
   voiceWindow?: VoiceLeapWindow,
 ) {
-  const w = c.wideLeaps;
   const landings = new Map<Hand, number>();
-  if (
-    w.kind === "disabled" ||
-    w.probability === 0 ||
-    !w.eligibleBars.includes(b)
-  )
-    return landings;
   const tick = (state.bar + b) * c.notation.beats * TPQ;
-  const cue = tick - w.preparationBeats * TPQ;
   for (let hi = 0; hi < state.hands.length; hi++) {
     const from = state.hands[hi];
+    const local = configForHand(c, from.hand);
+    const w = local.wideLeaps;
+    if (
+      w.kind === "disabled" ||
+      w.probability === 0 ||
+      !w.eligibleBars.includes(b)
+    )
+      continue;
+    const cue = tick - w.preparationBeats * TPQ;
     const window = voiceWindow?.(from.hand, tick);
     if (voiceWindow ? !window : random(state) >= w.probability) continue;
     const prepared = voiceWindow
@@ -178,7 +180,11 @@ export function planWideLeaps(
       cue,
       tick,
     );
-    let options = wideLandingOptions(c, from, available.get(from.hand)!).filter(
+    let options = wideLandingOptions(
+      local,
+      from,
+      available.get(from.hand)!,
+    ).filter(
       ({ to, index }) =>
         movementSeparated(to, state, positions, movements, tick) &&
         clearsOppositeEdge(from, edge) &&
@@ -217,13 +223,13 @@ export function planWideLeaps(
       state,
     );
     if (
-      c.coverage.kind === "guided" &&
+      local.coverage.kind === "guided" &&
       random(state) >=
         coverageMoveWeight(
           state.coverage![from.hand]!,
           positionCenter(from),
           positionCenter(to),
-          c.coverage,
+          local.coverage,
         )
     )
       continue;

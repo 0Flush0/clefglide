@@ -1,5 +1,10 @@
 import { Note } from "tonal";
 import {
+  activeHands,
+  configForHand,
+  hasArticulation,
+} from "./config/handParameters";
+import {
   TPQ,
   noteheads,
   type StreamState,
@@ -67,10 +72,10 @@ export function generateWithContext(
   previous: StreamState | undefined,
   contextKey: string,
 ): GeneratedPhrase {
-  const policy = c.articulation;
+  const articulated = hasArticulation(c);
   if (
     previous &&
-    (policy
+    (articulated
       ? previous.articulation?.context !==
         articulationContext(seed, generatorConfigFingerprint(c))
       : !!previous.articulation)
@@ -81,11 +86,16 @@ export function generateWithContext(
   const coreState = previous && { ...previous };
   if (coreState?.articulation) delete coreState.articulation;
   const phrase = generateCore(c, seed, coreState, contextKey);
-  if (!policy) return phrase;
+  if (!articulated) return phrase;
   if (previous?.articulation)
     phrase.initial.articulation = structuredClone(previous.articulation);
   let next: GeneratedPhrase | undefined;
-  if (policy.slurs && policy.slurs.crossPhrase) {
+  if (
+    activeHands(c).some((hand) => {
+      const slurs = configForHand(c, hand).articulation?.slurs;
+      return slurs && slurs.crossPhrase;
+    })
+  ) {
     try {
       next = generateCore(c, seed, phrase.final, contextKey);
     } catch (error) {

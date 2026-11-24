@@ -1,4 +1,5 @@
 import { Note } from "tonal";
+import { configForHand, fingeringPolicies } from "./config/handParameters";
 import {
   TPQ,
   noteheads,
@@ -38,15 +39,15 @@ export const fingeringContext = (c: ValidatedGeneratorConfig, seed: string) =>
   JSON.stringify([seed, generatorConfigFingerprint(c)]);
 const maximumSegmentTicks = 4 * TPQ;
 const historyTicks = (c: ValidatedGeneratorConfig) => {
-  const policy = c.dynamicFingering!;
-  const alternate = policy.techniques.find(
-    (r) => r.technique === "rested-alternate",
-  );
   return Math.max(
     maximumSegmentTicks,
-    alternate
-      ? preparationTicks(alternate.minimumPreparationMs, policy.tempoBpm)
-      : 0,
+    ...fingeringPolicies(c).flatMap((policy) =>
+      policy.techniques.flatMap((rule) =>
+        rule.technique === "rested-alternate"
+          ? [preparationTicks(rule.minimumPreparationMs, policy.tempoBpm)]
+          : [],
+      ),
+    ),
   );
 };
 
@@ -110,7 +111,7 @@ export function validFingeringBoundary(
   state: StreamState,
 ) {
   const memory = state.dynamicFingering;
-  if (!c.dynamicFingering) return memory === undefined;
+  if (!fingeringPolicies(c).length) return memory === undefined;
   const end = boundaryTick(state, c);
   const cutoff = end - historyTicks(c);
   return (
@@ -169,14 +170,15 @@ export function validFingeringBoundary(
         tick >= 0 &&
         tick < end,
     ) &&
-    Object.entries(memory.runs).every(
-      ([hand, run]) =>
+    Object.entries(memory.runs).every(([hand, run]) => {
+      const policy = configForHand(c, hand as Hand).dynamicFingering;
+      return (
         state.hands.some((h) => h.hand === hand) &&
-        c.dynamicFingering!.techniques.some(
-          (r) => r.technique === run.technique,
-        ) &&
-        runAllowed(c.dynamicFingering!, run),
-    )
+        !!policy &&
+        policy.techniques.some((r) => r.technique === run.technique) &&
+        runAllowed(policy, run)
+      );
+    })
   );
 }
 

@@ -67,6 +67,7 @@ function setup(settings = defaults, language: "en" | "de" = "en") {
 
 it("selects white and black endpoints with staged Apply and Cancel", () => {
   const { ui, open, latest } = setup();
+  const initial = latest();
   expect(ui.queryByRole("dialog")).toBeNull();
   const dialog = open();
   const piano = within(dialog.getByRole("group", { name: "Piano keyboard" }));
@@ -91,9 +92,9 @@ it("selects white and black endpoints with staged Apply and Cancel", () => {
   expect(
     piano.getByRole("button", { name: "C4" }).getAttribute("aria-pressed"),
   ).toBe("false");
-  expect(latest()).toEqual(defaults);
+  expect(latest()).toEqual(initial);
   fireEvent.click(dialog.getByRole("button", { name: "Apply" }));
-  expect(latest()).toEqual({ ...defaults, min: 61, max: 72 });
+  expect(latest()).toEqual({ ...initial, min: 61, max: 72 });
   expect(ui.queryByRole("dialog")).toBeNull();
   const reopened = open();
   fireEvent.click(
@@ -108,6 +109,7 @@ it("selects white and black endpoints with staged Apply and Cancel", () => {
 
 it("preserves independent edits through hand switches and accepts overlapping ranges", () => {
   const { ui, open, latest } = setup({ ...defaults, hand: "both" });
+  const initial = latest();
   const dialog = open();
   const piano = within(dialog.getByRole("group", { name: "Piano keyboard" }));
   fireEvent.click(dialog.getByRole("button", { name: "Left hand · C3–G3" }));
@@ -118,7 +120,7 @@ it("preserves independent edits through hand switches and accepts overlapping ra
   fireEvent.click(piano.getByRole("button", { name: "C6" }));
   fireEvent.click(dialog.getByRole("button", { name: "Apply" }));
   const expected: Settings = {
-    ...defaults,
+    ...initial,
     hand: "both",
     leftMin: 48,
     leftMax: 72,

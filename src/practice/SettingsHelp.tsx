@@ -332,7 +332,7 @@ export function SettingsHelp({
           <summary>{tr("Connected, but no notes arrive")}</summary>
           <p>
             {tr(
-              "Try another piano input; some keyboards expose several ports. In Practice → Advanced settings, leave MIDI channel on All channels unless you need a specific channel. For Bluetooth bridges, check that the keyboard input is routed to the same port selected in ClefGlide.",
+              "Try another piano input if your keyboard exposes several ports. Keep MIDI channel on All channels unless you need a specific channel. Find it under Advanced settings in Guided practice or Expert settings in Advanced practice. For Bluetooth bridges, check that the keyboard input is routed to the port selected in ClefGlide.",
             )}
           </p>
         </details>
@@ -378,7 +378,7 @@ export function SettingsHelp({
           </p>
           <p>
             {tr(
-              "Choose Edit range to select the lowest and highest piano keys for each hand; middle C is C4. Apply saves the range for your next exercise. Clefs, key, meter, timing calibration and MIDI diagnostics are in Advanced settings.",
+              "Choose Edit range to select the lowest and highest piano keys for each hand. Middle C is C4. Apply saves the range for your next exercise. In Guided, open Advanced settings for clefs and timing calibration. In Advanced, use Edit music settings to open the musical controls and Expert settings.",
             )}
           </p>
         </details>

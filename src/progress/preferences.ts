@@ -3,19 +3,53 @@ import { settingsValuesSchema } from "../score/model";
 import { resolveGeneratorConfig } from "../generation/config";
 import { legacyRhythms } from "../generation/config/presets";
 import {
+  atGuidedLevel,
   defaultPractice,
   defaultExerciseSeed,
   guidedPractice,
+  levelIdentitySchema,
   practiceOptionsSchema,
   savedSetupSchema,
   type PracticeSetup,
 } from "../practice/configuration";
+import {
+  currentGuidedLevel,
+  migratedGuidedLevel,
+} from "../practice/curriculum";
 import { db } from "./store";
 
 const hands = ["right", "left", "both"] as const;
 const handSchema = z.enum(hands);
 type HandSelection = z.infer<typeof handSchema>;
 export type GuidedProfiles = Record<HandSelection, PracticeSetup>;
+const guidedStagesSchema = z
+  .partialRecord(
+    handSchema,
+    z.record(z.string(), levelIdentitySchema).catch({}),
+  )
+  .catch({});
+export type GuidedStageSelections = z.infer<typeof guidedStagesSchema>;
+
+export function rememberGuidedStage(
+  selections: GuidedStageSelections,
+  setup: PracticeSetup | undefined,
+): GuidedStageSelections {
+  if (setup?.profile !== "guided") return selections;
+  const level = currentGuidedLevel(setup.level);
+  if (!level || level.hand !== setup.config.hands.active) return selections;
+  const track = selections[level.hand];
+  const previous = track?.[level.stageId];
+  if (previous?.id === level.id && previous.version === level.version)
+    return selections;
+  return {
+    ...selections,
+    [level.hand]: {
+      ...track,
+      [level.stageId]: { id: level.id, version: level.version },
+    },
+  };
+}
+
 export type PracticeDuration = 0 | 3 | 5;
 export function defaultProfiles(): GuidedProfiles {
   return {
@@ -27,8 +61,20 @@ export function defaultProfiles(): GuidedProfiles {
 
 const currentPreferences = z.object({
   setup: savedSetupSchema,
+  draft: savedSetupSchema.optional(),
+  draftSeed: z.string().optional(),
+  namedProfiles: z
+    .array(
+      z.object({
+        name: z.string().min(1).max(60),
+        config: savedSetupSchema.shape.config,
+      }),
+    )
+    .max(50)
+    .catch([]),
   seed: z.string().default(defaultExerciseSeed),
   guided: z.record(handSchema, savedSetupSchema),
+  guidedStages: guidedStagesSchema,
   guidedHand: handSchema,
   custom: savedSetupSchema.optional(),
   duration: z.union([z.literal(0), z.literal(3), z.literal(5)]).catch(0),
@@ -93,8 +139,12 @@ export type PreferenceRow = {
   midiChannel?: number;
   metronome?: boolean;
   setup?: PracticeSetup;
+  draft?: PracticeSetup;
+  draftSeed?: string;
+  namedProfiles?: Preferences["namedProfiles"];
   seed?: string;
   guided?: GuidedProfiles;
+  guidedStages?: GuidedStageSelections;
   guidedHand?: HandSelection;
   custom?: PracticeSetup;
 };
@@ -103,7 +153,31 @@ async function readPreferences(): Promise<Preferences> {
   const current = currentPreferences.safeParse(
     await db.preferences.get("practice-v2"),
   );
-  if (current.success) return current.data;
+  if (current.success) {
+    const preferences = current.data;
+    const migrate = (setup: PracticeSetup) => {
+      const level =
+        setup.profile === "guided" && migratedGuidedLevel(setup.level);
+      return level ? atGuidedLevel(level, setup.options) : setup;
+    };
+    const guided = {
+      left: migrate(preferences.guided.left),
+      right: migrate(preferences.guided.right),
+      both: migrate(preferences.guided.both),
+    };
+    const draft = migrate(preferences.draft ?? preferences.setup);
+    const stages = { ...preferences.guidedStages };
+    for (const hand of hands) {
+      const initial = rememberGuidedStage({}, guided[hand])[hand];
+      stages[hand] = { ...initial, ...stages[hand] };
+    }
+    return {
+      ...preferences,
+      guided,
+      draft,
+      guidedStages: rememberGuidedStage(stages, draft),
+    };
+  }
 
   const legacy = await db.preferences.get("settings");
   const guided = defaultProfiles();
@@ -122,7 +196,9 @@ async function readPreferences(): Promise<Preferences> {
       : "right";
   return {
     guided,
+    guidedStages: {},
     guidedHand,
+    namedProfiles: [],
     setup: guided[guidedHand],
     seed: defaultExerciseSeed,
     duration:
@@ -141,12 +217,18 @@ async function readPreferences(): Promise<Preferences> {
 export const loadPracticePreferences = readPreferences;
 
 /** Migrate lazily and merge edits within the same IndexedDB transaction. */
-export async function savePracticePreferences(update: Partial<Preferences>) {
+export async function savePracticePreferences(
+  update: Partial<Omit<Preferences, "guidedStages">>,
+) {
   await db.transaction("rw", db.preferences, async () => {
     const previous = await readPreferences();
     await db.preferences.put({
       id: "practice-v2",
-      ...currentPreferences.parse({ ...previous, ...update }),
+      ...currentPreferences.parse({
+        ...previous,
+        ...update,
+        guidedStages: rememberGuidedStage(previous.guidedStages, update.draft),
+      }),
     });
   });
 }

@@ -38,7 +38,9 @@ it("keeps controls compact, stages validated parameters, and preserves the scori
   fireEvent.change(ui.getByLabelText("Practice profile"), {
     target: { value: "custom" },
   });
-  fireEvent.click(ui.getByText("Generator parameters", { exact: true }));
+  fireEvent.click(ui.getByRole("button", { name: "Edit music settings" }));
+  fireEvent.click(ui.getByText("Expert settings", { exact: true }));
+  fireEvent.click(ui.getByText("Generator parameters (JSON)", { exact: true }));
   const editor = ui.getByLabelText(
     "GeneratorConfig JSON",
   ) as HTMLTextAreaElement;

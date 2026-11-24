@@ -15,6 +15,8 @@ export const tieSegmentSchema = z
   })
   .strict();
 
+type TiePolicy = ValidatedGeneratorConfig["notation"]["ties"];
+
 /** Independent graph and interval reconstruction. No generator selection helpers. */
 export function validateTieSegments(
   events: ScoreEvent[],
@@ -25,7 +27,7 @@ export function validateTieSegments(
     0,
     ...events.map((e) => e.bar * beats * TPQ + e.onset + e.duration),
   ),
-  policy?: Exclude<ValidatedGeneratorConfig["notation"]["ties"], false>,
+  policy?: TiePolicy | ((event: ScoreEvent) => TiePolicy),
   // For a clipped notation window, retain the full surrounding score as evidence.
   // Missing glyphs alone are never accepted as proof of an incoming connection.
   windowContext?: ScoreEvent[],
@@ -79,6 +81,9 @@ export function validateTieSegments(
     errors.push("Duplicate notation segment identity.");
   for (const { event, head, tick } of entries) {
     if (!head.tie) continue;
+    const rule = typeof policy === "function" ? policy(event) : policy;
+    if (rule === false)
+      errors.push("Tie notation requires a configured policy for this hand.");
     const parsed = tieSegmentSchema.safeParse(head.tie);
     if (!parsed.success) {
       errors.push("Invalid typed tie segment.");
@@ -98,17 +103,17 @@ export function validateTieSegments(
     )
       errors.push("Tie has inconsistent chromatic spelling.");
     if (
-      policy &&
+      rule &&
       (!l ||
-        policy.probability === 0 ||
-        !policy.segmentCounts.includes(t.count) ||
-        !policy.subdivisions.some((d) => d === event.duration) ||
-        !policy.patterns.some((p) => p.value === t.pattern) ||
-        !policy.voices.some((v) => v === l.voiceId) ||
-        l.durationTicks > policy.maxDurationTicks ||
+        rule.probability === 0 ||
+        !rule.segmentCounts.includes(t.count) ||
+        !rule.subdivisions.some((d) => d === event.duration) ||
+        !rule.patterns.some((p) => p.value === t.pattern) ||
+        !rule.voices.some((v) => v === l.voiceId) ||
+        l.durationTicks > rule.maxDurationTicks ||
         l.keyHold.kind !== "required" ||
         l.keyHold.releaseTick !== l.releaseTick ||
-        (t.pattern === "carry" && !policy.crossPhrase))
+        (t.pattern === "carry" && !rule.crossPhrase))
     )
       errors.push("Tie notation violates the configured lifetime policy.");
     if (
@@ -166,10 +171,10 @@ export function validateTieSegments(
         )
           errors.push("Broken or discontinuous tie connection.");
         if (
-          policy &&
+          rule &&
           (previous.event.bar === event.bar
-            ? !policy.withinMeasure
-            : !policy.crossMeasure)
+            ? !rule.withinMeasure
+            : !rule.crossMeasure)
         )
           errors.push("Tie connection violates measure boundary permission.");
       } else if (!carried || t.pattern !== "carry" || tick !== startTick)

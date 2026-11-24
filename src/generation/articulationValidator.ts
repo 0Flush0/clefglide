@@ -4,7 +4,17 @@ import type {
   ArticulationTiming,
   SlurGroup,
 } from "../score/articulationModel";
-import { TPQ, isContinuousMovement, type Phrase } from "../score/model";
+import {
+  activeHands,
+  configForHand,
+  hasArticulation,
+} from "./config/handParameters";
+import {
+  TPQ,
+  isContinuousMovement,
+  type Hand,
+  type Phrase,
+} from "../score/model";
 import type { ValidatedGeneratorConfig } from "./config";
 import { generatorConfigFingerprint } from "./config";
 import {
@@ -33,10 +43,9 @@ export function validateArticulation(
   previous?: Plan,
 ): string[] {
   const errors: string[] = [];
-  const a = c.articulation;
   const incoming = p.initial.articulation;
   const outgoing = p.final.articulation;
-  if (!a)
+  if (!hasArticulation(c))
     return incoming ||
       outgoing ||
       p.events.some((e) => e.articulation || e.slur)
@@ -57,6 +66,45 @@ export function validateArticulation(
     errors.push(
       "Articulation continuation differs from the previous phrase commitment.",
     );
+  for (const hand of c.handParameters ? activeHands(c) : [undefined])
+    errors.push(
+      ...validateHandArticulation(
+        p,
+        hand ? configForHand(c, hand) : c,
+        outgoing,
+        hand,
+      ),
+    );
+  if (
+    c.handParameters &&
+    [...(incoming?.groups ?? []), ...outgoing.groups].some(
+      (g) => !activeHands(c).some((hand) => g.voiceId.startsWith(`${hand}:`)),
+    )
+  )
+    errors.push("Articulation uses an inactive hand.");
+  return errors;
+}
+
+function validateHandArticulation(
+  p: Plan,
+  c: ValidatedGeneratorConfig,
+  outgoing: NonNullable<Plan["final"]["articulation"]>,
+  hand?: Hand,
+) {
+  const includes = (voice: string) => !hand || voice.startsWith(`${hand}:`);
+  const incoming = p.initial.articulation;
+  const events = p.events.filter((event) => includes(voiceOf(event)));
+  const a = c.articulation;
+  const errors: string[] = [];
+  if (!a)
+    return events.some((event) => event.articulation || event.slur) ||
+      [incoming, outgoing].some(
+        (state) =>
+          state?.groups.some((group) => includes(group.voiceId)) ||
+          Object.keys(state?.terminal ?? {}).some(includes),
+      )
+      ? ["Articulation requires an enabled policy for this hand."]
+      : [];
   const start = boundaryTick(p.initial, c);
   const end = boundaryTick(p.final, c);
   const timeline = new ArticulationTimeline([p], c);
@@ -166,11 +214,12 @@ export function validateArticulation(
     [incoming, start],
     [outgoing, end],
   ] as const)
-    for (const group of boundary?.groups ?? []) verifyGroup(group, at);
+    for (const group of boundary?.groups ?? [])
+      if (includes(group.voiceId)) verifyGroup(group, at);
 
   // Local groups are reconstructed from the annotations, then checked against the voice lane.
   const local = new Map<string, typeof p.events>();
-  for (const e of p.events)
+  for (const e of events)
     if (e.slur && !groupIds.has(e.slur.id)) {
       const group = local.get(e.slur.id) ?? [];
       group.push(e);
@@ -193,7 +242,7 @@ export function validateArticulation(
     });
   }
   const terminal: NonNullable<typeof outgoing>["terminal"] = {};
-  for (const e of p.events) {
+  for (const e of events) {
     if (!e.articulation && !e.slur) continue;
     const attack = timeline.byId.get(e.id);
     if (!attack?.eligible || (e.slur && !idToGroup.has(e.id))) {
@@ -273,9 +322,18 @@ export function validateArticulation(
         propertiesEqual(normalize(value), normalize(expected[voice]))
       );
     });
-  if (!sameTerminal(outgoing.terminal, terminal))
+  if (
+    !sameTerminal(
+      Object.fromEntries(
+        Object.entries(outgoing.terminal).filter(([voice]) => includes(voice)),
+      ),
+      terminal,
+    )
+  )
     errors.push("Invalid outgoing articulation persistence state.");
-  for (const [voice, ref] of Object.entries(incoming?.terminal ?? {}))
+  for (const [voice, ref] of Object.entries(incoming?.terminal ?? {}).filter(
+    ([voice]) => includes(voice),
+  ))
     if (
       !a.voices.includes(voice) ||
       ref.end !== start ||

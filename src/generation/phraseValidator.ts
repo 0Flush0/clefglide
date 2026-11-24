@@ -15,6 +15,7 @@ import {
   type ValidatedGeneratorConfig,
 } from "./config";
 import type { GeneratedPhrase } from "./model";
+import { configForHand } from "./config/handParameters";
 import { validateGeneratedLifetimes } from "./lifetimeValidator";
 import { validateIndependentVoices } from "./independentValidator";
 import { validateArticulation } from "./articulationValidator";
@@ -131,7 +132,9 @@ function validateCore(
     p.final.hands.length !== expected.length
   )
     errors.push("Missing or unexpected hand state.");
+  const configuration = c;
   for (const pos of [...p.positions, ...p.initial.hands, ...p.final.hands]) {
+    const c = configForHand(configuration, pos.hand);
     const { min, max, clef } = c.hands[pos.hand];
     const midis = pos.pitches.map((x) => Note.midi(x) ?? -1),
       scale = Scale.get(`${c.notation.key} major`).notes;

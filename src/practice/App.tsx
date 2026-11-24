@@ -5,7 +5,14 @@ import {
   translate,
   LanguageContext,
 } from "../shared/i18n";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Capacitor } from "@capacitor/core";
 import * as Tabs from "@radix-ui/react-tabs";
 import {
@@ -44,6 +51,13 @@ import {
 import { Note } from "tonal";
 import { difficultySummary } from "../generation/difficulty";
 import { PracticeSettings } from "./PracticeSettings";
+import { guidedHistoryLabel } from "./curriculum";
+import {
+  activeHands,
+  configForHand,
+  planningTempo,
+} from "../generation/config/handParameters";
+import type { NamedProfile } from "./AdvancedProfiles";
 import { SettingsHelp } from "./SettingsHelp";
 import { visibleMovements, nextMovements } from "../score/hints";
 import { PracticeHints } from "./PracticeHints";
@@ -101,7 +115,9 @@ import {
 import {
   defaultProfiles,
   loadPracticePreferences,
+  rememberGuidedStage,
   savePracticePreferences,
+  type GuidedStageSelections,
   type PracticeDuration,
 } from "../progress/preferences";
 
@@ -188,11 +204,15 @@ export function App() {
     [run, setRun] = useState(() =>
       createRuntime(defaultPractice, defaultExerciseSeed),
     );
+  const [namedProfiles, setNamedProfiles] = useState<NamedProfile[]>([]);
   const [duration, setDuration] = useState<SessionDuration>(0);
   const profiles = useRef(defaultProfiles());
+  const guidedStages = useRef<GuidedStageSelections>({});
   const guidedHand = useRef<Settings["hand"]>("right");
   const custom = useRef<PracticeSetup>(undefined);
-  const beforeReplay = useRef<PracticeSetup>(undefined);
+  const beforeReplay = useRef<{ setup: PracticeSetup; seed: string }>(
+    undefined,
+  );
   const preferencesEdited = useRef(false);
   const durationEdited = useRef(false);
   const channelEdited = useRef(false);
@@ -258,6 +278,7 @@ export function App() {
               r.assistanceUsed,
               {
                 results: r.engine.results,
+                finished: r.complete,
                 durationResults: r.engine.durationResults,
                 articulationResults: r.engine.articulationResults,
               },
@@ -318,15 +339,17 @@ export function App() {
     loadPracticePreferences()
       .then((p) => {
         if (cancelled) return;
+        setNamedProfiles(p.namedProfiles);
         if (!durationEdited.current) setDuration(p.duration);
         if (!channelEdited.current) setChannel(p.midiChannel);
         if (!metronomeEdited.current) setClick(p.metronome);
         if (!preferencesEdited.current) {
           profiles.current = p.guided;
+          guidedStages.current = p.guidedStages;
           guidedHand.current = p.guidedHand;
           custom.current = p.custom;
-          setDraft(p.setup);
-          setSeed(p.seed);
+          setDraft(p.draft ?? p.setup);
+          setSeed(p.draftSeed ?? p.seed);
           const restored = createRuntime(p.setup, p.seed);
           setRun(restored);
           ref.current = restored;
@@ -484,12 +507,15 @@ export function App() {
     if (setup.profile === "guided") {
       guidedHand.current = setup.config.hands.active;
       profiles.current[guidedHand.current] = setup;
+      guidedStages.current = rememberGuidedStage(guidedStages.current, setup);
     } else {
       custom.current = setup;
     }
     void savePracticePreferences({
       setup,
       seed,
+      draft: setup,
+      draftSeed: seed,
       guided: { ...profiles.current },
       guidedHand: guidedHand.current,
       custom: custom.current,
@@ -506,11 +532,13 @@ export function App() {
       const next = createRuntime(checked, newSeed, replay, legacy);
       void pausePractice(ref.current);
       if (replay && !ref.current.replay)
-        beforeReplay.current = ref.current.setup;
+        beforeReplay.current = { setup: draft, seed };
       ref.current = next;
       setRun(next);
-      setDraft(checked);
-      setSeed(newSeed);
+      if (!replay) {
+        setDraft(checked);
+        setSeed(newSeed);
+      }
       setError("");
       setFeedback("Fresh music. Check your starting hand position.");
       setReveal(false);
@@ -696,11 +724,13 @@ export function App() {
       window.removeEventListener("blur", blur);
     };
   }, [sim, pianoLow]);
-  const pending = useMemo(
-    () =>
-      JSON.stringify(draft) !== JSON.stringify(run.setup) || seed !== run.seed,
-    [draft, run.setup, seed, run.seed],
-  );
+  const pending = useMemo(() => {
+    const baseline = run.replay ? (beforeReplay.current ?? run) : run;
+    return (
+      JSON.stringify(draft) !== JSON.stringify(baseline.setup) ||
+      seed !== baseline.seed
+    );
+  }, [draft, run, run.setup, seed]);
   const updateDraft = (next: PracticeSetup) => {
     preferencesEdited.current = true;
     if (next.profile === "guided" && draft.profile === "guided") {
@@ -712,11 +742,27 @@ export function App() {
         const saved = profiles.current[nextHand];
         next = {
           ...saved,
-          options: { ...saved.options, mode: next.options.mode },
+          options: {
+            ...saved.options,
+            mode: draft.options.mode,
+            hints: draft.options.hints,
+          },
         };
       }
     }
+    if (next.profile === "guided") {
+      guidedHand.current = next.config.hands.active;
+      profiles.current[guidedHand.current] = next;
+      guidedStages.current = rememberGuidedStage(guidedStages.current, next);
+    } else custom.current = next;
     setDraft(next);
+    if (!savedSetupSchema.safeParse(next).success) return;
+    void savePracticePreferences({
+      draft: next,
+      guided: { ...profiles.current },
+      guidedHand: guidedHand.current,
+      custom: custom.current,
+    }).catch((e) => setError(String(e)));
   };
   const selectProfile = (profile: PracticeProfile) => {
     if (profile === draft.profile) return;
@@ -726,13 +772,16 @@ export function App() {
     const selected =
       profile === "guided"
         ? profiles.current[guidedHand.current]
-        : (custom.current ?? draft);
+        : (custom.current ?? { ...draft, level: undefined });
     updateDraft({
+      ...selected,
       profile,
-      config: selected.config,
       options: {
         ...draft.options,
-        bpm: selected.config.dynamicFingering?.tempoBpm ?? draft.options.bpm,
+        bpm:
+          profile === "guided"
+            ? selected.options.bpm
+            : (planningTempo(selected.config) ?? draft.options.bpm),
       },
     });
   };
@@ -743,6 +792,28 @@ export function App() {
       setError(String(e)),
     );
   };
+  const durationControl = (
+    <>
+      <span aria-hidden="true">{tr("Practice duration")}</span>
+      <div
+        className="segmented session-duration"
+        role="group"
+        aria-label={tr("Practice duration")}
+      >
+        {sessionDurations.map(({ minutes, label }) => (
+          <button
+            key={minutes}
+            type="button"
+            aria-pressed={duration === minutes}
+            disabled={run.duration !== undefined && !run.complete}
+            onClick={() => chooseDuration(minutes)}
+          >
+            {tr(label)}
+          </button>
+        ))}
+      </div>
+    </>
+  );
   const setHints = (hints: PracticeOptions["hints"]) => {
     updateDraft({ ...draft, options: { ...draft.options, hints } });
     if (!expireIfDue(run, performance.now())) {
@@ -759,8 +830,7 @@ export function App() {
   };
   const apply = () =>
     change(draft, seed !== run.seed ? seed : createLocalId("exercise"));
-  const freshSetup = () =>
-    pending ? draft : (beforeReplay.current ?? run.setup);
+  const freshSetup = () => (pending || run.replay ? draft : run.setup);
   const toggle = () => {
     // A delayed settings read must never replace an attempt the user has started.
     preferencesEdited.current = true;
@@ -1242,24 +1312,7 @@ export function App() {
                     </button>
                   </div>
                   <div className="session-timer">
-                    <span aria-hidden="true">{tr("Practice duration")}</span>
-                    <div
-                      className="segmented session-duration"
-                      role="group"
-                      aria-label={tr("Practice duration")}
-                    >
-                      {sessionDurations.map(({ minutes, label }) => (
-                        <button
-                          key={minutes}
-                          type="button"
-                          aria-pressed={duration === minutes}
-                          disabled={run.duration !== undefined && !run.complete}
-                          onClick={() => chooseDuration(minutes)}
-                        >
-                          {tr(label)}
-                        </button>
-                      ))}
-                    </div>
+                    {draft.profile === "guided" && durationControl}
                     {displayedDuration > 0 && (
                       <span
                         className="session-countdown"
@@ -1291,8 +1344,15 @@ export function App() {
                 </div>
                 <div className="stats">
                   {(m.chordEvents > 0 ||
-                    (run.setup.config.chords.kind === "voicings" &&
-                      run.setup.config.chords.probability > 0)) && (
+                    activeHands(run.setup.config).some((hand) => {
+                      const chords = configForHand(
+                        run.setup.config,
+                        hand,
+                      ).chords;
+                      return (
+                        chords.kind === "voicings" && chords.probability > 0
+                      );
+                    })) && (
                     <Stat
                       label={tr("Chord-event accuracy")}
                       value={
@@ -1414,10 +1474,55 @@ export function App() {
                 pending={pending}
                 onChange={updateDraft}
                 onProfile={selectProfile}
-                onSeed={setSeed}
+                onGuidedHand={(hand) => updateDraft(profiles.current[hand])}
+                guidedStages={guidedStages.current[draft.config.hands.active]}
+                namedProfiles={namedProfiles}
+                onProfiles={(next) => {
+                  setNamedProfiles(next);
+                  void savePracticePreferences({ namedProfiles: next }).catch(
+                    (e) => setError(String(e)),
+                  );
+                }}
+                onSeed={(seed) => {
+                  setSeed(seed);
+                  preferencesEdited.current = true;
+                  void savePracticePreferences({ draftSeed: seed }).catch((e) =>
+                    setError(String(e)),
+                  );
+                }}
+                completedLevels={
+                  new Set(
+                    sessions.flatMap((session) =>
+                      isConfiguredSession(session) &&
+                      session.finished &&
+                      session.setup.level &&
+                      session.results.length > 0
+                        ? [
+                            `${session.setup.level.version}:${session.setup.level.id}`,
+                          ]
+                        : [],
+                    ),
+                  )
+                }
+                practisedLevels={
+                  new Set(
+                    sessions.flatMap((session) =>
+                      isConfiguredSession(session) &&
+                      session.setup.level &&
+                      session.results.some((r) => r.kind === "correct")
+                        ? [
+                            `${session.setup.level.version}:${session.setup.level.id}`,
+                          ]
+                        : [],
+                    ),
+                  )
+                }
                 onHints={setHints}
                 onApply={() => void apply()}
                 assistanceUsed={run.assistanceUsed}
+                durationControl={
+                  <div className="sidebar-duration">{durationControl}</div>
+                }
               >
                 <label className="check metronome">
                   <input
@@ -1721,6 +1826,10 @@ function SessionRow({
   const articulation = isConfiguredSession(s)
     ? articulationMetrics(s.articulationResults)
     : undefined;
+  const language = useContext(LanguageContext);
+  const study = isConfiguredSession(s)
+    ? guidedHistoryLabel(s.setup.level, language)
+    : undefined;
   return (
     <details className="session">
       <summary>
@@ -1729,6 +1838,12 @@ function SessionRow({
           <small>
             {tr(settings.hand)} · {settings.key} {tr("major ·")}
             {tr(settings.mode)}
+            {study && (
+              <>
+                {" "}
+                · {tr("Level")} {study.levelNumber} · {tr(study.title)}
+              </>
+            )}
           </small>
         </span>
         <strong>
