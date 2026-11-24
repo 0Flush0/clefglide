@@ -14,6 +14,15 @@ import {
 } from "../score/model";
 import { difficultySummary } from "../generation/difficulty";
 import { metrics, type Result } from "../scoring/engine";
+import type { DurationResult, ArticulationResult } from "../scoring/engine";
+import { generatorConfigVersion } from "../generation/config";
+import {
+  playbackSettings,
+  practiceFingerprint,
+  savedSetupSchema,
+  type PracticeSetup,
+} from "../practice/configuration";
+import type { PreferenceRow } from "./preferences";
 const resultSchema = z.object({
   id: z.string(),
   pitch: z.number().int().min(0).max(127),
@@ -35,7 +44,7 @@ const sessionBase = z.object({
   results: z.array(resultSchema),
   assistanceUsed: z.boolean().default(false),
 });
-export const sessionSchema = z.preprocess(
+const legacySessionSchema = z.preprocess(
   (input) =>
     input && typeof input === "object"
       ? { generatorVersion: "1.0.0", ...input }
@@ -63,19 +72,66 @@ export const sessionSchema = z.preprocess(
     }),
   ]),
 );
+const releaseSchema = z.object({
+  expectedMs: z.number(),
+  releasedAtMs: z.number().optional(),
+  errorMs: z.number().optional(),
+  status: z.enum(["pending", "correct", "early", "late"]),
+});
+const durationSchema = z.object({
+  id: z.string(),
+  status: z.enum([
+    "pending",
+    "correct",
+    "early",
+    "late",
+    "pedal",
+    "interrupted",
+    "miss",
+    "skip",
+  ]),
+  attackMs: z.number().optional(),
+  physical: releaseSchema.optional(),
+  sound: releaseSchema.optional(),
+  interruption: z.enum(["pause", "disconnect", "finish"]).optional(),
+});
+const articulationSchema = z.object({
+  id: z.string(),
+  eventId: z.string(),
+  dimension: z.enum(["timing", "velocity"]),
+  status: z.enum(["pending", "unobserved", "correct", "low", "high"]),
+  observed: z.number().optional(),
+  min: z.number().optional(),
+  max: z.number().optional(),
+  weight: z.number().nonnegative(),
+});
+const configuredSessionSchema = sessionBase.extend({
+  kind: z.literal("configured"),
+  generatorVersion: z.string().regex(/^\d+\.\d+\.\d+$/),
+  setup: savedSetupSchema,
+  durationResults: z.array(durationSchema),
+  articulationResults: z.array(articulationSchema),
+});
+export const sessionSchema = z.union([
+  configuredSessionSchema,
+  legacySessionSchema,
+]);
+export type LegacySession = z.infer<typeof legacySessionSchema>;
 export type Session = z.infer<typeof sessionSchema>;
+export const isConfiguredSession = (
+  session: Session,
+): session is z.infer<typeof configuredSessionSchema> => "kind" in session;
+export const sessionPlayback = (session: Session) =>
+  isConfiguredSession(session)
+    ? playbackSettings(session.setup)
+    : session.settings;
+export const canReplay = (session: Session) =>
+  isConfiguredSession(session)
+    ? session.generatorVersion === generatorConfigVersion(session.setup.config)
+    : session.generatorVersion === VERSION;
 class Database extends Dexie {
   sessions!: Table<Session, string>;
-  preferences!: Table<
-    {
-      id: string;
-      settings: Settings;
-      profiles?: Record<Settings["hand"], Settings>;
-      selectedHand?: Settings["hand"];
-      duration?: 0 | 3 | 5;
-    },
-    string
-  >;
+  preferences!: Table<PreferenceRow, string>;
   constructor() {
     super("sightflow");
     this.version(1).stores({
@@ -92,8 +148,8 @@ export function record(
   ms: number,
   results: Result[],
   assistanceUsed = automaticAssistance(settings),
-): Session {
-  return sessionSchema.parse({
+): LegacySession {
+  return legacySessionSchema.parse({
     id,
     date: Date.now(),
     seed,
@@ -105,6 +161,35 @@ export function record(
     results,
   });
 }
+export function recordConfigured(
+  id: string,
+  seed: string,
+  setup: PracticeSetup,
+  ms: number,
+  assistanceUsed: boolean,
+  outcomes: {
+    results: Result[];
+    durationResults: DurationResult[];
+    articulationResults: ArticulationResult[];
+  },
+) {
+  return configuredSessionSchema.parse({
+    kind: "configured",
+    id,
+    date: Date.now(),
+    seed,
+    setup,
+    fingerprint: practiceFingerprint(
+      setup.config,
+      setup.options,
+      assistanceUsed,
+    ),
+    generatorVersion: generatorConfigVersion(setup.config),
+    assistanceUsed,
+    ms,
+    ...outcomes,
+  });
+}
 export async function importSessions(text: string) {
   const data = z
     .object({
@@ -113,6 +198,19 @@ export async function importSessions(text: string) {
     })
     .parse(JSON.parse(text));
   for (const s of data.sessions) {
+    if (isConfiguredSession(s)) {
+      if (
+        s.fingerprint !==
+        practiceFingerprint(
+          s.setup.config,
+          s.setup.options,
+          s.assistanceUsed,
+          s.generatorVersion,
+        )
+      )
+        throw new Error("Practice fingerprint mismatch.");
+      continue;
+    }
     const legacyHints =
       s.settings.hints === "reveal" ? ["reveal", "starts"] : [s.settings.hints];
     const valid =
@@ -171,20 +269,23 @@ export function csv(sessions: Session[]) {
   return [
     "date,mode,correct,wrong,missed,skipped,first_attempt_accuracy,correct_per_minute,difficulty,hints,assistance_used,generator_version,chord_events,chord_correct,chord_accuracy",
     ...sessions.map((s) => {
-      const m = metrics(s.results, s.ms, s.settings.tolerance);
+      const settings = sessionPlayback(s);
+      const m = metrics(s.results, s.ms, settings.tolerance);
       return [
         new Date(s.date).toISOString(),
-        s.settings.mode,
+        settings.mode,
         m.correct,
         m.wrong,
         m.missed,
         m.skipped,
         s.results.length ? m.accuracy.toFixed(2) : "",
         m.npm.toFixed(2),
-        "noteJumps" in s.settings
-          ? difficultySummary(s.settings)
-          : (s.settings.difficulty ?? "legacy-fixed"),
-        s.settings.hints,
+        isConfiguredSession(s)
+          ? s.setup.profile
+          : "noteJumps" in s.settings
+            ? difficultySummary(s.settings)
+            : (s.settings.difficulty ?? "legacy-fixed"),
+        settings.hints,
         s.assistanceUsed ?? "unknown",
         s.generatorVersion ?? "1.0.0",
         m.chordEvents,

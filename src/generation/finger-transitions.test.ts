@@ -5,7 +5,7 @@ import { writtenPitch } from "../score/pitch";
 import { inferFingeringHints } from "../score/hints";
 import { generate } from "./planner";
 import { playableTransition } from "./ergonomics";
-import { validatePhrase } from "./validator";
+import { validatePhrase } from "./legacyFixtures";
 
 // Complete four-bar fixtures retain exact ticks and use real independently checked maps.
 function phrase(

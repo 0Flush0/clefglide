@@ -1,6 +1,16 @@
 import "fake-indexeddb/auto";
 import { it, expect } from "vitest";
-import { db, record, importSessions, csv } from "./store";
+import {
+  db,
+  record,
+  recordConfigured,
+  importSessions,
+  csv,
+  isConfiguredSession,
+  canReplay,
+} from "./store";
+import { defaultPractice } from "../practice/configuration";
+import { articulatedStudy } from "../generation/examples";
 import {
   defaults,
   fingerprint,
@@ -11,7 +21,92 @@ import {
   v4SettingsSchema,
   VERSION,
 } from "../score/model";
-import { applyHandMovements } from "../practice/presets";
+import { applyHandMovements } from "../generation/difficulty";
+function assertLegacy(
+  session: import("./store").Session,
+): asserts session is import("./store").LegacySession {
+  if (isConfiguredSession(session))
+    throw new Error("Expected a historical session");
+}
+it("roundtrips mixed backups and checks configured fingerprints and replay identity", async () => {
+  const original = record("backup-legacy", "same-seed", defaults, 1000, []);
+  const current = recordConfigured(
+    "backup-current",
+    "same-seed",
+    defaultPractice,
+    1000,
+    true,
+    {
+      results: [],
+      durationResults: [],
+      articulationResults: [],
+    },
+  );
+  const advanced = recordConfigured(
+    "backup-advanced",
+    "study",
+    {
+      ...defaultPractice,
+      profile: "custom",
+      config: articulatedStudy(),
+    },
+    2000,
+    true,
+    {
+      results: [
+        { id: "note", pitch: 60, hand: "right", kind: "correct", first: true },
+      ],
+      durationResults: [
+        {
+          id: "note",
+          status: "correct",
+          physical: { expectedMs: 1200, releasedAtMs: 1200, status: "correct" },
+        },
+      ],
+      articulationResults: [
+        {
+          id: "note",
+          eventId: "note",
+          dimension: "velocity",
+          status: "correct",
+          observed: 1.3,
+          weight: 1,
+        },
+      ],
+    },
+  );
+  const backup = (sessions: unknown[]) =>
+    JSON.stringify({ format: "sightflow-1", sessions });
+  expect(current.generatorVersion).toBe(original.generatorVersion);
+  expect(current.fingerprint).not.toBe(original.fingerprint);
+  expect(canReplay(original)).toBe(true);
+  expect(canReplay(advanced)).toBe(true);
+  await expect(
+    importSessions(backup([original, current, advanced])),
+  ).resolves.toBe(3);
+  expect(await db.sessions.get(original.id)).toEqual(original);
+  expect(await db.sessions.get(advanced.id)).toEqual(advanced);
+  await expect(
+    importSessions(
+      backup([
+        {
+          ...advanced,
+          setup: {
+            ...advanced.setup,
+            options: { ...advanced.setup.options, bpm: 77 },
+          },
+        },
+      ]),
+    ),
+  ).rejects.toThrow(/fingerprint/);
+  const unavailable = {
+    ...advanced,
+    generatorVersion: "12.0.0",
+    fingerprint: advanced.fingerprint.replace(/^12\.0\.1:/, "12.0.0:"),
+  };
+  await expect(importSessions(backup([unavailable]))).resolves.toBe(1);
+  expect(canReplay((await db.sessions.get(unavailable.id))!)).toBe(false);
+});
 it.each(["5.0.0", "5.1.0"])(
   "retains %s history and fingerprints separately from current results",
   async (version) => {
@@ -51,7 +146,11 @@ it("persists and reloads each hand range independently", async () => {
   await db.preferences.put({ id: "range-settings", settings });
   const saved = (await db.preferences.get("range-settings"))!;
   expect(settingsSchema.parse(saved.settings)).toEqual(settings);
-  const updated = { ...saved.settings, leftMin: 36, leftMax: 57 };
+  const updated = {
+    ...settingsSchema.parse(saved.settings),
+    leftMin: 36,
+    leftMax: 57,
+  };
   await db.preferences.put({ id: "range-settings", settings: updated });
   expect(
     settingsSchema.parse(
@@ -63,7 +162,9 @@ it("persists and reloads each hand range independently", async () => {
   await importSessions(
     JSON.stringify({ format: "sightflow-1", sessions: [session] }),
   );
-  expect((await db.sessions.get(session.id))!.settings).toEqual(updated);
+  const restored = (await db.sessions.get(session.id))!;
+  assertLegacy(restored);
+  expect(restored.settings).toEqual(updated);
 });
 
 it("migrates shared left-only preferences once and preserves right/both preferences", () => {
@@ -269,6 +370,7 @@ it("preserves v2 history/fingerprints while migrating active preferences to inde
     JSON.stringify({ format: "sightflow-1", sessions: [old] }),
   );
   const saved = (await db.sessions.get("v2"))!;
+  assertLegacy(saved);
   expect(saved.settings).toEqual(settings);
   expect(saved.fingerprint).toBe(old.fingerprint);
   expect(saved.fingerprint).not.toBe(
@@ -302,6 +404,7 @@ it("retains legacy history through backup import without mixing its generator ve
   );
   const saved = (await db.sessions.get("legacy"))!;
   expect(saved.generatorVersion).toBe("1.0.0");
+  assertLegacy(saved);
   expect(saved.settings.hints).toBe("reveal");
   expect(saved.fingerprint).toBe(s.fingerprint);
   await expect(

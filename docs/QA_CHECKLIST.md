@@ -1,5 +1,13 @@
 # ClefGlide QA
 
+## Parameter-driven production practice
+
+- Node.js 24.12.0 ran typecheck, lint and the Vite production build. The build reported the existing bundle-size warning for the 631 kB minified entry chunk.
+- Chromium passed all 48 desktop and tablet cases. The advanced browser cases ran against the production build as well. They used the real practice controls and simulated MIDI key edges to play beyond the initial score buffer, render independent voices and cross-phrase ties, score releases for carried bass notes, verify wide-leap and dynamic-fingering cues, and record actual articulation outcomes. They also checked seed replay, profile switching, benchmark hints and IndexedDB persistence.
+- All 355 unit and integration tests passed across 41 files. They cover preference migration, mixed backup import, version and assistance comparisons, the historical 5.2 replay fixtures, and sessions that finish at the active-time deadline.
+- Capacitor sync and the debug APK build passed. All 20 production files matched the packaged assets by SHA-256. The 28 native JVM tests passed using simulated or mocked MIDI and Android APIs.
+- Physical follow-up covers piano comfort and cue readability, actual MIDI velocity and pedal response, Android WebView rendering, and device lifecycle behavior. See the [Android hardware checklist](ANDROID.md#verification-and-phone-checks).
+
 ## Capacitor Android support (2026-11-23)
 
 Verified on Windows with Node.js 24.12.0, Capacitor 8.6.2, Android SDK 36 and Android Studio's JDK 21:

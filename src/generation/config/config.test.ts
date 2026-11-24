@@ -2,7 +2,7 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 import fc from "fast-check";
 import { defaults, fingerprint, type Settings } from "../../score/model";
 import { generateConfigured } from "../engine";
-import { validateGeneratedPhrase } from "../validator";
+import { validateGeneratedPhrase } from "../phraseValidator";
 import { inspectGeneratorFeasibility } from "../feasibility";
 import { applyHandMovements } from "../difficulty";
 import { resolveSettings } from "./presets";

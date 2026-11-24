@@ -1,5 +1,10 @@
 import type { MidiEvent } from "../midi/adapter";
-import { TPQ, noteheads, type ScoreEvent, type Settings } from "../score/model";
+import {
+  TPQ,
+  noteheads,
+  type ScoreEvent,
+  type ScoringSettings,
+} from "../score/model";
 import {
   generatorConfigFingerprint,
   type ValidatedGeneratorConfig,
@@ -65,7 +70,7 @@ export class Scorer {
   completed = new Set<string>();
   constructor(
     public notes: ScoreEvent[],
-    public settings: Settings,
+    public settings: ScoringSettings,
     public chordOnsetMs = DEFAULT_CHORD_ONSET_MS,
     public readonly config?: ValidatedGeneratorConfig,
   ) {

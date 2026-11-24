@@ -1,5 +1,32 @@
 ﻿// English message keys remain stable across saved practice sessions.
 export const german: Record<string, string> = {
+  "Practice profile": "Übungsprofil",
+  Guided: "Geführt",
+  Advanced: "Erweitert",
+  "Scoring mode": "Bewertungsmodus",
+  "Generator parameters": "Generatorparameter",
+  "GeneratorConfig JSON": "GeneratorConfig-JSON",
+  "Use parameters": "Parameter übernehmen",
+  "Use parameters to stage your JSON edits.":
+    "Übernimm die Parameter, um deine JSON-Änderungen für die nächste Übung vorzubereiten.",
+  "Show all sessions": "Alle Sitzungen anzeigen",
+  "Note duration accuracy": "Genauigkeit der Notendauer",
+  "Articulation timing": "Artikulationsdauer",
+  "Articulation velocity": "Anschlagstärke bei Artikulation",
+  "Wide leap": "Weiter Sprung",
+  "Thumb under": "Daumenuntersatz",
+  "Finger over": "Fingerübersatz",
+  "Continuous shift": "Fließender Lagenwechsel",
+  "In Practice, the Before you play banner shows where to put your thumb and which finger starts. Begin with the Guided profile for a fixed five-note position.":
+    "Der Hinweis vor dem Spielen zeigt dir die Daumentaste und den Startfinger. Beginne mit dem geführten Profil für eine feste Fünftonlage.",
+  "Choose Guided for fixed-position practice or Advanced to edit the generator parameters. Choose wait, timed or benchmark scoring with either profile.":
+    "Wähle Geführt für Übungen in fester Handlage oder Erweitert, um die Generatorparameter zu bearbeiten. Beide Profile unterstützen Warten, Spielen im Takt und den unabhängigen Test.",
+  "Choose Edit range to select the lowest and highest piano keys for each hand; middle C is C4. Apply saves the range for your next exercise. Clefs, key, meter, timing calibration and MIDI diagnostics are in Advanced settings.":
+    "Wähle Bereich bearbeiten, um die tiefste und höchste Taste für jede Hand festzulegen. Das mittlere C ist C4. Übernehmen speichert den Bereich für die nächste Übung. Schlüssel, Tonart, Taktart, Timing-Kalibrierung und MIDI-Diagnose findest du unter Erweiterte Einstellungen.",
+  "Advanced parameters can enable wide leaps, sustained notes, ties, independent voices, dynamic fingering and articulation. Every generated phrase must pass the configured musical and hand-position rules.":
+    "Mit erweiterten Parametern kannst du weite Sprünge, gehaltene Töne, Haltebögen, unabhängige Stimmen, dynamische Fingersätze und Artikulation aktivieren. Jede erzeugte Phrase muss die gewählten musikalischen Regeln und Handlagenregeln erfüllen.",
+  "MIDI observations cover played pitches, timing, releases and velocity. The fingering plan follows software constraints, and comfort varies by pianist.":
+    "MIDI erfasst Tonhöhen, Spielzeitpunkte, das Loslassen der Tasten und die Anschlagstärke. Der Fingersatz folgt den Regeln der Software. Wie bequem er sich spielt, ist individuell.",
   "USB MIDI is discovered automatically. Use the Bluetooth button to discover BLE-MIDI devices.":
     "USB-MIDI wird automatisch erkannt. Suche mit der Bluetooth-Taste nach BLE-MIDI-Geräten.",
   "Reconnect the USB cable or choose the input to retry. For Bluetooth, tap Discover Bluetooth MIDI. Practice stays paused until you press Start.":
@@ -329,7 +356,7 @@ export const german: Record<string, string> = {
   "Left hand": "Linke Hand",
   "CONTINUOUS RHYTHM": "IM TAKT SPIELEN",
   "UNASSISTED · FIRST ATTEMPT": "OHNE HILFE · ERSTER VERSUCH",
-  "GUIDED NOTE READING": "ANGELEITETES NOTENLESEN",
+  "WAIT FOR CORRECT NOTES": "AUF RICHTIGE NOTEN WARTEN",
   "Keep the pulse": "Halte den Puls",
   "Take your time. Read ahead.": "Nimm dir Zeit. Lies voraus.",
   "Listening to your playing": "Ich höre deinem Spiel zu",

@@ -64,7 +64,7 @@ export const settingsValuesSchema = v4SettingsSchema.extend({
   leftMax: z.number().int().min(21).max(108).default(55),
   rangeVersion: z.literal(2).default(2),
 });
-/** Migrate active preferences only. Historical records retain their old schema. */
+/** Normalize older settings for compatibility. Historical rows keep their own schemas. */
 export const settingsSchema = z.preprocess((input) => {
   if (!input || typeof input !== "object") return input;
   const s = input as Record<string, unknown>;
@@ -89,6 +89,14 @@ export const settingsSchema = z.preprocess((input) => {
   };
 }, settingsValuesSchema);
 export type Settings = z.infer<typeof settingsSchema>;
+export type ScoringSettings = Pick<
+  Settings,
+  "mode" | "beats" | "bpm" | "offset" | "tolerance"
+>;
+export type NotationSettings = Pick<
+  Settings,
+  "beats" | "key" | "bars" | "hints"
+>;
 export const defaults = settingsSchema.parse({});
 export type Hand = "right" | "left";
 export type HintMemory = Partial<
@@ -245,16 +253,18 @@ export interface VoiceState {
   lastFingering?: { midi: number; finger: number }[];
   resolutionPitch?: string;
 }
-export interface Phrase {
+export interface ScorePhrase {
   seed: string;
   version: string;
-  settings: Settings;
   events: ScoreEvent[];
   initial: StreamState;
   final: StreamState;
   harmonies: string[];
   positions: HandState[];
   movements: MovementPlan[];
+}
+export interface Phrase extends ScorePhrase {
+  settings: Settings;
 }
 interface MovementLanding {
   id: string;
@@ -298,6 +308,6 @@ export function fingerprint(
     `|assistance:${assistanceUsed ? "assisted" : "unassisted"}`
   );
 }
-export function automaticAssistance(s: Settings) {
+export function automaticAssistance(s: Pick<Settings, "mode" | "hints">) {
   return s.mode !== "benchmark" && (s.hints === "all" || s.hints === "smart");
 }

@@ -1,6 +1,6 @@
 import type { MidiEvent } from "../midi/adapter";
 import type { ValidatedGeneratorConfig } from "../generation/config";
-import { TPQ, type LifetimeNote, type Settings } from "../score/model";
+import { TPQ, type LifetimeNote, type ScoringSettings } from "../score/model";
 import type { ArticulationTiming } from "../score/articulationModel";
 import { performedLifetime } from "../score/lifetimes";
 
@@ -54,7 +54,7 @@ export class LifetimeTracker {
   readonly evaluate: boolean;
   constructor(
     readonly config: LifetimeConfig,
-    readonly settings: Settings,
+    readonly settings: ScoringSettings,
   ) {
     this.evaluate =
       config.evaluation.kind === "evaluate" &&

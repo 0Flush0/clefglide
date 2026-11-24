@@ -13,6 +13,8 @@
 
 This specification includes future scope and proposed implementation details. See the [README](../README.md) for shipped features and [implementation decisions](DECISIONS.md) for the current generator and architecture.
 
+Production practice now uses the [validated parameter API](GENERATOR_CONFIG.md) for both Guided and Advanced profiles. Practice profiles select musical parameters. The wait, timed and benchmark modes in section 4.1 select scoring behavior.
+
 ---
 
 ## 1. Vision and reason to build

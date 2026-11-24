@@ -64,6 +64,7 @@ export function resolveGeneratorConfig(
 /** For parameter-driven callers only. Legacy session fingerprints are deliberately untouched. */
 export function generatorConfigFingerprint(
   config: ValidatedGeneratorConfig,
+  version = generatorConfigVersion(config),
 ): string {
   // Disabled configurations retain their pre-capability byte identity.
   const {
@@ -82,7 +83,7 @@ export function generatorConfigFingerprint(
     ...(dynamicFingering ? { dynamicFingering } : {}),
     ...(articulation ? { articulation } : {}),
   };
-  return `${generatorConfigVersion(config)}:parameters:${JSON.stringify(identity)}`;
+  return `${version}:parameters:${JSON.stringify(identity)}`;
 }
 export function generatorConfigVersion(config: ValidatedGeneratorConfig) {
   if (config.articulation) return "12.0.1";

@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, within } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { useState } from "react";
 import { defaults, type Settings } from "../score/model";
+import { guidedPractice, playbackSettings } from "./configuration";
 import { LanguageContext } from "../shared/i18n";
 import { PracticeSettings } from "./PracticeSettings";
 
@@ -32,12 +33,13 @@ function setup(settings = defaults, language: "en" | "de" = "en") {
     </LanguageContext.Provider>,
   );
   function Harness() {
-    const [draft, update] = useState(settings);
-    latest = draft;
+    const [draft, update] = useState(() => guidedPractice(settings.hand));
+    latest = { ...settings, ...playbackSettings(draft) };
     return (
       <PracticeSettings
         draft={draft}
         onChange={update}
+        onProfile={() => {}}
         onApply={() => {}}
         onHints={() => {}}
         onSeed={() => {}}

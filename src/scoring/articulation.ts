@@ -1,6 +1,11 @@
 import type { ValidatedGeneratorConfig } from "../generation/config";
 import type { ArticulationTiming } from "../score/articulationModel";
-import { TPQ, noteheads, type ScoreEvent, type Settings } from "../score/model";
+import {
+  TPQ,
+  noteheads,
+  type ScoreEvent,
+  type ScoringSettings,
+} from "../score/model";
 import type { LifetimeTracker } from "./lifetimes";
 
 type Policy = NonNullable<ValidatedGeneratorConfig["articulation"]>;
@@ -156,7 +161,7 @@ function classify(observed: number, min: number, max: number): Status {
 
 export function isArticulationTimingEvaluated(
   policy: Policy | undefined,
-  mode: Settings["mode"],
+  mode: ScoringSettings["mode"],
 ) {
   return (
     mode === "timed" &&
@@ -171,7 +176,7 @@ export function evaluateArticulation(
   events: ScoreEvent[],
   tracker: LifetimeTracker,
   policy: Policy,
-  settings: Settings,
+  settings: ScoringSettings,
   chordOnsetMs: number,
   unattempted: ReadonlySet<string>,
   paused: boolean,

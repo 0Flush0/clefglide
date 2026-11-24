@@ -1,39 +1,40 @@
 import { useEffect, useRef, useState } from "react";
 import { Note } from "tonal";
 import { Pencil, X } from "lucide-react";
-import { type Hand, type Settings, settingsSchema } from "../score/model";
-import { rangeError } from "../generation/positions";
+import type { Hand } from "../score/model";
+import type { GeneratorConfig } from "../generation";
 import { useTranslation } from "../shared/i18n";
 
 const keys = Array.from({ length: 88 }, (_, i) => i + 21);
 const black = (midi: number) => [1, 3, 6, 8, 10].includes(midi % 12);
 const whiteKeys = keys.filter((midi) => !black(midi));
-const bounds = (s: Settings, hand: Hand) =>
-  hand === "left" ? [s.leftMin, s.leftMax] : [s.min, s.max];
+type Hands = GeneratorConfig["hands"];
+const bounds = (s: Hands, hand: Hand) => [s[hand].min, s[hand].max];
 
 export function KeyboardRange({
   settings,
   onChange,
+  validate,
 }: {
-  settings: Settings;
-  onChange: (s: Settings) => void;
+  settings: Hands;
+  onChange: (s: Hands) => void;
+  validate: (s: Hands) => string | undefined;
 }) {
   const tr = useTranslation();
   const dialog = useRef<HTMLDialogElement>(null);
   const keyboard = useRef<HTMLDivElement>(null);
   const lowerEndpoint = useRef<HTMLButtonElement>(null);
   const centeredHand = useRef<Hand | undefined>(undefined);
-  const [selection, setSelection] = useState<Settings>();
+  const [selection, setSelection] = useState<Hands>();
   const [hand, setHand] = useState<Hand>("right");
   const [edge, setEdge] = useState<"low" | "high">("low");
   const [focusMidi, setFocusMidi] = useState(60);
   const editing = Boolean(selection);
   const hands: Hand[] =
-    settings.hand === "both" ? ["left", "right"] : [settings.hand];
+    settings.active === "both" ? ["left", "right"] : [settings.active];
   const [low, high] = bounds(selection ?? settings, hand);
-  const error = selection ? rangeError(selection) : undefined;
-  const valid =
-    selection && settingsSchema.safeParse(selection).success && !error;
+  const error = selection ? validate(selection) : undefined;
+  const valid = selection && !error;
 
   useEffect(() => {
     if (selection && !dialog.current?.open) {
@@ -76,7 +77,7 @@ export function KeyboardRange({
     const max = edge === "high" ? midi : Math.max(midi, high);
     setSelection({
       ...selection,
-      ...(hand === "left" ? { leftMin: min, leftMax: max } : { min, max }),
+      [hand]: { ...selection[hand], min, max },
     });
     setFocusMidi(midi);
     if (edge === "low") setEdge("high");
@@ -89,7 +90,7 @@ export function KeyboardRange({
         <button
           type="button"
           onClick={() => {
-            const active = settings.hand === "left" ? "left" : "right";
+            const active = settings.active === "left" ? "left" : "right";
             setHand(active);
             setEdge("low");
             setFocusMidi(bounds(settings, active)[0]);

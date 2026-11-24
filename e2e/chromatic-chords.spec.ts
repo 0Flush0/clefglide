@@ -1,3 +1,9 @@
+import { stageConfiguration } from "./fixtures/configuredPractice";
+import {
+  chordDefaults,
+  chromaticDefaults,
+  resolveGeneratorConfig,
+} from "../src/generation";
 import { test, expect } from "@playwright/test";
 
 test("chromatic chord practice engraves, streams, keeps hints stable and saves actual chord outcomes", async ({
@@ -6,26 +12,15 @@ test("chromatic chord practice engraves, streams, keeps hints stable and saves a
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto("/");
-  for (const label of [
-    "Note jumps",
-    "Hand movements",
-    "Finger spacing",
-    "Accidentals",
-    "Chords",
-  ])
-    await expect(
-      page.getByRole("group", { name: label }).getByRole("button"),
-    ).toHaveCount(4);
-  for (const label of ["Accidentals", "Chords"])
-    await page
-      .getByRole("group", { name: label })
-      .getByRole("button", { name: "Hard" })
-      .click();
   await page.getByLabel("Fingering assistance").selectOption("all");
-  // This seed puts a chord in the two bars visible on tablets.
-  await page.getByText("Advanced settings", { exact: true }).click();
-  await page.getByLabel("Exercise seed").fill("chord-hints");
-  await page.getByText("Advanced settings", { exact: true }).click();
+  await stageConfiguration(
+    page,
+    resolveGeneratorConfig({
+      chords: { ...chordDefaults, probability: 1 },
+      chromatic: { ...chromaticDefaults, probability: 0.45 },
+    }),
+    "chord-hints",
+  );
   const apply = page.getByRole("button", { name: "Apply & generate" });
   await apply.click();
   await expect(apply).toBeDisabled();

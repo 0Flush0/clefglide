@@ -1,9 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { defaults, type MovementPlan } from "./model";
-import { positionsFor } from "../generation/positions";
 import { generate } from "../generation/planner";
-import { validatePhrase } from "../generation/validator";
-import { applyHandMovements } from "../practice/presets";
+import { positionsFor, validatePhrase } from "../generation/legacyFixtures";
+import { applyHandMovements } from "../generation/difficulty";
 import {
   selectFingeringHints,
   showPlacement,

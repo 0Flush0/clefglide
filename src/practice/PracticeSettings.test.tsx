@@ -1,87 +1,60 @@
-import { cleanup, fireEvent, render, within } from "@testing-library/react";
-import { afterEach, expect, it } from "vitest";
+﻿import { fireEvent, render } from "@testing-library/react";
 import { useState } from "react";
-import { defaults, type Settings } from "../score/model";
+import { expect, it } from "vitest";
+import { defaultPractice } from "./configuration";
 import { PracticeSettings } from "./PracticeSettings";
-afterEach(cleanup);
-it("offers five independent four-button groups with details collapsed", () => {
-  let latest = defaults;
-  function SettingsHarness() {
-    const [draft, update] = useState<Settings>({ ...defaults, max: 84 });
-    latest = draft;
+
+it("keeps controls compact, stages validated parameters, and preserves the scoring mode", () => {
+  function Harness() {
+    const [draft, onChange] = useState({
+      ...defaultPractice,
+      options: { ...defaultPractice.options, mode: "timed" as const },
+    });
     return (
       <PracticeSettings
         draft={draft}
-        onChange={update}
-        onHints={() => {}}
+        onChange={(setup) =>
+          onChange({ ...setup, options: { ...setup.options, mode: "timed" } })
+        }
+        onProfile={(profile) => onChange({ ...draft, profile })}
         onSeed={() => {}}
+        onHints={() => {}}
         onApply={() => {}}
-        seed="settings"
+        seed="test"
         pending
-        assistanceUsed
+        assistanceUsed={false}
       >
         {null}
       </PracticeSettings>
     );
   }
-  const ui = render(<SettingsHarness />);
-  expect(ui.queryByLabelText("Difficulty preset")).toBeNull();
-  for (const label of [
-    "Note jumps",
-    "Hand movements",
-    "Finger spacing",
-    "Accidentals",
-    "Chords",
-  ]) {
-    expect(
-      within(ui.getByRole("group", { name: label })).getAllByRole("button"),
-    ).toHaveLength(4);
-  }
-  const choose = (group: string, name: string) =>
-    fireEvent.click(
-      within(ui.getByRole("group", { name: group })).getByRole("button", {
-        name,
-      }),
-    );
-  choose("Finger spacing", "Hard");
-  expect(latest).toEqual({ ...defaults, max: 84, fingerSpacing: "hard" });
-  choose("Note jumps", "Large");
-  expect(latest).toMatchObject({
-    noteJumps: "large",
-    interval: 7,
-    handMovements: "off",
-    maxShift: 0,
-    shiftFrequency: 0,
-    fingerSpacing: "hard",
-    min: 60,
-    max: 84,
-  });
-  choose("Hand movements", "Easy");
-  expect(latest).toMatchObject({
-    noteJumps: "large",
-    interval: 7,
-    handMovements: "easy",
-    maxShift: 1,
-    shiftFrequency: 0.25,
-    fingerSpacing: "hard",
-  });
-  choose("Hand movements", "Off");
-  expect(latest).toMatchObject({
-    noteJumps: "large",
-    interval: 7,
-    handMovements: "off",
-    maxShift: 0,
-    shiftFrequency: 0,
-    fingerSpacing: "hard",
-  });
-  expect(ui.container.querySelector(".advanced")?.hasAttribute("open")).toBe(
+
+  const ui = render(<Harness />);
+  expect(ui.getByRole("button", { name: "Edit range" })).toBeTruthy();
+  expect(ui.getByText("Advanced settings").closest("details")?.open).toBe(
     false,
   );
-  expect(ui.queryByRole("dialog")).toBeNull();
-  expect(ui.getByRole("button", { name: "Edit range" })).toBeTruthy();
-  const before = latest;
-  choose("Accidentals", "Hard");
-  expect(latest).toEqual({ ...before, accidentals: "hard" });
-  choose("Chords", "Medium");
-  expect(latest).toEqual({ ...before, accidentals: "hard", chords: "medium" });
+  expect(ui.queryByLabelText("GeneratorConfig JSON")).toBeNull();
+  fireEvent.change(ui.getByLabelText("Practice profile"), {
+    target: { value: "custom" },
+  });
+  fireEvent.click(ui.getByText("Generator parameters", { exact: true }));
+  const editor = ui.getByLabelText(
+    "GeneratorConfig JSON",
+  ) as HTMLTextAreaElement;
+  const apply = ui.getByRole("button", { name: "Use parameters" });
+  fireEvent.change(editor, { target: { value: "{}" } });
+  fireEvent.click(apply);
+  expect(ui.getByRole("alert").textContent).toContain(
+    "Invalid generator configuration",
+  );
+  const config = JSON.parse(JSON.stringify(defaultPractice.config));
+  config.hands.right.max = 84;
+  fireEvent.change(editor, { target: { value: JSON.stringify(config) } });
+  fireEvent.click(apply);
+  expect(ui.queryByRole("alert")).toBeNull();
+  expect(JSON.parse(editor.value).hands.right.max).toBe(84);
+  expect((ui.getByLabelText("Scoring mode") as HTMLSelectElement).value).toBe(
+    "timed",
+  );
 });

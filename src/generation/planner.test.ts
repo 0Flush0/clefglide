@@ -3,19 +3,12 @@ import fc from "fast-check";
 import { Note } from "tonal";
 import { defaults, type Settings } from "../score/model";
 import { generate } from "./planner";
-import { validatePhrase } from "./validator";
-import {
-  applyHandMovements,
-  applyNoteJumps,
-  jumpLevels,
-} from "../practice/presets";
+import { positionsFor, validatePhrase } from "./legacyFixtures";
+import { applyHandMovements, applyNoteJumps, jumpLevels } from "./difficulty";
 import { inferFingeringHints, selectFingeringHints } from "../score/hints";
-import {
-  movementRules,
-  positionsFor,
-  rangeSummary,
-  diatonicIndex,
-} from "./positions";
+import { movementRules, resolveSettings } from "./config/presets";
+import { diatonicIndex } from "./positionMaps";
+import { inspectGeneratorFeasibility } from "./feasibility";
 describe("trusted five-finger planner", () => {
   it("validates 10,000 seeded phrases and 10,000 continuation boundaries", () => {
     fc.assert(
@@ -185,9 +178,6 @@ describe("trusted five-finger planner", () => {
     );
     expect(starts.size).toBeGreaterThan(4);
     expect([...starts].some((x) => x.endsWith("C4"))).toBe(false);
-    expect(rangeSummary(defaults)).toContain(
-      "Only one hand position fits this range.",
-    );
     expect(positionsFor(defaults, "right")).toHaveLength(1);
     expect(applyHandMovements(s, "hard")).toMatchObject({ min: 62, max: 81 });
   });
@@ -423,8 +413,10 @@ describe("trusted five-finger planner", () => {
     expect(validatePhrase(excessive)).toContain(
       "Unapproved or excessive finger spacing.",
     );
-    expect(rangeSummary({ ...defaults, fingerSpacing: "hard" })).toContain(
-      "No approved spacing pattern fits; conventional spacing will be used.",
-    );
+    expect(
+      inspectGeneratorFeasibility(
+        resolveSettings({ ...defaults, fingerSpacing: "hard" }),
+      ).warnings,
+    ).toEqual([expect.stringContaining("no approved variable position fits")]);
   });
 });

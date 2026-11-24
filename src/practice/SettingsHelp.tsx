@@ -346,7 +346,7 @@ export function SettingsHelp({
           </h2>
           <p>
             {tr(
-              "In Practice, the Before you play banner shows where to put your thumb and which finger starts. Begin with one hand and leave Hand movements and Finger spacing Off for a fixed five-note position.",
+              "In Practice, the Before you play banner shows where to put your thumb and which finger starts. Begin with the Guided profile for a fixed five-note position.",
             )}
           </p>
         </article>
@@ -373,54 +373,12 @@ export function SettingsHelp({
           <summary>{tr("Choose what to practice")}</summary>
           <p>
             {tr(
-              "Choose your hands and tempo in Practice. Change one difficulty control at a time; your keyboard ranges stay the same.",
+              "Choose Guided for fixed-position practice or Advanced to edit the generator parameters. Choose wait, timed or benchmark scoring with either profile.",
             )}
           </p>
-          <dl>
-            <div>
-              <dt>{tr("Note jumps")}</dt>
-              <dd>
-                {tr(
-                  "How far the next note can move, from small steps to an octave.",
-                )}
-              </dd>
-            </div>
-            <div>
-              <dt>{tr("Hand movements")}</dt>
-              <dd>
-                {tr(
-                  "Off keeps one hand position across phrases. Higher levels allow planned moves, each prepared by a full beat of rest.",
-                )}
-              </dd>
-            </div>
-            <div>
-              <dt>{tr("Finger spacing")}</dt>
-              <dd>
-                {tr(
-                  "Off uses five consecutive scale notes. Higher levels allow selected gaps near the thumb and index finger.",
-                )}
-              </dd>
-            </div>
-            <div>
-              <dt>{tr("Accidentals")}</dt>
-              <dd>
-                {tr(
-                  "Off follows your chosen key signature. Higher levels add notes outside the key.",
-                )}
-              </dd>
-            </div>
-            <div>
-              <dt>{tr("Chords")}</dt>
-              <dd>
-                {tr(
-                  "Off plays one note per hand. Easy adds two-note shapes, Medium adds triads and inversions, and Hard allows selected four-note shapes. Your ranges can limit the available shapes.",
-                )}
-              </dd>
-            </div>
-          </dl>
           <p>
             {tr(
-              "Choose Edit range to select the lowest and highest piano keys for each hand; middle C is C4. Apply saves the range for your next exercise. Clefs, key, meter, rhythm, timing calibration and MIDI diagnostics are in Advanced settings.",
+              "Choose Edit range to select the lowest and highest piano keys for each hand; middle C is C4. Apply saves the range for your next exercise. Clefs, key, meter, timing calibration and MIDI diagnostics are in Advanced settings.",
             )}
           </p>
         </details>
@@ -489,12 +447,12 @@ export function SettingsHelp({
           <summary>{tr("Current teaching scope")}</summary>
           <p>
             {tr(
-              "Practice supports C, G, F and D major, 3/4 and 4/4, fixed hand positions, planned rested moves, selected finger spacing, chromatic neighbors and synchronized two-hand chords. Ranges and hand-position rules still apply to every phrase.",
+              "Advanced parameters can enable wide leaps, sustained notes, ties, independent voices, dynamic fingering and articulation. Every generated phrase must pass the configured musical and hand-position rules.",
             )}
           </p>
           <p>
             {tr(
-              "Finger crossings, an adaptive scheduler and finger verification are not available. The fingering plan follows the declared rules; it cannot guarantee comfort for every pianist.",
+              "MIDI observations cover played pitches, timing, releases and velocity. The fingering plan follows software constraints, and comfort varies by pianist.",
             )}
           </p>
         </details>

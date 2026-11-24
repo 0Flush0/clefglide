@@ -42,23 +42,38 @@ import {
   Legend,
 } from "recharts";
 import { Note } from "tonal";
-import { difficultySummary } from "./presets";
+import { difficultySummary } from "../generation/difficulty";
 import { PracticeSettings } from "./PracticeSettings";
 import { SettingsHelp } from "./SettingsHelp";
 import { visibleMovements, nextMovements } from "../score/hints";
 import { PracticeHints } from "./PracticeHints";
 import {
-  defaults,
   fingerprint,
   settingsSchema,
   type Settings,
-  type Phrase,
-  type HandState,
-  VERSION,
   automaticAssistance,
 } from "../score/model";
-import { generate } from "../generation/planner";
-import { Scorer, metrics } from "../scoring/engine";
+import {
+  durationMetrics,
+  articulationMetrics,
+  metrics,
+} from "../scoring/engine";
+import {
+  defaultPractice,
+  defaultExerciseSeed,
+  playbackSettings,
+  practiceFingerprint,
+  savedSetupSchema,
+  type PracticeSetup,
+  type PracticeProfile,
+  type PracticeOptions,
+} from "./configuration";
+import {
+  createRuntime,
+  extendRuntime,
+  legacyReplaySetup,
+  type Runtime,
+} from "./runtime";
 import {
   MidiBus,
   type MidiAdapter,
@@ -75,6 +90,10 @@ import { Notation } from "../score/Notation";
 import {
   db,
   record,
+  recordConfigured,
+  canReplay,
+  sessionPlayback,
+  isConfiguredSession,
   csv,
   importSessions,
   type Session,
@@ -87,45 +106,17 @@ import {
 } from "../progress/preferences";
 
 const bus = new MidiBus();
-const initialSeed = "first-light";
 const sessionDurations = [
   { minutes: 3, label: "3 min" },
   { minutes: 5, label: "5 min" },
   { minutes: 0, label: "Unlimited" },
 ] as const;
 type SessionDuration = PracticeDuration;
-type Runtime = {
-  phrases: Phrase[];
-  engine: Scorer;
-  seed: string;
-  id: string;
-  initialHands: HandState[];
-  assistanceUsed: boolean;
-  duration?: SessionDuration;
-  complete?: boolean;
-};
 function formatCountdown(ms: number) {
   const seconds = Math.ceil(Math.max(0, ms) / 1000);
   return [Math.floor(seconds / 60), seconds % 60]
     .map((part) => String(part).padStart(2, "0"))
     .join(":");
-}
-function runtime(settings: Settings, seed: string): Runtime {
-  const first = generate(settings, seed),
-    next = generate(settings, seed, first.final);
-  return {
-    phrases: [first, next],
-    engine: new Scorer(
-      [...first.events, ...next.events]
-        .filter((e) => e.kind === "note")
-        .sort((a, b) => a.bar - b.bar || a.onset - b.onset),
-      settings,
-    ),
-    seed,
-    id: createLocalId("session"),
-    initialHands: structuredClone(first.initial.hands),
-    assistanceUsed: automaticAssistance(settings),
-  };
 }
 const labels = {
   en: {
@@ -192,15 +183,20 @@ export function App() {
     query.addEventListener("change", update);
     return () => query.removeEventListener("change", update);
   }, []);
-  const [settings, setSettings] = useState(defaults),
-    [draft, setDraft] = useState(defaults),
-    [seed, setSeed] = useState(initialSeed),
-    [run, setRun] = useState(() => runtime(defaults, initialSeed));
+  const [draft, setDraft] = useState(defaultPractice),
+    [seed, setSeed] = useState(defaultExerciseSeed),
+    [run, setRun] = useState(() =>
+      createRuntime(defaultPractice, defaultExerciseSeed),
+    );
   const [duration, setDuration] = useState<SessionDuration>(0);
   const profiles = useRef(defaultProfiles());
+  const guidedHand = useRef<Settings["hand"]>("right");
+  const custom = useRef<PracticeSetup>(undefined);
+  const beforeReplay = useRef<PracticeSetup>(undefined);
   const preferencesEdited = useRef(false);
-  const editedProfiles = useRef(new Set<Settings["hand"]>());
   const durationEdited = useRef(false);
+  const channelEdited = useRef(false);
+  const metronomeEdited = useRef(false);
   const ref = useRef(run);
   ref.current = run;
   const [, render] = useState(0),
@@ -228,28 +224,44 @@ export function App() {
       /* Storage is optional. */
     }
   };
+  const settings = useMemo(() => playbackSettings(run.setup), [run.setup]);
   const tr = <T,>(value: T) => translate(value, lang);
   const t = labels[lang],
     audio = useRef<AudioContext | null>(null),
     lastBeat = useRef(-1),
     hardware = useRef<MidiAdapter | null>(null),
     savedPhrase = useRef(-1),
-    presentedBars = useRef<Settings["bars"]>(settings.bars);
+    presentedBars = useRef<PracticeOptions["bars"]>(settings.bars);
   const sessions =
     useLiveQuery(() => db.sessions.orderBy("date").reverse().toArray(), []) ??
     [];
   const persist = useCallback(async (r: Runtime) => {
     if (!r.engine.results.length && !r.complete) return;
     try {
+      const options = { ...r.setup.options, bars: presentedBars.current };
+      const ms = r.engine.activeMs(performance.now());
       await db.sessions.put(
-        record(
-          r.id,
-          r.seed,
-          { ...r.engine.settings, bars: presentedBars.current },
-          r.engine.activeMs(performance.now()),
-          r.engine.results,
-          r.assistanceUsed,
-        ),
+        r.legacy
+          ? record(
+              r.id,
+              r.seed,
+              { ...r.legacy, ...options },
+              ms,
+              r.engine.results,
+              r.assistanceUsed,
+            )
+          : recordConfigured(
+              r.id,
+              r.seed,
+              { ...r.setup, options },
+              ms,
+              r.assistanceUsed,
+              {
+                results: r.engine.results,
+                durationResults: r.engine.durationResults,
+                articulationResults: r.engine.articulationResults,
+              },
+            ),
       );
     } catch (e) {
       setError(`Could not save local progress: ${String(e)}`);
@@ -265,7 +277,7 @@ export function App() {
       // A delayed callback must finalize scoring and elapsed time at the deadline.
       const deadline = now - overrun;
       r.engine.tick(deadline);
-      r.engine.pause(deadline);
+      r.engine.pause(deadline, "finish");
       r.complete = true;
       void persist(r);
       render((x) => x + 1);
@@ -274,43 +286,56 @@ export function App() {
     [persist],
   );
   const pausePractice = useCallback(
-    (r: Runtime) => {
+    (r: Runtime, reason: "pause" | "disconnect" = "pause") => {
       const now = performance.now();
       if (expireIfDue(r, now)) return;
-      r.engine.pause(now);
+      r.engine.pause(now, reason);
       render((x) => x + 1);
       return persist(r);
     },
     [expireIfDue, persist],
+  );
+  const prefetch = useCallback(
+    (r: Runtime, now: number) => {
+      try {
+        extendRuntime(r);
+        return true;
+      } catch (e) {
+        r.engine.pause(now);
+        setError(
+          "Could not extend the exercise: " +
+            (e instanceof Error ? e.message : String(e)),
+        );
+        void persist(r);
+        render((x) => x + 1);
+        return false;
+      }
+    },
+    [persist],
   );
   useEffect(() => {
     let cancelled = false;
     loadPracticePreferences()
       .then((p) => {
         if (cancelled) return;
-        profiles.current = {
-          ...p.profiles,
-          ...Object.fromEntries(
-            [...editedProfiles.current].map((hand) => [
-              hand,
-              profiles.current[hand],
-            ]),
-          ),
-        };
         if (!durationEdited.current) setDuration(p.duration);
-        if (p.saved && !preferencesEdited.current) {
-          const s = p.settings;
-          const restored = runtime(s, initialSeed);
-          setSettings(s);
-          setDraft(s);
+        if (!channelEdited.current) setChannel(p.midiChannel);
+        if (!metronomeEdited.current) setClick(p.metronome);
+        if (!preferencesEdited.current) {
+          profiles.current = p.guided;
+          guidedHand.current = p.guidedHand;
+          custom.current = p.custom;
+          setDraft(p.setup);
+          setSeed(p.seed);
+          const restored = createRuntime(p.setup, p.seed);
           setRun(restored);
+          ref.current = restored;
         }
       })
-      .catch(() =>
-        setError(
-          "Local settings could not be loaded. Export important progress regularly.",
-        ),
-      );
+      .catch((e: unknown) => {
+        if (!cancelled)
+          setError("Could not restore local practice: " + String(e));
+      });
     return () => {
       cancelled = true;
     };
@@ -342,7 +367,7 @@ export function App() {
         }
       },
       () => {
-        void pausePractice(ref.current);
+        void pausePractice(ref.current, "disconnect");
         setDevice("");
         setFeedback(
           "Piano disconnected. Practice paused; reconnect and press Start.",
@@ -376,13 +401,16 @@ export function App() {
         setDiagnostic(e);
         if (
           (e.source === "simulator") !== sim ||
-          (channel && e.channel !== channel)
+          (e.source === "hardware" && channel && e.channel !== channel)
         )
           return;
         const r = ref.current;
-        if (expireIfDue(r, performance.now())) return;
+        const now = performance.now();
+        if (expireIfDue(r, now)) return;
         const before = r.engine.results.length;
+        const index = r.engine.index;
         r.engine.input(e);
+        if (r.engine.index !== index) prefetch(r, now);
         const result = r.engine.results.at(-1);
         if (r.engine.results.length > before) {
           setFeedback(
@@ -395,7 +423,7 @@ export function App() {
         }
         render((x) => x + 1);
       }),
-    [sim, channel, expireIfDue],
+    [sim, channel, expireIfDue, prefetch],
   );
   const running = run.engine.running;
   useEffect(() => {
@@ -406,22 +434,11 @@ export function App() {
       const now = performance.now();
       if (expireIfDue(run, now)) return;
       engine.tick(now);
+      if (!prefetch(run, now)) return;
       const targetBar = engine.target?.bar ?? run.phrases.at(-1)!.final.bar;
-      if (targetBar + 4 >= run.phrases.at(-1)!.final.bar) {
-        const p = generate(
-          engine.settings,
-          run.seed,
-          run.phrases.at(-1)!.final,
-        );
-        run.phrases.push(p);
-        engine.notes.push(
-          ...p.events
-            .filter((e) => e.kind === "note")
-            .sort((a, b) => a.bar - b.bar || a.onset - b.onset),
-        );
-        if (run.phrases.length > 4) run.phrases.shift();
-      }
-      const phrase = Math.floor(targetBar / 4);
+      const phrase = Math.floor(
+        targetBar / run.setup.config.notation.phraseBars,
+      );
       if (phrase !== savedPhrase.current) {
         savedPhrase.current = phrase;
         void persist(run);
@@ -448,7 +465,7 @@ export function App() {
       render((x) => x + 1);
     }, 30);
     return () => clearInterval(timer);
-  }, [click, expireIfDue, persist, run, running]);
+  }, [click, expireIfDue, persist, prefetch, run, running]);
   useEffect(() => {
     const fn = () => {
       void pausePractice(ref.current);
@@ -463,33 +480,62 @@ export function App() {
       document.removeEventListener("visibilitychange", hidden);
     };
   }, [pausePractice]);
-  const change = async (s: Settings, newSeed: string) => {
+  const saveSetup = (setup: PracticeSetup, seed: string) => {
+    if (setup.profile === "guided") {
+      guidedHand.current = setup.config.hands.active;
+      profiles.current[guidedHand.current] = setup;
+    } else {
+      custom.current = setup;
+    }
+    void savePracticePreferences({
+      setup,
+      seed,
+      guided: { ...profiles.current },
+      guidedHand: guidedHand.current,
+      custom: custom.current,
+    }).catch((e) => setError(String(e)));
+  };
+  const change = (
+    setup: PracticeSetup,
+    newSeed: string,
+    replay = false,
+    legacy?: Settings,
+  ) => {
     try {
-      const parsed = settingsSchema.parse(s);
-      const checked = {
-        ...parsed,
-        hints: parsed.hints === "reveal" ? ("smart" as const) : parsed.hints,
-      };
-      const next = runtime(checked, newSeed);
-      await pausePractice(ref.current);
+      const checked = savedSetupSchema.parse(setup);
+      const next = createRuntime(checked, newSeed, replay, legacy);
+      void pausePractice(ref.current);
+      if (replay && !ref.current.replay)
+        beforeReplay.current = ref.current.setup;
+      ref.current = next;
       setRun(next);
-      setSettings(checked);
       setDraft(checked);
       setSeed(newSeed);
       setError("");
       setFeedback("Fresh music. Check your starting hand position.");
       setReveal(false);
       savedPhrase.current = -1;
-      ref.current = next;
       preferencesEdited.current = true;
-      editedProfiles.current.add(checked.hand);
-      profiles.current[checked.hand] = checked;
-      await savePracticePreferences({
-        settings: checked,
-        profile: checked,
-        selectedHand: checked.hand,
-      });
+      if (!replay) {
+        beforeReplay.current = undefined;
+        saveSetup(checked, newSeed);
+      }
       return next;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+  const replaySession = (session: Session) => {
+    try {
+      if (!canReplay(session)) return;
+      let next: Runtime | undefined;
+      if (isConfiguredSession(session))
+        next = change(session.setup, session.seed, true);
+      else {
+        const legacy = settingsSchema.parse(session.settings);
+        next = change(legacyReplaySetup(legacy), session.seed, true, legacy);
+      }
+      if (next) setTab("practice");
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -499,7 +545,10 @@ export function App() {
     activeMs = engine.activeMs(now),
     m = metrics(engine.results, activeMs, settings.tolerance),
     target = engine.target,
-    startBar = target?.bar ?? 0;
+    startBar = target?.bar ?? run.phrases.at(-1)!.final.bar - 1;
+  const releases = engine.lifetimes?.evaluate
+    ? durationMetrics(engine.durationResults)
+    : undefined;
   const displayedDuration = run.duration ?? duration;
   const shownBars = compactScore
     ? (Math.min(settings.bars, 2) as 2)
@@ -510,20 +559,20 @@ export function App() {
       run.phrases
         .flatMap((p) => p.events)
         .filter((e) => e.bar >= startBar && e.bar < startBar + shownBars),
-    [run, startBar, shownBars, run.phrases.length],
+    [run, startBar, shownBars, run.phrases],
   );
   const hands = run.phrases[0].initial.hands;
   const planPositions = useMemo(
     () => [...run.initialHands, ...run.phrases.flatMap((p) => p.positions)],
-    [run, startBar, run.phrases.length],
+    [run, startBar, run.phrases],
   );
   const hintEvents = useMemo(
     () => run.phrases.flatMap((p) => p.events),
-    [run, startBar, run.phrases.length],
+    [run, startBar, run.phrases],
   );
   const allMovements = useMemo(
     () => run.phrases.flatMap((p) => p.movements),
-    [run, startBar, run.phrases.length],
+    [run, startBar, run.phrases],
   );
   const upcomingMovements = useMemo(
     () =>
@@ -533,7 +582,7 @@ export function App() {
         shownBars,
         settings.beats,
       ),
-    [run, startBar, shownBars, settings.beats, run.phrases.length],
+    [run, startBar, shownBars, settings.beats, run.phrases],
   );
   useEffect(() => setReveal(false), [startBar]);
   const manualMovements = useMemo(
@@ -543,7 +592,7 @@ export function App() {
         startBar,
         settings.beats,
       ),
-    [run, startBar, settings.beats, run.phrases.length],
+    [run, startBar, settings.beats, run.phrases],
   );
   const guidanceHands =
     startBar === 0
@@ -647,23 +696,45 @@ export function App() {
       window.removeEventListener("blur", blur);
     };
   }, [sim, pianoLow]);
-  const pending =
-    JSON.stringify(draft) !== JSON.stringify(settings) || seed !== run.seed;
-  const updateDraft = (next: Settings) => {
+  const pending = useMemo(
+    () =>
+      JSON.stringify(draft) !== JSON.stringify(run.setup) || seed !== run.seed,
+    [draft, run.setup, seed, run.seed],
+  );
+  const updateDraft = (next: PracticeSetup) => {
     preferencesEdited.current = true;
-    const switching = next.hand !== draft.hand;
-    profiles.current[draft.hand] = { ...draft };
-    editedProfiles.current.add(draft.hand);
-    const selected = switching ? profiles.current[next.hand] : next;
-    setDraft({ ...selected });
-    const parsed = settingsSchema.safeParse(selected);
-    if (parsed.success) {
-      profiles.current[selected.hand] = parsed.data;
-      void savePracticePreferences({
-        profile: parsed.data,
-        selectedHand: selected.hand,
-      }).catch((e) => setError(String(e)));
+    if (next.profile === "guided" && draft.profile === "guided") {
+      const previousHand = draft.config.hands.active;
+      const nextHand = next.config.hands.active;
+      profiles.current[previousHand] = draft;
+      if (previousHand !== nextHand) {
+        guidedHand.current = nextHand;
+        const saved = profiles.current[nextHand];
+        next = {
+          ...saved,
+          options: { ...saved.options, mode: next.options.mode },
+        };
+      }
     }
+    setDraft(next);
+  };
+  const selectProfile = (profile: PracticeProfile) => {
+    if (profile === draft.profile) return;
+    if (draft.profile === "guided")
+      profiles.current[draft.config.hands.active] = draft;
+    else custom.current = draft;
+    const selected =
+      profile === "guided"
+        ? profiles.current[guidedHand.current]
+        : (custom.current ?? draft);
+    updateDraft({
+      profile,
+      config: selected.config,
+      options: {
+        ...draft.options,
+        bpm: selected.config.dynamicFingering?.tempoBpm ?? draft.options.bpm,
+      },
+    });
   };
   const chooseDuration = (minutes: SessionDuration) => {
     durationEdited.current = true;
@@ -672,25 +743,25 @@ export function App() {
       setError(String(e)),
     );
   };
-  const setHints = (hints: Settings["hints"]) => {
-    const updated = { ...settings, hints };
-    setSettings(updated);
-    // The assistance control belongs to the selected profile; the active score
-    // still responds immediately, as before, without changing its notes/cursor.
-    updateDraft({ ...draft, hints });
+  const setHints = (hints: PracticeOptions["hints"]) => {
+    updateDraft({ ...draft, options: { ...draft.options, hints } });
     if (!expireIfDue(run, performance.now())) {
-      engine.settings = { ...engine.settings, hints };
-      run.assistanceUsed ||= automaticAssistance(updated);
+      run.setup = { ...run.setup, options: { ...run.setup.options, hints } };
+      run.assistanceUsed ||= automaticAssistance(run.setup.options);
       void persist(run);
+      if (!run.replay)
+        void savePracticePreferences({ setup: run.setup }).catch((e) =>
+          setError(String(e)),
+        );
     }
     setReveal(false);
-    void savePracticePreferences({ settings: updated }).catch((e) =>
-      setError(String(e)),
-    );
+    render((x) => x + 1);
   };
   const apply = () =>
     change(draft, seed !== run.seed ? seed : createLocalId("exercise"));
-  const toggle = async () => {
+  const freshSetup = () =>
+    pending ? draft : (beforeReplay.current ?? run.setup);
+  const toggle = () => {
     // A delayed settings read must never replace an attempt the user has started.
     preferencesEdited.current = true;
     durationEdited.current = true;
@@ -703,9 +774,9 @@ export function App() {
       void audio.current.resume();
     }
     const next = pending
-      ? await apply()
+      ? apply()
       : run.complete
-        ? await change(settings, createLocalId("exercise"))
+        ? change(freshSetup(), createLocalId("exercise"))
         : run;
     if (!next) return;
     next.duration ??= duration;
@@ -812,22 +883,27 @@ export function App() {
       midiAction.current = false;
     }
   };
-  const filtered = sessions.filter(
-    (s) =>
-      compareAll ||
-      s.fingerprint ===
-        fingerprint({ ...settings, bars: shownBars }, run.assistanceUsed),
+  const activeFingerprint = useMemo(() => {
+    const options = { ...run.setup.options, bars: shownBars };
+    return run.legacy
+      ? fingerprint({ ...run.legacy, ...options }, run.assistanceUsed)
+      : practiceFingerprint(run.setup.config, options, run.assistanceUsed);
+  }, [run.legacy, run.setup, shownBars, run.assistanceUsed]);
+  const comparable = sessions.filter(
+    (s) => s.fingerprint === activeFingerprint,
   );
-  const chart = filtered
+  const chart = comparable
     .filter((s) => s.results.length > 0)
     .slice(0, 30)
     .reverse()
     .map((s, i) => ({
       session: i + 1,
       accuracy: Math.round(
-        metrics(s.results, s.ms, s.settings.tolerance).accuracy,
+        metrics(s.results, s.ms, sessionPlayback(s).tolerance).accuracy,
       ),
-      npm: Math.round(metrics(s.results, s.ms, s.settings.tolerance).npm),
+      npm: Math.round(
+        metrics(s.results, s.ms, sessionPlayback(s).tolerance).npm,
+      ),
     }));
   return (
     <LanguageContext.Provider value={lang}>
@@ -1002,7 +1078,7 @@ export function App() {
                             ? "CONTINUOUS RHYTHM"
                             : settings.mode === "benchmark"
                               ? "UNASSISTED · FIRST ATTEMPT"
-                              : "GUIDED NOTE READING",
+                              : "WAIT FOR CORRECT NOTES",
                         )}
                       </span>
                       <h2>
@@ -1093,7 +1169,9 @@ export function App() {
                     <button
                       title={tr("Restart this seed")}
                       aria-label={tr("Restart")}
-                      onClick={() => void change(settings, run.seed)}
+                      onClick={() =>
+                        void change(run.setup, run.seed, run.replay, run.legacy)
+                      }
                     >
                       <RotateCcw size={18} />
                     </button>
@@ -1108,6 +1186,7 @@ export function App() {
                           now >= engine.origin
                         ) {
                           engine.skip(now);
+                          prefetch(run, now);
                           setFeedback("Target skipped. Continue reading.");
                           render((x) => x + 1);
                         }
@@ -1135,10 +1214,7 @@ export function App() {
                     <button
                       className="next"
                       onClick={() =>
-                        void change(
-                          pending ? draft : settings,
-                          createLocalId("exercise"),
-                        )
+                        void change(freshSetup(), createLocalId("exercise"))
                       }
                     >
                       {tr(t.next)}
@@ -1148,7 +1224,16 @@ export function App() {
                       className="finish"
                       title={tr("Save & finish")}
                       onClick={() => {
-                        void pausePractice(run);
+                        const now = performance.now();
+                        if (
+                          !expireIfDue(run, now) &&
+                          (run.duration !== undefined || engine.results.length)
+                        ) {
+                          engine.tick(now);
+                          engine.pause(now, "finish");
+                          run.complete = true;
+                          void persist(run);
+                        }
                         setTab("progress");
                       }}
                     >
@@ -1205,7 +1290,9 @@ export function App() {
                   </span>
                 </div>
                 <div className="stats">
-                  {settings.chords !== "off" && (
+                  {(m.chordEvents > 0 ||
+                    (run.setup.config.chords.kind === "voicings" &&
+                      run.setup.config.chords.probability > 0)) && (
                     <Stat
                       label={tr("Chord-event accuracy")}
                       value={
@@ -1245,6 +1332,19 @@ export function App() {
                       value={m.correct ? `${Math.round(m.timing)}%` : "—"}
                       detail={tr(
                         `±${settings.tolerance} ms · separate from pitch`,
+                      )}
+                    />
+                  )}
+                  {releases && (
+                    <Stat
+                      label={tr("Note duration accuracy")}
+                      value={
+                        releases.accuracy === null
+                          ? "—"
+                          : `${Math.round(releases.accuracy)}%`
+                      }
+                      detail={tr(
+                        `${releases.correct} / ${releases.evaluated} evaluated releases`,
                       )}
                     />
                   )}
@@ -1313,6 +1413,7 @@ export function App() {
                 seed={seed}
                 pending={pending}
                 onChange={updateDraft}
+                onProfile={selectProfile}
                 onSeed={setSeed}
                 onHints={setHints}
                 onApply={() => void apply()}
@@ -1323,7 +1424,11 @@ export function App() {
                     type="checkbox"
                     checked={click}
                     onChange={(e) => {
+                      metronomeEdited.current = true;
                       setClick(e.target.checked);
+                      void savePracticePreferences({
+                        metronome: e.target.checked,
+                      }).catch((err) => setError(String(err)));
                       if (e.target.checked) {
                         audio.current ??= new AudioContext();
                         void audio.current.resume();
@@ -1348,7 +1453,16 @@ export function App() {
                     {tr("MIDI channel")}
                     <select
                       value={channel}
-                      onChange={(e) => setChannel(+e.target.value)}
+                      onChange={(e) => {
+                        channelEdited.current = true;
+                        const midiChannel = +e.target.value;
+                        if (!sim && midiChannel !== channel)
+                          void pausePractice(run);
+                        setChannel(midiChannel);
+                        void savePracticePreferences({ midiChannel }).catch(
+                          (err) => setError(String(err)),
+                        );
+                      }}
                     >
                       <option value="0">{tr("All channels")}</option>
                       {Array.from({ length: 16 }, (_, i) => (
@@ -1387,22 +1501,10 @@ export function App() {
               )}
             </p>
             <div className="panel">
-              <div className="section-line">
-                <h2>{tr("Comparable practice")}</h2>
-                <label className="check">
-                  <input
-                    type="checkbox"
-                    checked={compareAll}
-                    onChange={(e) => setCompareAll(e.target.checked)}
-                  />
-                  {tr("Show all difficulties (not comparable)")}
-                </label>
-              </div>
+              <h2>{tr("Comparable practice")}</h2>
               <p>
                 {tr(
-                  compareAll
-                    ? "Mixed settings; this chart is not an improvement comparison."
-                    : "Showing only the current mode and exact settings, including assistance and tempo.",
+                  "Showing only the current mode and exact settings, including assistance and tempo.",
                 )}
               </p>
               {chart.length ? (
@@ -1490,15 +1592,20 @@ export function App() {
                   </button>
                 </div>
               </div>
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={compareAll}
+                  onChange={(e) => setCompareAll(e.target.checked)}
+                />
+                {tr("Show all sessions")}
+              </label>
               <div className="history">
-                {filtered.map((s) => (
+                {(compareAll ? sessions : comparable).map((s) => (
                   <SessionRow
                     key={s.id}
                     session={s}
-                    replay={() => {
-                      void change(settingsSchema.parse(s.settings), s.seed);
-                      setTab("practice");
-                    }}
+                    replay={() => replaySession(s)}
                     remove={() => void db.sessions.delete(s.id)}
                   />
                 ))}
@@ -1568,7 +1675,7 @@ export function App() {
             </a>
             <span>
               {tr("Local-first · Generator v")}
-              {tr(VERSION)}
+              {run.phrases[0].version}
               {" · "}
               {tr("MIT-licensed")}
             </span>
@@ -1606,15 +1713,22 @@ function SessionRow({
   remove: () => void;
 }) {
   const tr = useTranslation();
-  const m = metrics(s.results, s.ms, s.settings.tolerance);
+  const settings = sessionPlayback(s);
+  const m = metrics(s.results, s.ms, settings.tolerance);
+  const releases = isConfiguredSession(s)
+    ? durationMetrics(s.durationResults)
+    : undefined;
+  const articulation = isConfiguredSession(s)
+    ? articulationMetrics(s.articulationResults)
+    : undefined;
   return (
     <details className="session">
       <summary>
         <span>
           {tr(new Date(s.date).toLocaleString())}
           <small>
-            {tr(s.settings.hand)} · {s.settings.key} {tr("major ·")}
-            {tr(s.settings.mode)}
+            {tr(settings.hand)} · {settings.key} {tr("major ·")}
+            {tr(settings.mode)}
           </small>
         </span>
         <strong>
@@ -1638,15 +1752,15 @@ function SessionRow({
         {m.missed} {tr("missed ·")}
         {m.skipped} {tr("skipped")}
         {tr(
-          s.settings.mode === "timed"
+          settings.mode === "timed"
             ? ` · ${Math.round(m.timing)}% on time`
             : "",
         )}
       </p>
       <p>
         {tr("Seed:")}
-        {s.seed} · {s.settings.bpm} {tr("BPM · hints:")}{" "}
-        {tr(s.settings.mode === "benchmark" ? "hidden" : s.settings.hints)}
+        {s.seed} · {settings.bpm} {tr("BPM · hints:")}{" "}
+        {tr(settings.mode === "benchmark" ? "hidden" : settings.hints)}
       </p>
       {m.chordEvents > 0 && (
         <p>
@@ -1656,12 +1770,35 @@ function SessionRow({
           {tr("% chord-event accuracy")}
         </p>
       )}
-      {s.generatorVersion === VERSION ? (
+      {releases && releases.accuracy !== null && (
+        <p>
+          {tr("Note duration accuracy")} {Math.round(releases.accuracy)}% ·{" "}
+          {tr(`${releases.correct} / ${releases.evaluated} evaluated releases`)}
+        </p>
+      )}
+      {articulation &&
+        (["timing", "velocity"] as const).map((dimension) => {
+          const outcome = articulation[dimension];
+          return (
+            outcome.accuracy !== null && (
+              <p key={dimension}>
+                {tr(
+                  dimension === "timing"
+                    ? "Articulation timing"
+                    : "Articulation velocity",
+                )}{" "}
+                {Math.round(outcome.accuracy)}% ·{" "}
+                {tr(`${outcome.evaluated} evaluated markings`)}
+              </p>
+            )
+          );
+        })}
+      {canReplay(s) ? (
         <button onClick={replay}>{tr("Replay seed")}</button>
       ) : (
         <p>
           {tr("Legacy generator")}
-          {tr(s.generatorVersion)}
+          {tr(s.generatorVersion ?? "1.0.0")}
           {tr(
             ": history retained; exact replay requires that generator version.",
           )}
@@ -1669,13 +1806,19 @@ function SessionRow({
       )}
       <p>
         {tr(
-          "noteJumps" in s.settings
-            ? difficultySummary(s.settings)
-            : "Legacy difficulty",
+          isConfiguredSession(s)
+            ? s.setup.profile === "guided"
+              ? "Guided"
+              : "Advanced"
+            : "noteJumps" in s.settings
+              ? difficultySummary(s.settings)
+              : "Legacy difficulty",
         )}{" "}
         ·{" "}
         {tr(
-          s.generatorVersion === VERSION
+          s.generatorVersion &&
+            s.generatorVersion !== "1.0.0" &&
+            s.assistanceUsed !== undefined
             ? s.assistanceUsed
               ? "Assisted practice"
               : "No hints used"

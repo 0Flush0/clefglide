@@ -22,7 +22,7 @@ import {
   noteheads,
   type ScoreEvent,
   type HandState,
-  type Settings,
+  type NotationSettings,
   type MovementPlan,
   type HintMemory,
 } from "./model";
@@ -51,7 +51,7 @@ export function Notation({
 }: {
   events: ScoreEvent[];
   hands: HandState[];
-  settings: Settings;
+  settings: NotationSettings;
   startBar: number;
   currentId?: string;
   reveal: boolean;

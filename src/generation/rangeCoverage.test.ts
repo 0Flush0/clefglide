@@ -8,8 +8,8 @@ import {
 import { applyHandMovements } from "./difficulty";
 import { generate } from "./planner";
 import { hash } from "./random";
-import { validatePhrase } from "./validator";
-import { diatonicIndex } from "./positions";
+import { validatePhrase } from "./legacyFixtures";
+import { diatonicIndex } from "./positionMaps";
 import * as coverage from "./rangeCoverage";
 
 const input = {

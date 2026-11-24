@@ -1,8 +1,9 @@
 import { expect, it } from "vitest";
 import { defaults, noteheads, type Settings } from "../score/model";
 import { generate } from "./planner";
-import { rangeError } from "./positions";
-import { validatePhrase } from "./validator";
+import { inspectGeneratorFeasibility } from "./feasibility";
+import { resolveSettings } from "./config/presets";
+import { validatePhrase } from "./legacyFixtures";
 
 it("enforces independent hand ranges for chords, chromatic notes and movement across chunks", () => {
   let chords = 0,
@@ -68,7 +69,7 @@ it("uses either end of the 88-key piano and permits feasible overlapping ranges"
       leftMax: 72,
     },
   ]) {
-    expect(rangeError(s)).toBeUndefined();
+    expect(inspectGeneratorFeasibility(resolveSettings(s)).errors).toEqual([]);
     for (let seed = 0; seed < 10; seed++)
       expect(validatePhrase(generate(s, String(seed)))).toEqual([]);
   }
@@ -76,7 +77,9 @@ it("uses either end of the 88-key piano and permits feasible overlapping ranges"
 
 it("rejects an infeasible active hand while ignoring the unused hand range", () => {
   const s = { ...defaults, hand: "left" as const, leftMin: 61, leftMax: 67 };
-  expect(rangeError(s)).toContain("Left hand");
+  expect(inspectGeneratorFeasibility(resolveSettings(s)).errors[0]).toMatch(
+    /left hand.*five consecutive/i,
+  );
   expect(() => generate(s, "narrow-left")).toThrow(/five consecutive/);
   expect(() => generate({ ...s, hand: "right" }, "unused-left")).not.toThrow();
   expect(() =>

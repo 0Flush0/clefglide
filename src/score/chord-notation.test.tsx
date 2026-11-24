@@ -1,10 +1,10 @@
+import { positionsFor } from "../generation/legacyFixtures";
 import { afterEach, expect, it, vi } from "vitest";
 import { cleanup, render } from "@testing-library/react";
 import { createCanvas } from "@napi-rs/canvas";
 import { Notation } from "./Notation";
 import { defaults, noteheads, type ScoreEvent } from "./model";
 import { writtenPitch } from "./pitch";
-import { positionsFor } from "../generation/positions";
 import { inferFingeringHints } from "./hints";
 import { generate } from "../generation/planner";
 afterEach(() => {

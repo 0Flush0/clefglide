@@ -56,8 +56,16 @@ export function generateConfigured(
   c: ValidatedGeneratorConfig,
   seed: string,
   previous?: StreamState,
-  // Internal legacy stream identity override; parameter-driven callers omit this.
-  contextKey = generatorConfigFingerprint(c),
+): GeneratedPhrase {
+  return generateWithContext(c, seed, previous, generatorConfigFingerprint(c));
+}
+
+/** Legacy replay retains the coverage identity written by the 5.2 planner. */
+export function generateWithContext(
+  c: ValidatedGeneratorConfig,
+  seed: string,
+  previous: StreamState | undefined,
+  contextKey: string,
 ): GeneratedPhrase {
   const policy = c.articulation;
   if (

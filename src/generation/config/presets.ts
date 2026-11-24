@@ -10,7 +10,7 @@ import {
 import { resolveGeneratorConfig, GeneratorConfigurationError } from "./resolve";
 import type { GeneratorConfig, GeneratorOverrides } from "./schema";
 
-/** UI policy caps belong to presets, never the generation algorithms. */
+/** Historical 5.2 replay caps, preserved for seed identity. */
 export const movementRules = {
   off: { distance: 0, eligible: [] },
   easy: { distance: 2, eligible: [2] },
@@ -70,7 +70,7 @@ const chromaticPresets = {
     preferAppliedDominant: true,
   },
 } satisfies Record<Settings["accidentals"], GeneratorConfig["chromatic"]>;
-const rhythmPresets = {
+export const legacyRhythms = {
   gentle: generatorDefaults.rhythm,
   quarters: {
     durations: [{ value: 480, weight: 1 }],
@@ -165,7 +165,7 @@ export function resolveSettings(
       maxIntervalSteps: s.interval,
       stepBonus: jumpLevels[s.noteJumps].stepWeight,
     },
-    rhythm: rhythmPresets[s.rhythm],
+    rhythm: legacyRhythms[s.rhythm],
     movement,
     chords,
     coverage:

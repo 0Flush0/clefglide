@@ -1,5 +1,16 @@
 # Implementation decisions
 
+## Production practice profile migration
+
+- Guided selects fixed five-finger parameters. Advanced owns a custom `GeneratorConfig` exposed through a collapsed JSON editor. The profiles use the same generator, notation, hint inference and scorer with wait, timed or benchmark scoring.
+- The practice runtime retains validated phrase state and appends complete sounded notation through `Scorer.appendNotes`, including tie continuations. The scorer projects attacks internally and retains release observations across chunks. Notation receives the events and surrounding cue context independently of the scoring projection.
+- The five difficulty controls, their UI preset exports, and the settings-based range, chord and validation facades were removed from active practice. Range edits check the actual configuration and current generator feasibility. Guided starts with diatonic single notes, shared rhythm and a fixed natural map.
+- Active preferences migrate to Guided. The migration preserves per-hand ranges, clefs, key, meter, rhythm, playback options and duration where present. Legacy reveal becomes Smart. MIDI channel filtering and the metronome are saved with current preferences. The selected custom config and applied seed restore on reload. Device connection and permission still use their platform flow.
+- Configured sessions save the full normalized parameters, seed, generator version, playback options, assistance status and separate pitch, duration and articulation results. `sightflow-1` backups accept both configured and legacy rows. Legacy sessions keep their original settings and fingerprints. The 5.2 replay adapter retains the original coverage context and uses the same practice runtime. Earlier legacy versions remain available in history and exports.
+- The next product work is the Guided curriculum and dedicated skill controls for Advanced. Physical piano and Android WebView checks are tracked separately from simulator and packaging checks. See the [practice guide](PRACTICE.md) and [QA checklist](QA_CHECKLIST.md).
+
+The sections below record earlier milestones and their decisions at the time.
+
 ## Opt-in phrase-spanning ties (programmatic generator v8.1)
 
 - The existing tie module now commits complete chains of 2–256 segments and a configurable total duration before returning a source phrase. Notes, chromatic neighbors and full/partial chords retain original attack/voice identities, spelling, fingers, positions and physical holds across every intervening boundary. New attacks in partial chords use the approved voicing library; held tones can remain as suspensions over changing harmony.

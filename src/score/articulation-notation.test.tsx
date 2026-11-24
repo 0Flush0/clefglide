@@ -182,7 +182,7 @@ it("renders slurs alongside ties and independent voices without changing tick ac
       events={p.events}
       hands={p.initial.hands}
       positions={p.positions}
-      settings={{ ...defaults, key: "G", hand: "both" }}
+      settings={{ ...defaults, key: "G" }}
       startBar={0}
       reveal={false}
     />,

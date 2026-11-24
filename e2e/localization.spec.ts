@@ -6,9 +6,7 @@ test("German first visit covers practice, help and progress and remembers langua
 }) => {
   await page.goto("/");
   await expect(page.locator("html")).toHaveAttribute("lang", "de");
-  await expect(
-    page.getByRole("heading", { name: "Schwierigkeitsgrad" }),
-  ).toBeVisible();
+  await expect(page.getByLabel("Übungsprofil")).toBeVisible();
   await expect(page.getByTestId("placement-plan")).toContainText("Daumen auf");
   await expect(page.getByTestId("placement-plan")).toContainText("Beginne auf");
   await page.getByRole("tab", { name: "Einstellungen & Hilfe" }).click();

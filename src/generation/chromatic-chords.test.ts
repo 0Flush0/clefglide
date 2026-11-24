@@ -3,10 +3,11 @@ import fc from "fast-check";
 import { Chord, Note, Scale } from "tonal";
 import { defaults, noteheads, type Settings } from "../score/model";
 import { generate } from "./planner";
-import { validatePhrase } from "./validator";
+import { positionsFor, validatePhrase } from "./legacyFixtures";
 import { applyHandMovements, jumpLevels } from "./difficulty";
-import { diatonicIndex, positionsFor } from "./positions";
-import { chordCandidates } from "./chords";
+import { diatonicIndex } from "./positionMaps";
+import { chordCandidatesForConfig } from "./voicings";
+import { resolveSettings } from "./config/presets";
 import { inferFingeringHints } from "../score/hints";
 
 it("validates deterministic chromatic/chord phrases across all five dimensions and continuation", () => {
@@ -209,6 +210,7 @@ it("derives root triads and inversions from harmony rather than arbitrary pitch 
     noteJumps: "large",
     interval: 7,
   };
+  const config = resolveSettings(s);
   const shapes = positionsFor(s, "right");
   for (const harmony of [
     ["C", "E", "G"],
@@ -216,7 +218,7 @@ it("derives root triads and inversions from harmony rather than arbitrary pitch 
   ]) {
     const candidates = shapes.flatMap((pos) =>
       pos.fingerToMidi.flatMap((midi, i) =>
-        chordCandidates(
+        chordCandidatesForConfig(
           {
             id: "e",
             kind: "note",
@@ -231,7 +233,7 @@ it("derives root triads and inversions from harmony rather than arbitrary pitch 
             action: "PLAY_WITHIN_POSITION",
           },
           pos,
-          s,
+          config,
           harmony,
         ),
       ),

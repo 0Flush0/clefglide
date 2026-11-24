@@ -1,6 +1,6 @@
 import { defaults, type Phrase, type Settings } from "./model";
 import { generate } from "../generation/planner";
-import { applyHandMovements } from "../practice/presets";
+import { applyHandMovements } from "../generation/difficulty";
 import { inferFingeringHints } from "./hints";
 /** Deliberate validator fixture; the normal planner never requests alternatives. */
 export function restedAlternatePhrase(): Phrase {

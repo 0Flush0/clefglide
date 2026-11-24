@@ -9,17 +9,23 @@ import {
 } from "@testing-library/react";
 import { createCanvas } from "@napi-rs/canvas";
 import { App } from "./App";
-import { db, record } from "../progress/store";
 import {
-  defaults,
-  fingerprint,
-  VERSION,
-  noteheads,
-  v4SettingsSchema,
-} from "../score/model";
+  db,
+  record,
+  isConfiguredSession,
+  sessionPlayback,
+} from "../progress/store";
+import { defaults, noteheads, v4SettingsSchema } from "../score/model";
 import { metrics } from "../scoring/engine";
-import { generate } from "../generation/planner";
-import { applyHandMovements } from "./presets";
+import {
+  generateConfigured,
+  resolveGeneratorConfig,
+  repositionDefaults,
+  chordDefaults,
+  chromaticDefaults,
+  type ValidatedGeneratorConfig,
+} from "../generation";
+import { practiceFingerprint } from "./configuration";
 
 afterEach(() => {
   cleanup();
@@ -59,6 +65,21 @@ function setupNotationDom() {
     configurable: true,
     value: () => {},
   });
+}
+
+function stageConfig(
+  ui: ReturnType<typeof render>,
+  config: ValidatedGeneratorConfig,
+) {
+  fireEvent.change(ui.getByLabelText("Practice profile"), {
+    target: { value: "custom" },
+  });
+  fireEvent.change(ui.getByLabelText("GeneratorConfig JSON"), {
+    target: { value: JSON.stringify(config) },
+  });
+  fireEvent.click(
+    ui.getByRole("button", { name: "Use parameters", hidden: true }),
+  );
 }
 
 it("migrates old left-only preferences and restores independent ranges through hand switches and reload", async () => {
@@ -101,18 +122,19 @@ it("migrates old left-only preferences and restores independent ranges through h
   fireEvent.click(dialog.getByRole("button", { name: "Apply" }));
   fireEvent.click(ui.getByRole("button", { name: "Apply & generate" }));
   await waitFor(async () =>
-    expect((await db.preferences.get("settings"))?.settings).toMatchObject({
-      rangeVersion: 2,
-      min: 72,
-      max: 79,
-      leftMin: 48,
-      leftMax: 55,
+    expect(
+      (await db.preferences.get("practice-v2"))?.setup?.config.hands,
+    ).toMatchObject({
+      right: { min: 72, max: 79 },
+      left: { min: 48, max: 55 },
     }),
   );
   fireEvent.change(ui.getByLabelText("Hands"), { target: { value: "both" } });
   fireEvent.click(ui.getByRole("button", { name: "Apply & generate" }));
   await waitFor(async () =>
-    expect((await db.preferences.get("settings"))?.settings.hand).toBe("both"),
+    expect(
+      (await db.preferences.get("practice-v2"))?.setup?.config.hands.active,
+    ).toBe("both"),
   );
   ui.unmount();
   const restored = render(<App />);
@@ -154,18 +176,15 @@ it("remembers all three staged hand profiles without changing the running exerci
   );
   fireEvent.click(ui.getByRole("button", { name: "Start practice" }));
   const originalTarget = ui.getByTestId("target").getAttribute("data-pitches");
-  for (const [hand, bpm, key, rhythm, tolerance] of [
-    ["right", 82, "G", "mixed", 120],
-    ["left", 55, "F", "quarters", 220],
-    ["both", 74, "D", "gentle", 160],
+  for (const [hand, bpm, key, tolerance] of [
+    ["right", 82, "G", 120],
+    ["left", 55, "F", 220],
+    ["both", 74, "D", 160],
   ] as const) {
     fireEvent.change(ui.getByLabelText("Hands"), { target: { value: hand } });
     fireEvent.change(ui.getByLabelText("Tempo"), { target: { value: bpm } });
     fireEvent.change(ui.getByLabelText("Key", { exact: true }), {
       target: { value: key },
-    });
-    fireEvent.change(ui.getByLabelText("Rhythm"), {
-      target: { value: rhythm },
     });
     fireEvent.change(ui.getByLabelText("Timing tolerance (ms)"), {
       target: { value: tolerance },
@@ -174,14 +193,8 @@ it("remembers all three staged hand profiles without changing the running exerci
       originalTarget,
     );
     expect(ui.getByRole("button", { name: "Pause" })).toBeTruthy();
-    await waitFor(async () =>
-      expect(
-        (await db.preferences.get("settings"))?.profiles?.[hand],
-      ).toMatchObject({ hand, bpm, key, rhythm, tolerance }),
-    );
   }
-  const stored = (await db.preferences.get("settings"))!;
-  expect(stored.settings).toEqual(initial);
+  expect((await db.preferences.get("settings"))?.settings).toEqual(initial);
   fireEvent.change(ui.getByLabelText("Hands"), { target: { value: "right" } });
   expect((ui.getByLabelText("Tempo") as HTMLInputElement).value).toBe("82");
   expect(
@@ -189,9 +202,10 @@ it("remembers all three staged hand profiles without changing the running exerci
   ).toBe("G");
   fireEvent.click(ui.getByRole("button", { name: "New exercise" }));
   await waitFor(async () =>
-    expect((await db.preferences.get("settings"))?.settings).toEqual(
-      stored.profiles!.right,
-    ),
+    expect((await db.preferences.get("practice-v2"))?.setup).toMatchObject({
+      config: { hands: { active: "right" }, notation: { key: "G" } },
+      options: { bpm: 82, tolerance: 120 },
+    }),
   );
   ui.unmount();
   const restored = render(<App />);
@@ -231,7 +245,7 @@ it.each(["3 min", "5 min", "Unlimited"])(
     fireEvent.click(ui.getByRole("button", { name: label }));
     const minutes = label === "3 min" ? 3 : label === "5 min" ? 5 : 0;
     await waitFor(async () =>
-      expect((await db.preferences.get("settings"))?.duration).toBe(minutes),
+      expect((await db.preferences.get("practice-v2"))?.duration).toBe(minutes),
     );
     ui.unmount();
     const restored = render(<App />);
@@ -351,7 +365,7 @@ it("excludes the rhythm count-in and pauses when the page is left", async () => 
   vi.spyOn(performance, "now").mockImplementation(() => clock);
   const ui = render(<App />);
   fireEvent.click(ui.getByRole("button", { name: "3 min" }));
-  fireEvent.change(ui.getByLabelText("Practice mode"), {
+  fireEvent.change(ui.getByLabelText("Scoring mode"), {
     target: { value: "timed" },
   });
   fireEvent.click(ui.getByRole("button", { name: "Apply & play" }));
@@ -381,7 +395,7 @@ it("excludes the rhythm count-in and pauses when the page is left", async () => 
   );
 });
 
-it("ClefGlide restores existing SightFlow settings and progress without migration", async () => {
+it("ClefGlide preserves historical fingerprints and offers exact historical seed replay", async () => {
   setupNotationDom();
   await db.sessions.clear();
   await db.preferences.clear();
@@ -407,10 +421,22 @@ it("ClefGlide restores existing SightFlow settings and progress without migratio
     button: 0,
     ctrlKey: false,
   });
+  expect(ui.container.querySelectorAll(".session")).toHaveLength(0);
+  fireEvent.click(ui.getByLabelText(/Show all/));
   await waitFor(() =>
     expect(ui.container.querySelectorAll(".session")).toHaveLength(1),
   );
   expect(ui.container.textContent).not.toMatch(/sightflow/i);
+  const row = ui.container.querySelector(".session")!;
+  fireEvent.click(row.querySelector("summary")!);
+  fireEvent.click(
+    within(row as HTMLElement).getByRole("button", { name: "Replay seed" }),
+  );
+  await waitFor(() =>
+    expect(
+      ui.container.querySelector('[id^="vf-original-seed-0-"]'),
+    ).not.toBeNull(),
+  );
   expect(await db.sessions.get(session.id)).toEqual(session);
   expect(await db.preferences.get("settings")).toEqual({
     id: "settings",
@@ -424,15 +450,14 @@ it("plays actual both-hand chromatic chords through four bars and persists separ
   await db.preferences.clear();
   let clock = 1000;
   vi.spyOn(performance, "now").mockImplementation(() => clock);
-  const settings = {
-    ...defaults,
-    hand: "both" as const,
-    chords: "hard" as const,
-    accidentals: "hard" as const,
-  };
+  const config = resolveGeneratorConfig({
+    hands: { active: "both" },
+    chords: { ...chordDefaults, probability: 1 },
+    chromatic: { ...chromaticDefaults, probability: 0.45 },
+  });
   const seed = Array.from({ length: 30 }, (_, i) => `ui-chord-${i}`).find(
     (seed) => {
-      const p = generate(settings, seed);
+      const p = generateConfigured(config, seed);
       return (
         p.events.some((e) => noteheads(e).length > 1) &&
         p.events.some((e) => e.pitch.includes("#") || e.pitch.includes("b"))
@@ -441,15 +466,7 @@ it("plays actual both-hand chromatic chords through four bars and persists separ
   )!;
   expect(seed).toBeDefined();
   const ui = render(<App />);
-  fireEvent.change(ui.getByLabelText("Hands", { exact: true }), {
-    target: { value: "both" },
-  });
-  for (const label of ["Accidentals", "Chords"])
-    fireEvent.click(
-      within(ui.getByRole("group", { name: label })).getByRole("button", {
-        name: "Hard",
-      }),
-    );
+  stageConfig(ui, config);
   fireEvent.change(ui.getByLabelText("Exercise seed"), {
     target: { value: seed },
   });
@@ -492,7 +509,11 @@ it("plays actual both-hand chromatic chords through four bars and persists separ
     expect((await db.sessions.toArray()).length).toBe(1),
   );
   const stored = (await db.sessions.toArray())[0],
-    summary = metrics(stored.results, stored.ms, stored.settings.tolerance);
+    summary = metrics(
+      stored.results,
+      stored.ms,
+      sessionPlayback(stored).tolerance,
+    );
   expect(summary.chordEvents).toBeGreaterThan(0);
   expect(summary).toMatchObject({
     chordAccuracy: 100,
@@ -500,12 +521,9 @@ it("plays actual both-hand chromatic chords through four bars and persists separ
     wrong: 0,
     missed: 0,
   });
-  expect(stored.settings).toMatchObject({
-    hand: "both",
-    chords: "hard",
-    accidentals: "hard",
-    handMovements: "off",
-  });
+  if (!isConfiguredSession(stored))
+    throw new Error("Expected a configured session");
+  expect(stored.setup.config).toEqual(config);
 }, 20000);
 
 it("Smart placement is automatic, hint modes apply immediately, and reveal never changes the music", async () => {
@@ -641,59 +659,36 @@ it("pending exercise changes can generate and start in one action; invalid range
     expect(ui.getByRole("button", { name: "Pause" })).not.toBeNull(),
   );
   expect(ui.container.querySelector('[id^="vf-first-light-0-"]')).toBeNull();
-  fireEvent.click(
-    within(ui.getByRole("group", { name: "Hand movements" })).getByRole(
-      "button",
-      { name: "Easy" },
-    ),
-  );
+  fireEvent.change(ui.getByLabelText("Practice profile"), {
+    target: { value: "custom" },
+  });
   // Editing future settings must leave Pause available for the current attempt.
   fireEvent.click(ui.getByRole("button", { name: "Pause" }));
   expect(ui.getByRole("button", { name: "Apply & play" })).not.toBeNull();
 });
 
-it("applies real difficulty without changing range, reveals advance shifts, streams and records assistance", async () => {
+it("uses parameter-driven repositioning, advance hints, and the configured history fingerprint", async () => {
   setupNotationDom();
   await db.sessions.clear();
   await db.preferences.clear();
   const ui = render(<App />);
   fireEvent.click(ui.container.querySelector(".piano-card summary")!);
-  expect(ui.getByText(/Only one hand position fits this range/)).not.toBeNull();
-  fireEvent.click(ui.getByRole("button", { name: "Edit range" }));
-  const dialog = within(ui.getByRole("dialog"));
-  fireEvent.click(dialog.getByRole("button", { name: "Highest note · G4" }));
-  fireEvent.click(dialog.getByRole("button", { name: "C6" }));
-  fireEvent.click(dialog.getByRole("button", { name: "Apply" }));
-  fireEvent.click(
-    within(ui.getByRole("group", { name: "Hand movements" })).getByRole(
-      "button",
-      { name: "Hard" },
-    ),
-  );
-  fireEvent.click(
-    within(ui.getByRole("group", { name: "Note jumps" })).getByRole("button", {
-      name: "Large",
-    }),
-  );
-  expect(ui.container.querySelector(".keyboard-range")?.textContent).toContain(
-    "C4–C6",
-  );
-  fireEvent.click(ui.getByText("Advanced settings", { exact: true }));
-  fireEvent.change(ui.getByLabelText("Hand-shift frequency"), {
-    target: { value: "1" },
+  const config = resolveGeneratorConfig({
+    hands: { right: { max: 84 } },
+    melody: { maxIntervalSteps: 7 },
+    movement: {
+      ...repositionDefaults,
+      eligibleBars: [1, 2, 3],
+      probability: 1,
+      maxDistanceSteps: 4,
+    },
   });
+  stageConfig(ui, config);
   fireEvent.change(ui.getByLabelText("Exercise seed"), {
     target: { value: "ui-shift" },
   });
   fireEvent.click(ui.getByRole("button", { name: "Apply & generate" }));
-  const settings = {
-    ...applyHandMovements(
-      { ...defaults, noteJumps: "large" as const, interval: 7, max: 84 },
-      "hard",
-    ),
-    shiftFrequency: 1,
-  };
-  const plan = generate(settings, "ui-shift");
+  const plan = generateConfigured(config, "ui-shift");
   expect(plan.movements.length).toBeGreaterThan(0);
   await waitFor(() =>
     expect(ui.container.querySelector(".level-pill")?.textContent).toContain(
@@ -730,9 +725,14 @@ it("applies real difficulty without changing range, reveals advance shifts, stre
     expect((await db.sessions.toArray())[0]?.assistanceUsed).toBe(true),
   );
   const saved = (await db.sessions.toArray())[0];
-  expect(saved.generatorVersion).toBe(VERSION);
-  expect(saved.fingerprint).toBe(fingerprint(settings, true));
-  expect(saved.fingerprint).not.toBe(fingerprint(settings, false));
+  if (!isConfiguredSession(saved))
+    throw new Error("Expected a configured session");
+  expect(saved.fingerprint).toBe(
+    practiceFingerprint(config, saved.setup.options, true),
+  );
+  expect(saved.fingerprint).not.toBe(
+    practiceFingerprint(config, saved.setup.options, false),
+  );
 }, 20000);
 
 it.each([undefined, { randomUUID: undefined, getRandomValues: undefined }])(

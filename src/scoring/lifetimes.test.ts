@@ -526,7 +526,8 @@ describe("optional release and duration scoring", () => {
     expect(a.scoringFingerprint).not.toBe(b.scoringFingerprint);
     expect(a.scoringFingerprint).not.toBe(fast.scoringFingerprint);
     expect(new Scorer([note()], defaults).scoringFingerprint).toBeUndefined();
-    a.settings = { ...a.settings, hints: "hidden" };
+    const changedHints = { ...a.settings, hints: "hidden" };
+    a.settings = changedHints;
     expect(a.scoringFingerprint).toMatch(/^7.0.0:parameters:/);
     a.settings = { ...a.settings, bpm: 120 };
     expect(() => a.start(0)).toThrow(/new scorer/);

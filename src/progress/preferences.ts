@@ -1,74 +1,152 @@
-import { defaults, settingsSchema, type Settings } from "../score/model";
+﻿import { z } from "zod";
+import { settingsValuesSchema } from "../score/model";
+import { resolveGeneratorConfig } from "../generation/config";
+import { legacyRhythms } from "../generation/config/presets";
+import {
+  defaultPractice,
+  defaultExerciseSeed,
+  guidedPractice,
+  practiceOptionsSchema,
+  savedSetupSchema,
+  type PracticeSetup,
+} from "../practice/configuration";
 import { db } from "./store";
 
-export type HandProfiles = Record<Settings["hand"], Settings>;
+const hands = ["right", "left", "both"] as const;
+const handSchema = z.enum(hands);
+type HandSelection = z.infer<typeof handSchema>;
+export type GuidedProfiles = Record<HandSelection, PracticeSetup>;
 export type PracticeDuration = 0 | 3 | 5;
-export function defaultProfiles(): HandProfiles {
+export function defaultProfiles(): GuidedProfiles {
   return {
-    right: { ...defaults, hand: "right" },
-    left: { ...defaults, hand: "left" },
-    both: { ...defaults, hand: "both" },
+    right: defaultPractice,
+    left: guidedPractice("left"),
+    both: guidedPractice("both"),
   };
 }
-function activeSettings(value: unknown): Settings {
-  const parsed = settingsSchema.parse(value);
+
+const currentPreferences = z.object({
+  setup: savedSetupSchema,
+  seed: z.string().default(defaultExerciseSeed),
+  guided: z.record(handSchema, savedSetupSchema),
+  guidedHand: handSchema,
+  custom: savedSetupSchema.optional(),
+  duration: z.union([z.literal(0), z.literal(3), z.literal(5)]).catch(0),
+  midiChannel: z.number().int().min(0).max(16).catch(0),
+  metronome: z.boolean().catch(false),
+});
+const legacyPreferences = settingsValuesSchema
+  .pick({
+    hand: true,
+    key: true,
+    beats: true,
+    rhythm: true,
+    min: true,
+    max: true,
+    leftMin: true,
+    leftMax: true,
+    rhClef: true,
+    lhClef: true,
+    bpm: true,
+    mode: true,
+    hints: true,
+    bars: true,
+    offset: true,
+    tolerance: true,
+  })
+  .extend({ rangeVersion: z.literal(2).optional() });
+
+function migrateGuided(
+  s: z.infer<typeof legacyPreferences>,
+  hand = s.hand,
+): PracticeSetup {
+  const sharedLeftRange = s.rangeVersion === undefined && s.hand === "left";
   return {
-    ...parsed,
-    hints: parsed.hints === "reveal" ? "smart" : parsed.hints,
+    profile: "guided",
+    config: resolveGeneratorConfig({
+      hands: {
+        active: hand,
+        right: { min: s.min, max: s.max, clef: s.rhClef },
+        left: {
+          min: sharedLeftRange ? s.min : s.leftMin,
+          max: sharedLeftRange ? s.max : s.leftMax,
+          clef: s.lhClef,
+        },
+      },
+      notation: { key: s.key, beats: s.beats },
+      rhythm: legacyRhythms[s.rhythm],
+    }),
+    options: practiceOptionsSchema.parse({
+      ...s,
+      hints: s.hints === "reveal" ? "smart" : s.hints,
+    }),
   };
 }
-export async function loadPracticePreferences() {
-  const saved = await db.preferences.get("settings");
-  const profiles = defaultProfiles();
-  const settings = saved ? activeSettings(saved.settings) : defaults;
-  profiles[settings.hand] = settings;
-  for (const hand of ["right", "left", "both"] as const) {
-    const parsed = settingsSchema.safeParse(saved?.profiles?.[hand]);
-    if (saved?.profiles?.[hand] && parsed.success)
-      profiles[hand] = { ...activeSettings(parsed.data), hand };
-  }
-  const selectedHand = saved?.selectedHand;
-  return {
-    saved: !!saved,
-    settings:
-      selectedHand === "right" ||
-      selectedHand === "left" ||
-      selectedHand === "both"
-        ? profiles[selectedHand]
-        : settings,
-    profiles,
-    duration:
-      saved?.duration === 3 || saved?.duration === 5
-        ? saved.duration
-        : (0 as PracticeDuration),
-  };
-}
-/** Merge inside one transaction so concurrent duration/profile writes cannot erase each other. */
-export async function savePracticePreferences(update: {
-  settings?: Settings;
-  profile?: Settings;
-  selectedHand?: Settings["hand"];
+
+type Preferences = z.infer<typeof currentPreferences>;
+export type PreferenceRow = {
+  id: string;
+  settings?: unknown;
+  profiles?: Partial<Record<HandSelection, unknown>>;
+  selectedHand?: HandSelection;
   duration?: PracticeDuration;
-}) {
+  midiChannel?: number;
+  metronome?: boolean;
+  setup?: PracticeSetup;
+  seed?: string;
+  guided?: GuidedProfiles;
+  guidedHand?: HandSelection;
+  custom?: PracticeSetup;
+};
+
+async function readPreferences(): Promise<Preferences> {
+  const current = currentPreferences.safeParse(
+    await db.preferences.get("practice-v2"),
+  );
+  if (current.success) return current.data;
+
+  const legacy = await db.preferences.get("settings");
+  const guided = defaultProfiles();
+  const selected = legacyPreferences.safeParse(legacy?.settings);
+  if (selected.success)
+    guided[selected.data.hand] = migrateGuided(selected.data);
+  for (const hand of hands) {
+    const value = legacyPreferences.safeParse(legacy?.profiles?.[hand]);
+    if (value.success) guided[hand] = migrateGuided(value.data, hand);
+  }
+  const selectedHand = handSchema.safeParse(legacy?.selectedHand);
+  const guidedHand = selectedHand.success
+    ? selectedHand.data
+    : selected.success
+      ? selected.data.hand
+      : "right";
+  return {
+    guided,
+    guidedHand,
+    setup: guided[guidedHand],
+    seed: defaultExerciseSeed,
+    duration:
+      legacy?.duration === 3 || legacy?.duration === 5 ? legacy.duration : 0,
+    midiChannel: z
+      .number()
+      .int()
+      .min(0)
+      .max(16)
+      .catch(0)
+      .parse(legacy?.midiChannel),
+    metronome: legacy?.metronome === true,
+  };
+}
+
+export const loadPracticePreferences = readPreferences;
+
+/** Migrate lazily and merge edits within the same IndexedDB transaction. */
+export async function savePracticePreferences(update: Partial<Preferences>) {
   await db.transaction("rw", db.preferences, async () => {
-    const saved = await db.preferences.get("settings");
-    const settings = activeSettings(
-      update.settings ?? saved?.settings ?? defaults,
-    );
-    const profiles = {
-      ...defaultProfiles(),
-      [settings.hand]: settings,
-      ...saved?.profiles,
-    };
-    if (update.profile)
-      profiles[update.profile.hand] = activeSettings(update.profile);
+    const previous = await readPreferences();
     await db.preferences.put({
-      ...saved,
-      id: "settings",
-      settings,
-      profiles,
-      ...(update.selectedHand ? { selectedHand: update.selectedHand } : {}),
-      ...(update.duration !== undefined ? { duration: update.duration } : {}),
+      id: "practice-v2",
+      ...currentPreferences.parse({ ...previous, ...update }),
     });
   });
 }

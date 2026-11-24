@@ -4,7 +4,7 @@ import { Notation } from "./Notation";
 import { defaults } from "./model";
 import { generate } from "../generation/planner";
 import { createCanvas } from "@napi-rs/canvas";
-import { applyHandMovements } from "../practice/presets";
+import { applyHandMovements } from "../generation/difficulty";
 import { movementAnnotation, visibleMovements } from "./hints";
 import { restedAlternatePhrase, spacedPhrase } from "./test-fixtures";
 import {

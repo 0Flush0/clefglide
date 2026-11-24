@@ -4,15 +4,15 @@ ClefGlide is a piano sight-reading trainer for the browser and Android that gene
 
 [Try ClefGlide](https://clefglide.org/)
 
-![ClefGlide practice screen with sheet music, fingering guidance and difficulty controls](docs/practice.png)
+![ClefGlide practice screen with sheet music and fingering guidance](docs/practice.png)
 
 ## Features
 
-- Seeded exercises for either hand or both hands, with adjustable note ranges, leaps, hand movements, finger spacing, accidentals and chords.
+- Guided fixed-position and Advanced custom profiles for seeded exercises with either hand or both hands. Advanced parameters include wide leaps, sustained notes, ties, independent voices, dynamic fingering and articulation.
 - Treble, bass and grand-staff notation with Smart Hints for finger placement and planned hand movements.
-- Guided practice that waits for the correct notes, plus timed practice with a count-in and separate timing feedback.
-- Web MIDI in supported browsers, a native USB MIDI adapter on Android, and a virtual piano for touch or computer keyboard practice.
-- Local progress comparisons by difficulty and assistance, with JSON backup import/export and CSV summaries.
+- Wait, timed and benchmark scoring with either practice profile. Timed scoring includes a count-in and separate timing feedback.
+- Web MIDI in supported browsers, native USB and BLE-MIDI on Android, and a virtual piano for touch or computer keyboard practice.
+- Local progress comparisons by exact configuration and assistance, with JSON backup import/export and CSV summaries.
 - Responsive practice controls, light and dark themes, and English and German UI options.
 
 Feature ideas and enhancement requests are welcome through [GitHub issues](https://github.com/0Flush0/clefglide/issues).
@@ -47,11 +47,11 @@ npm run android:sync
 npm run android:open
 ```
 
-Enable **USB debugging** on your phone, connect it to the PC, and accept its debugging prompt. In Android Studio, select the **app** configuration and your **physical phone**, then press **Run**. Try the virtual piano first. After installation, disconnect the PC and connect a class-compliant USB MIDI keyboard through a USB/OTG adapter; choose **Connect MIDI** and the keyboard's input port.
+Enable **USB debugging** on your phone, connect it to the PC, and accept its debugging prompt. In Android Studio, select the **app** configuration and your **physical phone**, then press **Run**. Try the virtual piano first. After installation, disconnect the PC and connect a class-compliant USB MIDI keyboard through a USB/OTG adapter. The app discovers USB inputs automatically. For Bluetooth, select **Discover Bluetooth MIDI** and choose the keyboard's input.
 
 Run `npm run android:sync` after web changes to rebuild and copy the assets before running from Android Studio. The debug APK is produced at `android/app/build/outputs/apk/debug/app-debug.apk`. The [Android guide](docs/ANDROID.md) covers Windows command-line builds, file-picker backups, lifecycle behavior, safe-area layout and the physical-device checklist.
 
-The native adapter handles note-on/off, sustain and USB disconnections through Android's `MidiManager`. Backgrounding or disconnecting pauses practice; reconnect and start manually. Android keeps the system bars visible and isolates main-content scrolling from navigation. The web build and deployment remain unchanged. Bluetooth MIDI, iOS, release signing and store publication are outside this version.
+The native adapter handles note-on/off, sustain and USB or Bluetooth disconnections through Android's `MidiManager`. Backgrounding or disconnecting pauses practice. Reconnect and start manually. Android keeps the system bars visible and isolates main-content scrolling from navigation.
 
 **Verification:** Android builds and automated browser/native simulations pass. USB MIDI, native WebView behavior, overscroll, system bars and Android file pickers still require verification on a physical phone and keyboard.
 

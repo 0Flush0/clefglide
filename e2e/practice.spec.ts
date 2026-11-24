@@ -1,3 +1,5 @@
+import { stageConfiguration } from "./fixtures/configuredPractice";
+import { resolveGeneratorConfig } from "../src/generation";
 import { test, expect } from "@playwright/test";
 
 test("keyboard range dialog supports independent ranges, keyboard access and narrow screens", async ({
@@ -186,12 +188,12 @@ test("hints disappear while pitch expectations remain, range and clef apply", as
 }) => {
   await page.goto("/");
   await page.locator(".piano-card summary").click();
-  await page.getByText("Advanced settings", { exact: true }).click();
   await page.getByRole("button", { name: "Edit range" }).click();
   const range = page.getByRole("dialog", { name: "Edit keyboard range" });
   await range.getByRole("button", { name: "C3", exact: true }).click();
   await range.getByRole("button", { name: "G3", exact: true }).click();
   await range.getByRole("button", { name: "Apply", exact: true }).click();
+  await page.getByText("Advanced settings", { exact: true }).click();
   await page.getByRole("combobox", { name: /^Clef/ }).selectOption("bass");
   await page.getByLabel("Fingering assistance").selectOption("all");
   await page.getByRole("button", { name: "Apply & generate" }).click();
@@ -201,36 +203,22 @@ test("hints disappear while pitch expectations remain, range and clef apply", as
   await page.getByLabel("Fingering assistance").selectOption("hidden");
   await expect(fingers).toHaveCount(0);
 });
-test("independent difficulty buttons apply a spaced exercise without page overflow", async ({
+test("advanced parameters apply without page overflow while hint switches preserve the score", async ({
   page,
 }) => {
   await page.goto("/");
-  for (const label of ["Note jumps", "Hand movements", "Finger spacing"]) {
-    await expect(
-      page.getByRole("group", { name: label }).getByRole("button"),
-    ).toHaveCount(4);
-  }
-  await page
-    .getByRole("group", { name: "Finger spacing" })
-    .getByRole("button", { name: "Hard" })
-    .click();
-  await expect(
-    page.getByText(/No approved spacing pattern fits/),
-  ).toBeVisible();
-  await page.getByRole("button", { name: "Edit range" }).click();
-  const range = page.getByRole("dialog", { name: "Edit keyboard range" });
-  await range.getByRole("button", { name: "Highest note · G4" }).click();
-  await range.getByRole("button", { name: "C6", exact: true }).click();
-  await range.getByRole("button", { name: "Apply", exact: true }).click();
-  await page
-    .getByRole("group", { name: "Note jumps" })
-    .getByRole("button", { name: "Large" })
-    .click();
-  await expect(
-    page
-      .getByRole("group", { name: "Hand movements" })
-      .getByRole("button", { name: "Off" }),
-  ).toHaveAttribute("aria-pressed", "true");
+  const configuration = resolveGeneratorConfig({
+    hands: { right: { max: 84 } },
+    melody: { maxIntervalSteps: 4 },
+    fingering: {
+      patterns: [
+        { value: "natural", weight: 1 },
+        { value: "thumbGap", weight: 1 },
+      ],
+      variablePositionProbability: 1,
+    },
+  });
+  await stageConfiguration(page, configuration, "spacing-profile");
   await page.getByRole("button", { name: "Apply & generate" }).click();
   const ids = await page
     .locator(".vf-stavenote")
