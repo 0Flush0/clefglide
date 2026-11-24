@@ -15,6 +15,7 @@ import {
 import { chordCandidatesForConfig } from "./voicings";
 import { wideLandingOptions } from "./wideLeaps";
 import { positionFitsVoices, voiceAllows, voiceSpecs } from "./voiceConfig";
+import { dynamicFeasibility } from "./dynamicFeasibility";
 
 /** Context-dependent feasibility is separate from structural configuration validity.
  * Chord/movement probabilities are opportunities, not promises that every shape fits. */
@@ -174,6 +175,7 @@ export function inspectGeneratorFeasibility(c: ValidatedGeneratorConfig) {
     errors.push(
       "Both hands need separate positions; widen the ranges or lower the left range.",
     );
+  errors.push(...dynamicFeasibility(c, compatible));
   return { errors, warnings };
 }
 

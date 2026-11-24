@@ -1,6 +1,7 @@
 import { Note } from "tonal";
 import {
   TPQ,
+  isContinuousMovement,
   noteheads,
   type Hand,
   type HandState,
@@ -58,6 +59,14 @@ import {
 } from "./rangeCoverage";
 import { validVoiceLeapBoundary } from "./wideLeapValidation";
 import type { MovementDiagnostic } from "./model";
+import {
+  applyDynamicAttack,
+  chooseDynamicAttack,
+  recordFingeringAttack,
+} from "./dynamicAttacks";
+import { beginFingering, finishFingering } from "./fingeringTimeline";
+import { planSubstitutions } from "./substitutions";
+import { GeneratorContextInfeasibleError } from "./dynamicFeasibility";
 
 type Key = Pick<Notehead, "midi" | "finger" | "hand">;
 type Occupied = Key & {
@@ -86,7 +95,11 @@ export function generateIndependent(
   const specs = voiceSpecs(c);
   const fingerprint = generatorConfigFingerprint(c);
   const feasibility = inspectGeneratorFeasibility(c);
-  if (feasibility.errors.length) throw new Error(feasibility.errors.join(" "));
+  if (feasibility.errors.length) {
+    const message = feasibility.errors.join(" ");
+    if (c.dynamicFingering) throw new GeneratorContextInfeasibleError(message);
+    throw new Error(message);
+  }
   const context = JSON.stringify([seed, fingerprint]);
   const empty = {
     context,
@@ -135,6 +148,9 @@ export function generateIndependent(
     const state = structuredClone(start);
     state.rng = rng;
     if (!previous) state.hands = initialHands(c, state, accepts);
+    if (c.dynamicFingering) beginFingering(c, seed, state, !!previous);
+    else if (state.dynamicFingering)
+      throw new Error("Start a new stream to disable dynamic fingering.");
     const initial = structuredClone(previous ?? state);
     // Retries start with the same musical state and take another deterministic draw.
     const phrase = plan(state, initial);
@@ -152,6 +168,7 @@ export function generateIndependent(
     const positions = structuredClone(state.hands);
     const movements: MovementPlan[] = [];
     const diagnostics: MovementDiagnostic[] = [];
+    const fingeringPlan = { initial, events, positions, movements };
     const wideEnabled =
       c.wideLeaps.kind === "lifted-wide" && c.wideLeaps.probability > 0;
     const occupied: Occupied[] = (initial.activeLifetimes ?? []).map((n) => ({
@@ -406,6 +423,13 @@ export function generateIndependent(
           landing !== undefined ||
           (memory.active &&
             !otherLanding &&
+            (!c.dynamicFingering ||
+              !movements.some(
+                (m) =>
+                  m.hand === hand &&
+                  m.landingTick === tick &&
+                  isContinuousMovement(m),
+              )) &&
             options.length > 0 &&
             random(state) < attackChance &&
             (!active.length ||
@@ -460,7 +484,7 @@ export function generateIndependent(
         const sameHand = occupied.filter(
           (key) => key.release > tick && key.hand === hand,
         );
-        const safe = (heads: Notehead[]) => {
+        const safe = (heads: Notehead[], position = h) => {
           const newHeads = heads.filter(
             (n) =>
               !carries.some(
@@ -468,6 +492,12 @@ export function generateIndependent(
               ),
           );
           if (!heads.every((n) => voiceAllows(profile, n.midi, n.finger)))
+            return false;
+          if (
+            c.dynamicFingering &&
+            newHeads.length &&
+            sameHand.some((n) => n.restedAlternate)
+          )
             return false;
           if (
             newHeads.some((n) =>
@@ -491,10 +521,12 @@ export function generateIndependent(
             return false;
           const held: (Key & { restedAlternate?: boolean })[] = [
             ...sameHand,
-            ...newHeads,
+            ...newHeads.map((n) =>
+              n.fingering ? { ...n, restedAlternate: true } : n,
+            ),
           ];
           if (held.length > policy[hand]!.maxPolyphony) return false;
-          const map = [...h.fingerToMidi];
+          const map = [...position.fingerToMidi];
           held.forEach((key) => {
             if (!key.restedAlternate) map[key.finger - 1] = key.midi;
           });
@@ -553,9 +585,40 @@ export function generateIndependent(
           midi: Note.midi(pitch)!,
           written: writtenPitch(pitch, c.notation.key),
         });
+        const goal = Math.max(
+          0,
+          Math.min(
+            4,
+            voiceShapes.get(id)![b] +
+              motif[(onset / 240) % motif.length] +
+              c.melody.motifOffset,
+          ),
+        );
+        const attack =
+          !carry && canAttack && landing === undefined
+            ? chooseDynamicAttack(
+                c,
+                state,
+                fingeringPlan,
+                event,
+                h,
+                targets.get(hand)!,
+                goal,
+                chords[b],
+                b === c.notation.phraseBars - 1 &&
+                  onset + duration === soundedEnd,
+                (n, position) => safe([n], position),
+                profile.maxIntervalSteps ?? c.melody.maxIntervalSteps,
+                pos.resolutionPitch,
+              )
+            : undefined;
         let heads: Notehead[] = [];
         if (carry) {
           heads = carries.map((p) => structuredClone(p.head));
+        } else if (attack) {
+          applyDynamicAttack(fingeringPlan, event, h, attack);
+          heads = [attack.head];
+          memory.resolutionPitch = undefined;
         } else if (canAttack) {
           const last =
             b === c.notation.phraseBars - 1 && onset + duration === soundedEnd;
@@ -610,15 +673,6 @@ export function generateIndependent(
             if (harmonic.length) choices = harmonic;
           }
           if (choices.length) {
-            const goal = Math.max(
-              0,
-              Math.min(
-                4,
-                voiceShapes.get(id)![b] +
-                  motif[(onset / 240) % motif.length] +
-                  c.melody.motifOffset,
-              ),
-            );
             const index =
               landing ??
               chooseWeighted(
@@ -683,6 +737,7 @@ export function generateIndependent(
               canAttack);
           if (
             heads.length === 1 &&
+            !attack &&
             addTones &&
             landing === undefined &&
             profile.chords &&
@@ -742,6 +797,7 @@ export function generateIndependent(
                 voice: id,
                 onset: tick,
                 release: tick + duration,
+                ...(n.fingering ? { restedAlternate: true } : {}),
               });
           });
           memory.lastPitch = anchor.pitch;
@@ -752,13 +808,22 @@ export function generateIndependent(
           }));
           if (id.endsWith(":main")) {
             h.lastPitch = anchor.pitch;
-            h.lastIndex =
-              h.hand === "right" ? anchor.finger - 1 : 5 - anchor.finger;
+            h.lastIndex = attack
+              ? h.pitches.indexOf(anchor.pitch)
+              : h.hand === "right"
+                ? anchor.finger - 1
+                : 5 - anchor.finger;
             h.lastNoteEnd = tick + duration;
             h.lastFingering = memory.lastFingering;
             h.lastVoicing = h.lastFingering.map((n) => n.midi);
             h.resolutionPitch = memory.resolutionPitch;
           }
+          if (!carry)
+            recordFingeringAttack(
+              state,
+              event,
+              attack?.movement?.technique ?? attack?.head.fingering?.technique,
+            );
         }
         events.push(event);
         cursors[selectedLane] += duration;
@@ -766,7 +831,11 @@ export function generateIndependent(
     }
     state.bar += c.notation.phraseBars;
     attachNoteLifetimes(events, c);
-    planTies(events, c, initial, state, seed);
+    planTies(events, c, initial, state, seed, movements);
+    if (c.dynamicFingering) {
+      finishFingering(fingeringPlan, state, c);
+      planSubstitutions(fingeringPlan, state, c);
+    }
     if (wideEnabled) {
       const endTick = state.bar * measure;
       const pending = Object.fromEntries(

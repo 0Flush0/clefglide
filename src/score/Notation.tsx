@@ -18,6 +18,7 @@ import {
 } from "vexflow/bravura";
 import {
   TPQ,
+  isContinuousMovement,
   noteheads,
   type ScoreEvent,
   type HandState,
@@ -210,10 +211,15 @@ export function Notation({
                       (head.tie?.index ?? 0) > 0,
                     );
                 if (sign) note.addModifier(new Accidental(sign), index);
-                const show = selected.get(head.id)?.show;
-                if (show && (head.tie?.index ?? 0) === 0)
+                const hint = selected.get(head.id);
+                const substitution = hint?.substitution;
+                if (hint?.show)
                   note.addModifier(
-                    new FretHandFinger(String(head.finger))
+                    new FretHandFinger(
+                      substitution
+                        ? `${substitution.fromFinger}–${substitution.toFinger}`
+                        : String(head.finger),
+                    )
                       .setFont("Arial", 12, "bold")
                       .setPosition(
                         heads.length > 1
@@ -227,12 +233,16 @@ export function Notation({
                 (!independent || lane === 0) &&
                 showPlacement(settings.hints, reveal)
               ) {
-                const move = movements?.find(
+                const cues = movements?.filter(
                   (m) =>
                     m.hand === e.hand &&
-                    m.cueTick === e.bar * settings.beats * TPQ + e.onset,
+                    (isContinuousMovement(m)
+                      ? m.source.eventId === e.id ||
+                        (m.cueTick < startBar * settings.beats * TPQ &&
+                          m.landingNoteId === e.id)
+                      : m.cueTick === e.bar * settings.beats * TPQ + e.onset),
                 );
-                if (move)
+                for (const move of cues ?? [])
                   note.addModifier(
                     new Annotation(
                       translate(movementAnnotation(move), language),

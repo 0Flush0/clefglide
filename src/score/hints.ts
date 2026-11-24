@@ -1,15 +1,22 @@
 import {
   TPQ,
+  isContinuousMovement,
   noteheads,
   type HandState,
   type MovementPlan,
   type ScoreEvent,
   type Settings,
   type HintMemory,
+  type FingerSubstitution,
 } from "./model";
 import { Note } from "tonal";
 export type HintReason =
-  "initial" | "position-change" | "non-obvious" | "all" | "manual";
+  | "initial"
+  | "position-change"
+  | "transition-source"
+  | "non-obvious"
+  | "all"
+  | "manual";
 export interface FingeringHint {
   noteId: string;
   hand: ScoreEvent["hand"];
@@ -19,6 +26,7 @@ export interface FingeringHint {
   position: HandState;
   nonObvious: boolean;
   movement?: MovementPlan;
+  substitution?: FingerSubstitution;
   reasons: HintReason[];
   show: boolean;
 }
@@ -57,12 +65,21 @@ export function inferFingeringHints(
   memory: HintMemory = {},
 ): { hints: FingeringHint[]; state: HintMemory } {
   const state = structuredClone(memory);
+  const continuousSources = new Set(
+    movements.filter(isContinuousMovement).map((m) => m.source.eventId),
+  );
   const notes = events
     .filter((e) => e.kind === "note")
     .sort((a, b) => a.bar - b.bar || a.onset - b.onset)
     .flatMap((e) =>
       noteheads(e)
-        .filter((n) => !n.tie || n.tie.index === 0)
+        .filter(
+          (n) =>
+            !n.tie ||
+            n.tie.index === 0 ||
+            n.substitution ||
+            continuousSources.has(n.id),
+        )
         .map((n) => ({ ...e, ...n })),
     );
   const hints = notes.map((note) => {
@@ -110,10 +127,11 @@ export function inferFingeringHints(
       known.filter((f) => f <= expectedFinger).at(-1) ?? known[0];
     const spacingException =
       reference !== undefined && knowledge.anchors[reference] !== coordinate;
-    const nonObvious = note.finger !== expectedFinger || spacingException;
+    const nonObvious =
+      note.finger !== expectedFinger || spacingException || !!note.substitution;
     // The first note establishes a conventional baseline; later cues establish
     // only a previously uninferable offset. Tagged alternatives do not remap it.
-    if (starting || spacingException)
+    if ((starting || spacingException) && !note.tie?.index)
       knowledge.anchors[expectedFinger] = coordinate;
     knowledge.established[position.id] = { ...knowledge.anchors };
     const initial = starting && !movement && note.bar === 0;
@@ -125,6 +143,9 @@ export function inferFingeringHints(
           ? [
               ...(initial ? ["initial" as const] : []),
               ...(movement ? ["position-change" as const] : []),
+              ...(continuousSources.has(note.id)
+                ? ["transition-source" as const]
+                : []),
               ...(nonObvious ? ["non-obvious" as const] : []),
             ]
           : [];
@@ -137,6 +158,7 @@ export function inferFingeringHints(
       position,
       nonObvious,
       movement,
+      ...(note.substitution ? { substitution: note.substitution } : {}),
       reasons,
       show: reasons.length > 0,
     };
@@ -159,6 +181,14 @@ export function visibleMovements(
     .sort((a, b) => a.landingTick - b.landingTick);
 }
 export function movementAnnotation(m: MovementPlan) {
+  if (isContinuousMovement(m)) {
+    const label = {
+      "thumb-under": "Thumb under",
+      "finger-over": "Finger over",
+      "continuous-shift": "Continuous shift",
+    }[m.technique];
+    return `${label} ${m.hand === "right" ? "RH" : "LH"} · ${m.landingFinger}`;
+  }
   if (m.technique === "lifted-wide-leap")
     return `Leap ${m.hand === "right" ? "RH" : "LH"} ${m.distance > 0 ? "↑" : "↓"} · ${m.landingFinger}`;
   return `Move ${m.hand === "right" ? "RH" : "LH"} · ${m.landingFinger}`;

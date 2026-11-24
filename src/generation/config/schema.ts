@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { TPQ } from "../../score/model";
+import { dynamicFingeringSchema } from "./dynamic";
 
 const probability = z.number().min(0).max(1);
 const weight = z.number().min(0.000001).max(1000);
@@ -350,6 +351,7 @@ const schema = z
     rhythm: rhythmSchema,
     harmony: harmonySchema,
     fingering: fingeringSchema,
+    dynamicFingering: dynamicFingeringSchema.optional(),
     movement: movementSchema,
     chromatic: chromaticSchema,
     chords: chordsSchema,
@@ -370,6 +372,49 @@ const schema = z
     const lifetime = c.noteLifetimes;
     const ties = c.notation.ties;
     const independent = c.independentVoices;
+    const dynamic = c.dynamicFingering;
+    if (dynamic) {
+      const hands =
+        c.hands.active === "both" ? ["right", "left"] : [c.hands.active];
+      for (const [index, rule] of dynamic.techniques.entries()) {
+        const path = ["dynamicFingering", "techniques", index];
+        if (
+          rule.technique === "substitution" &&
+          (lifetime.kind !== "explicit" || lifetime.keyHold !== "required")
+        )
+          error(path, "Substitutions require explicit physical key holds.");
+        if (
+          rule.technique !== "substitution" &&
+          rule.technique !== "rested-alternate" &&
+          lifetime.kind === "explicit" &&
+          lifetime.keyHold === "attack-only"
+        )
+          error(
+            path,
+            "Continuous attacks require a preceding modeled key hold.",
+          );
+        if (
+          rule.technique === "rested-alternate" &&
+          !c.fingering.allowRestedAlternates
+        )
+          error(
+            path,
+            "Enable fingering.allowRestedAlternates to generate rested alternates.",
+          );
+        if (
+          (rule.technique === "thumb-under" ||
+            rule.technique === "finger-over") &&
+          !hands.some((hand) =>
+            rule.directions.includes(
+              (hand === "right") === (rule.technique === "thumb-under")
+                ? "up"
+                : "down",
+            ),
+          )
+        )
+          error(path, "No active hand can cross in an enabled direction.");
+      }
+    }
     if ((c.notation.voices === "independent") !== !!independent)
       error(
         ["independentVoices"],

@@ -1,6 +1,8 @@
 import {
   TPQ,
   noteheads,
+  isContinuousMovement,
+  type MovementPlan,
   type ScoreEvent,
   type Notehead,
   type StreamState,
@@ -33,12 +35,31 @@ export function planTies(
   initial: StreamState,
   state: StreamState,
   seed: string,
+  movements: MovementPlan[] = [],
 ) {
   const t = c.notation.ties;
   if (t === false) return;
   const voiceOf = (e: ScoreEvent) => e.voiceId ?? `${e.hand}:main`;
   const tick = (e: ScoreEvent) => e.bar * c.notation.beats * TPQ + e.onset;
   const end = state.bar * c.notation.beats * TPQ;
+  const continuous = movements.filter(isContinuousMovement);
+  const landingIds = new Set(continuous.map((m) => m.landingNoteId));
+  const sourceIds = new Set(continuous.map((m) => m.source.eventId));
+  const blocksTie = (e: ScoreEvent, connects: boolean) =>
+    landingIds.has(e.id) ||
+    !!e.fingering ||
+    (sourceIds.has(e.id) &&
+      (!connects ||
+        continuous.some(
+          (m) =>
+            m.source.eventId === e.id &&
+            !c.dynamicFingering?.techniques.some(
+              (r) =>
+                r.technique === m.technique &&
+                "allowTiedSource" in r &&
+                r.allowTiedSource,
+            ),
+        )));
   const selected = (heads: Notehead[]) => {
     if (heads.length === 1) return heads;
     if (t.chordTones === "none") return [];
@@ -138,6 +159,7 @@ export function planTies(
         continue;
       const candidates: { value: () => void; weight: number }[] = [];
       for (const pattern of t.patterns) {
+        if (blocksTie(e, pattern.value === "connect")) continue;
         if (pattern.value === "subdivide") {
           const counts = t.segmentCounts.filter(
             (count) =>
@@ -196,6 +218,7 @@ export function planTies(
               run.some(
                 (x, j) =>
                   x.kind !== "note" ||
+                  blocksTie(x, true) ||
                   x.positionId !== e.positionId ||
                   !t.subdivisions.some((s) => s === x.duration) ||
                   noteheads(x).some((n) => n.tie) ||

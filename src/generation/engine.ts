@@ -37,6 +37,14 @@ import { nextLeapPreparation } from "./wideLeaps";
 import { attachNoteLifetimes } from "../score/lifetimes";
 import { planTies, validateTieCarry, carryHeadId } from "./ties";
 import { generateIndependent } from "./independentVoices";
+import {
+  applyDynamicAttack,
+  chooseDynamicAttack,
+  recordFingeringAttack,
+} from "./dynamicAttacks";
+import { beginFingering, finishFingering } from "./fingeringTimeline";
+import { planSubstitutions } from "./substitutions";
+import { GeneratorContextInfeasibleError } from "./dynamicFeasibility";
 export function generateConfigured(
   c: ValidatedGeneratorConfig,
   seed: string,
@@ -47,17 +55,24 @@ export function generateConfigured(
   if (c.independentVoices) return generateIndependent(c, seed, previous);
   if (previous?.independentVoices)
     throw new Error("Start a new stream to change the voice model.");
+  if (previous?.dynamicFingering && !c.dynamicFingering)
+    throw new Error("Start a new stream to disable dynamic fingering.");
   if (previous) validateTieCarry(c, previous, seed);
   if (previous?.activeLifetimes?.length && c.notation.ties === false)
     throw new Error(
       "Shared-rhythm generation cannot consume held carry-in voices; author them with the core lifetime model.",
     );
   if (
+    c.dynamicFingering ||
     c.notation.ties !== false ||
     (c.wideLeaps.kind !== "disabled" && c.wideLeaps.probability > 0)
   ) {
     const { errors } = inspectGeneratorFeasibility(c);
-    if (errors.length) throw new Error(errors.join(" "));
+    if (errors.length) {
+      if (c.dynamicFingering)
+        throw new GeneratorContextInfeasibleError(errors.join(" "));
+      throw new Error(errors.join(" "));
+    }
     if (
       previous?.wideLeapPreparation &&
       previous.wideLeapPreparation.configFingerprint !==
@@ -72,12 +87,14 @@ export function generateConfigured(
     ? structuredClone(previous)
     : { rng: hash(seed), bar: 0, hands: [], hints: {} };
   if (!previous) state.hands = initialHands(c, state);
+  if (c.dynamicFingering) beginFingering(c, seed, state, !!previous);
   if (c.noteLifetimes.kind === "explicit") state.activeLifetimes ??= [];
   const initial = structuredClone(state),
     events: ScoreEvent[] = [],
     positions = structuredClone(state.hands),
     movements: MovementPlan[] = [];
   const diagnostics: MovementDiagnostic[] = [];
+  const fingeringPlan = { initial, events, positions, movements };
   const available = new Map(
     state.hands.map((h) => [h.hand, positionsForConfig(c, h.hand)]),
   );
@@ -189,34 +206,58 @@ export function generateConfigured(
           chords[b],
           b === c.notation.phraseBars - 1 && j === durations.length - 1,
         );
-        const index = carry
-          ? h.hand === "right"
-            ? carry.head.finger - 1
-            : 5 - carry.head.finger
-          : h.resolutionPitch && !(j === 0 && landings.has(h.hand))
-            ? h.pitches.indexOf(h.resolutionPitch)
-            : j === 0 && landings.has(h.hand)
-              ? landings.get(h.hand)!
-              : chooseWeighted(weighted, state);
+        const attack =
+          !rest && !carry && !(j === 0 && landings.has(h.hand))
+            ? chooseDynamicAttack(
+                c,
+                state,
+                fingeringPlan,
+                {
+                  id: `${seed}-${bar}-${onset}-${h.hand}`,
+                  bar,
+                  onset,
+                  hand: h.hand,
+                },
+                h,
+                available.get(h.hand)!,
+                goal,
+                chords[b],
+                finalAttack,
+                () => true,
+              )
+            : undefined;
+        const index = attack
+          ? attack.position.pitches.indexOf(attack.head.pitch)
+          : carry
+            ? h.hand === "right"
+              ? carry.head.finger - 1
+              : 5 - carry.head.finger
+            : h.resolutionPitch && !(j === 0 && landings.has(h.hand))
+              ? h.pitches.indexOf(h.resolutionPitch)
+              : j === 0 && landings.has(h.hand)
+                ? landings.get(h.hand)!
+                : chooseWeighted(weighted, state);
         if (index === undefined || index < 0)
           throw new Error(
             "No playable melodic transition. Widen the range or maximum melodic interval.",
           );
-        const { pitch, finger, resolving } = carry
-          ? {
-              pitch: carry.head.pitch,
-              finger: carry.head.finger,
-              resolving: false,
-            }
-          : planChromatic(
-              c,
-              h,
-              index,
-              rest,
-              j === 0 && landings.has(h.hand),
-              chords[b],
-              state,
-            );
+        const { pitch, finger, resolving } = attack
+          ? { ...attack.head, resolving: false }
+          : carry
+            ? {
+                pitch: carry.head.pitch,
+                finger: carry.head.finger,
+                resolving: false,
+              }
+            : planChromatic(
+                c,
+                h,
+                index,
+                rest,
+                j === 0 && landings.has(h.hand),
+                chords[b],
+                state,
+              );
         const midi = Note.midi(pitch)!;
         const id = `${seed}-${bar}-${onset}-${h.hand}`;
         const event: ScoreEvent = {
@@ -249,6 +290,7 @@ export function generateConfigured(
               : "PLAY_WITHIN_POSITION",
         };
         if (
+          !attack &&
           !rest &&
           (!carry ||
             (carries.length === 1 &&
@@ -324,9 +366,14 @@ export function generateConfigured(
             delete n.lifetime;
           });
         }
+        if (attack) applyDynamicAttack(fingeringPlan, event, h, attack);
         events.push(event);
         if (!rest) {
-          h.lastIndex = h.hand === "right" ? finger - 1 : 5 - finger;
+          h.lastIndex = attack
+            ? index
+            : h.hand === "right"
+              ? finger - 1
+              : 5 - finger;
           h.lastPitch = pitch;
           h.lastVoicing = event.notes!.map((n) => n.midi);
           h.lastFingering = event.notes!.map(({ midi, finger }) => ({
@@ -334,6 +381,12 @@ export function generateConfigured(
             finger,
           }));
           h.lastNoteEnd = bar * c.notation.beats * TPQ + onset + durations[j];
+          if (!carry)
+            recordFingeringAttack(
+              state,
+              event,
+              attack?.movement?.technique ?? attack?.head.fingering?.technique,
+            );
         }
       }
       onset += durations[j];
@@ -342,7 +395,11 @@ export function generateConfigured(
   state.bar += c.notation.phraseBars;
   attachNoteLifetimes(events, c);
   if (c.noteLifetimes.kind === "explicit") state.activeLifetimes = [];
-  planTies(events, c, initial, state, seed);
+  planTies(events, c, initial, state, seed, movements);
+  if (c.dynamicFingering) {
+    finishFingering(fingeringPlan, state, c);
+    planSubstitutions(fingeringPlan, state, c);
+  }
   const preparation = nextLeapPreparation(c, state.bar);
   if (preparation) state.wideLeapPreparation = preparation;
   else delete state.wideLeapPreparation;

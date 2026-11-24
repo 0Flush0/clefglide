@@ -3,6 +3,7 @@ import { expect, it } from "vitest";
 import baselineText from "./compatibility-v5.2.json?raw";
 import { type Settings } from "../score/model";
 import { generate } from "./planner";
+import { guidedIndependentDuet, movingTrebleWithHeldBass } from "./examples";
 import {
   generateConfigured,
   noteLifetimeDefaults,
@@ -64,5 +65,31 @@ it.each([false, true])(
         ? "694a5b44836f30777c28708f1fa05371f8666bb75b37fa827f7cd1d05502e2e4"
         : "4f4e34b4a84de085b8b8531de0584f54f4a40fbe831c1d0cef5596a71dad6f1a",
     );
+  },
+);
+
+it.each([
+  [
+    movingTrebleWithHeldBass,
+    "4c942d6ca669731587c29c352efb9b2c8fce89a87a25d1ff15172a635b4c3621",
+  ],
+  [
+    guidedIndependentDuet,
+    "7ebbc7c28a491c6a7916462c32319f253eca28c1ddfd071cef9e1d5eac023c98",
+  ],
+] as const)(
+  "preserves complete v10 opt-out streams for %s",
+  (example, expected) => {
+    const config = example();
+    const seed = "dynamic-opt-out-v10";
+    const first = generateConfigured(config, seed);
+    const second = generateConfigured(config, seed, first.final);
+    const third = generateConfigured(config, seed, second.final);
+    expect(first.version).toBe("10.0.0");
+    expect(
+      createHash("sha256")
+        .update(JSON.stringify([first, second, third]))
+        .digest("hex"),
+    ).toBe(expected);
   },
 );

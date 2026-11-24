@@ -65,16 +65,24 @@ export function generatorConfigFingerprint(
   config: ValidatedGeneratorConfig,
 ): string {
   // Disabled configurations retain their pre-capability byte identity.
-  const { wideLeaps, noteLifetimes, independentVoices, ...legacy } = config;
+  const {
+    wideLeaps,
+    noteLifetimes,
+    independentVoices,
+    dynamicFingering,
+    ...legacy
+  } = config;
   const identity = {
     ...legacy,
     ...(wideLeaps.kind !== "disabled" ? { wideLeaps } : {}),
     ...(noteLifetimes.kind !== "disabled" ? { noteLifetimes } : {}),
     ...(independentVoices ? { independentVoices } : {}),
+    ...(dynamicFingering ? { dynamicFingering } : {}),
   };
   return `${generatorConfigVersion(config)}:parameters:${JSON.stringify(identity)}`;
 }
 export function generatorConfigVersion(config: ValidatedGeneratorConfig) {
+  if (config.dynamicFingering) return "11.0.0";
   if (config.independentVoices)
     return config.wideLeaps.kind !== "disabled" ||
       config.coverage.kind === "guided" ||

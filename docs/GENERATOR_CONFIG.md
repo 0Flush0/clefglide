@@ -2,11 +2,11 @@
 
 The generator has two entry points. `generate(settings, seed, previous?)` in `src/generation/planner.ts` is the unchanged application compatibility API. It resolves saved settings through `config/presets.ts`, calls the parameter-driven engine, and returns the original `Phrase` shape. No UI control, preference schema, session schema, backup format or historical fingerprint changes in this refactor.
 
-`generateConfigured(config, seed, previous?)` in `engine.ts` accepts only a branded, deeply readonly `ValidatedGeneratorConfig`. It returns `GeneratedPhrase`, which carries the resolved config and a separate parameter fingerprint (`5.2.0:parameters:...` with optional modules disabled, `6.0.0:parameters:...` for wide leaps, `7.0.0:parameters:...` for explicit lifetimes without ties, `8.1.0:parameters:...` for shared-rhythm ties, `9.0.0:parameters:...` for the original independent-voice combinations, and `10.0.0:parameters:...` for independent voices with wide leaps, guided coverage or explicit rested-alternate permission). It has no legacy `settings` field. Custom configurations require a separate history and comparison design before they can be saved as practice sessions.
+`generateConfigured(config, seed, previous?)` in `engine.ts` accepts only a branded, deeply readonly `ValidatedGeneratorConfig`. It returns `GeneratedPhrase`, which carries the resolved config and a separate parameter fingerprint. The existing versions are 5.2.0 for the original core, 6.0.0 for wide leaps, 7.0.0 for explicit lifetimes, 8.1.0 for shared-rhythm ties, 9.0.0 for the original independent scheduler, and 10.0.0 for independent voices with wide leaps, guided coverage or authored rested-alternate permission. Enabling `dynamicFingering` selects 11.0.0. Custom configurations require a separate history and comparison design before they can be saved as practice sessions.
 
 The engine orchestrates small modules: `initialHands.ts`, `melody.ts`, `rhythm.ts`, `harmony.ts`, `chromatic.ts`, `movement.ts`, `wideLeaps.ts`, `ties.ts`, `voicings.ts`, `rangeCoverage.ts`, `positionMaps.ts` and `ergonomics.ts`. `sampling.ts` supplies ordered weighted selection. They consume resolved parameters, not difficulty labels. `planner.ts`, `positions.ts`, `chords.ts` and `validator.ts` retain the old signatures/range-preview behavior as compatibility facades; core modules do not import those facades. `difficulty.ts` and `config/presets.ts` are preset/UI policy, not algorithms. `generation/index.ts` provides the public composition API.
 
-`phraseValidator.ts`, `independentValidator.ts`, `wideLeapValidation.ts` and `lifetimeValidator.ts` independently reconstruct approved maps/options, harmony, transitions, movements, exact ticks, rhythm vocabulary, chords and boundary state. The `validator.ts` facade resolves policy for legacy callers. Validation does not call planner candidate, movement, rhythm, harmony, ergonomics or selection algorithms. Its physical checks and approved pattern reconstruction remain independent.
+`phraseValidator.ts`, `independentValidator.ts`, `wideLeapValidation.ts`, `lifetimeValidator.ts` and `fingeringValidator.ts` independently reconstruct approved maps/options, harmony, transitions, movements, exact ticks, rhythm vocabulary, chords and boundary state. The `validator.ts` facade resolves policy for legacy callers. Dynamic validation checks the supplied plan against deterministic contact and timeline rules without calling attack candidate enumeration, sequence sampling or the probabilistic substitution planner.
 
 ## Resolution, validation and overrides
 
@@ -43,6 +43,7 @@ const next = generateConfigured(config, "example", first.final);
 | Keys, clefs, meters, four-bar phrases, one or both hands, exact tick grid | Supported | Supported | C, G, F and D major in 3/4 or 4/4. Clefs do not transpose pitches. Each active hand needs a playable map, and both hands need compatible noncrossing positions. |
 | Rhythm weights, breathing rests, contours, motifs, cadence and harmony | Supported | Supported with per-voice duration, activity, register, finger and overlap policies | Shared rhythm tiles every sounded budget exactly. Independent lanes can fill unused slots with rests. Hard rhythm and activity limits take precedence over musical preferences. |
 | Natural and approved variable spacing | Supported | Supported | A position retains its spacing shape through relocation. The configured register, permitted fingers and required polyphony can eliminate some shapes. |
+| Dynamic attack techniques and held-finger substitution | Programmatic opt-in | Programmatic opt-in with per-voice constraints | The moving hand needs an isolated contact window for continuous movement and local alternates. Substitution can use an isolated hold or a supported stationary dyad. |
 | Fixed positions and small lifted repositioning | Supported | Supported | Small shifts require the configured preparation and an eligible main-voice landing. The existing small-shift schedule reserves the same tail in all lanes. |
 | Wide lifted leaps and small shifts | Supported on compatible shared schedules | Supported with hand-local wide preparation | A simultaneous hold by the relocating hand or an intersecting travel envelope rules out that move. An opposite-hand hold is compatible with independent preparation and a legal landing. |
 | Guided register coverage with small shifts | Supported | Supported | Guidance can defer an already legal move or bias a contour within the currently reachable map. |
@@ -130,13 +131,77 @@ The contour component is `max(minimumNoteWeight, contourPeakWeight − distance 
 | `fingering.patterns` | `natural`, weight 1 | Unique weighted subset of approved `natural`, `thumbGap`, `indexGap`, `twoGaps` names. Natural is required as the conventional option; arbitrary offsets are rejected. Weights affect starting-position selection within the selected natural/variable group (product of per-hand weights for paired positions). |
 | `fingering.variablePositionProbability` | `0` | Probability of preferring variable positions at initialization; positive values require a variable pattern in the library. If the preferred group has no compatible position, retain the available approved group, as before. |
 | `fingering.chromaticFingers` | `[2,3,4]` | Unique nonempty subset of these inner fingers; controls available alternative assignments. Outer-finger chromatic reach remains disallowed by the model. |
-| `fingering.allowRestedAlternates` | `false` | Boolean validator permission for the existing explicitly tagged rested-adjacent alternative. This does **not** make the planner emit such alternatives. Preparation, original expected finger, adjacency and two-semitone safety checks remain mandatory. |
+| `fingering.allowRestedAlternates` | `false` | Boolean validator permission for the existing explicitly tagged rested-adjacent alternative. Automatic generation also requires the `dynamicFingering` technique rule. |
 | `movement.kind` | `fixed` | `fixed` has no extra fields, or `rested-reposition`. Unsupported techniques are rejected. |
 | `movement.probability` | enabled branch: `0.25` | Probability per enabled boundary, independently per hand. Zero disables small-shift opportunities and their preparation. Guided coverage requires another active technique if small shifts are disabled. |
 | `movement.maxDistanceSteps` | enabled branch: `1` | Integer 1–4 diatonic steps of the position's lowest pitch. Separate from the melodic jump limit. |
 | `movement.eligibleBars` | enabled branch: `[2]` | Unique nonempty destination bars 1–3. Never chunk entry/bar zero. |
 | `movement.preparationBeats` | enabled branch: `1` | 1 or 2 full quarter-note beats of rest; never below the full-beat safety minimum. The cue attaches to the exact rest start; its end is the landing tick. |
 | `movement.distanceWeights` | enabled branch: `[4,3,2,1]` | Four positive weights for absolute distances 1, 2, 3, 4. Coverage scales acceptance of legal candidates; unused mass means no relocation. |
+
+### Dynamic fingering and continuous movement (programmatic API, version 11)
+
+Version 10 generated fixed and approved variable position maps, chromatic finger options, repeated keys, same-finger black-to-white slides and lifted relocations. It also represented ties and independent voices with physical holds. Authored scores could validate an explicitly tagged rested alternate. A tie used the same planned finger through its segments, so there was no held-finger substitution. Version 11 adds explicit actions to both existing planners.
+
+`dynamicFingering` defaults to omission. Supply the complete object to opt in. Omission preserves the earlier generators, preset settings, PRNG sequence and fingerprint bytes. `movement.kind` and `wideLeaps` continue to govern lifted actions. A fixed lifted-movement policy can be composed with a continuous technique.
+
+| Parameter | Bounds and behavior |
+| --- | --- |
+| `tempoBpm` | Integer 10–180. Each duration threshold in milliseconds rounds up to ticks using `ceil(ms × BPM × 480 / 60000)`. Use the same tempo when performing/scoring a programmatically generated exercise. |
+| `techniques` | One to six unique technique rules. Omit a technique to disable it. Arrays replace on resolution; list order participates in deterministic sampling and fingerprinting. |
+| `fingerWeights` | Five destination-finger weights in finger order, each 0.001–1000. Weight 1 is neutral. Applies to alternate assignments, continuous landings and the receiving finger of a substitution. |
+| `attacks.maxConsecutive`, `attacks.maxRepeated` | Integers 1–32, with repeated ≤ consecutive. Require `attacks` when any attack technique is listed. Each hand carries its run across rests, tied continuations and chunks. An ordinary main-voice attack resets the run. Switching techniques restarts the same-technique count. |
+| `attacks.distanceCost` | Number 0–100. Divide attack mass by `1 + distanceCost × distance`. Continuous moves use position distance in scale steps. Local alternate assignments use reach in semitones. |
+| All rules `probability` | In (0, 1]. Attack rules draw independently per eligible main-voice opportunity. Substitution draws once per hand and displayed segment onset with one or more legal transfers. |
+| Attack rules `weight` | 0.001–1000. Multiplies each passed, legal candidate's melodic weight, finger preference and distance factor. Substitution has its own opportunities and chooses among legal handoffs with `fingerWeights`. |
+| All rules `fingerPairs` | Nonempty unique ordered pairs of integers 1–5. The allowed pairs and interpretation are in the table below. The effective interval and any independent-voice range/finger restrictions still apply. |
+| Attack rules `directions` | Nonempty unique subset of `up` and `down` in physical pitch order. For an alternate, direction is from the alternate finger's home to the played key. |
+| Attack rules `maxSemitones` | Positive integer. Maximum change in attack pitch for movement, or maximum reach from home for an alternate. Crossings and alternates cap at 2. The noncrossing shift caps at 3. |
+| All rules `minimumPreparationMs` | Integer 0–2000. Continuous movement and substitution apply an 80 ms preparation floor. Adjacent reach applies a 100 ms floor. Rested alternate takes the greater of the configured milliseconds and its rest threshold. |
+| Continuous rules `minimumTransitionMs` | Integer 0–2000. Floors are 120 ms for crossings and 90 ms for a noncrossing shift. This is a separate interval at the end of the source hold, after preparation. |
+| Continuous rules `maxPositionSteps` | Integer 1–3 and large enough to admit at least one configured crossing pair. Use exactly 1 for the noncrossing shift. Position distance measures movement of the lowest mapped pitch in diatonic steps. |
+| Continuous rules `allowBlackKeys`, `allowTiedSource` | Booleans. Allow mapped black-key contacts on inner fingers and allow the last segment of a tie as the source, respectively. The thumb always crosses on a white key. |
+| Rested alternate `minimumRestTicks` | Integer 480–960. The whole hand must remain silent for this interval, including any independent lanes. Also requires `fingering.allowRestedAlternates`. |
+| Substitution `transferMs`, `minimumRecoveryMs` | Integers 80–2000. The transfer completes strictly inside the physical hold. Recovery starts at key release, precedes new same-hand attacks or hand movement, and fits entirely within the output phrase. |
+| Substitution `allowTies`, `heldNotes` | Boolean allowing handoff on a final tie segment and either `isolated` or `stable-dyad`. The second mode also admits one compatible stationary supporting tone. |
+
+| Technique | Fixed ergonomic envelope |
+| --- | --- |
+| `thumb-under` | 2→1 or 3→1, RH ascending or LH descending. One diatonic step between mapped source and landing, at most one white-key width between centers. The conventional scale template translates the five-finger position by the long finger number in steps. |
+| `finger-over` | 1→2 or 1→3, RH descending or LH ascending. The inverse crossing uses the same white-thumb and adjacent-key envelope. |
+| `continuous-shift` | Adjacent fingers follow normal hand order across up to two diatonic steps and two white-key widths, with a one-step translation of the position. |
+| `adjacent-reach` | Adjacent inner fingers 2–4. A free finger reaches from its mapped white key to an adjacent mapped white key while the departing contact preserves hand order and the combined reach envelope. |
+| `rested-alternate` | Any adjacent pair, interpreted as mapped finger → alternate finger. Both mapped keys must be white and one white-key width apart. The earlier v10 authored exception remains available under its original policy. |
+| `substitution` | Adjacent inner fingers 2–4 on a continuously held white key, with the receiving finger normally mapped one white-key width away. A supporting white key must remain down through target release and clear both finger contacts with an ordered, bounded span. One transfer per lifetime. |
+
+Continuous movement requires one main-voice physical source contact through the landing tick, a single landing attack and no additional same-hand contact during the gesture. The explicit movement records source event/key/finger, cue, transfer start, landing and both approved maps. The travel envelope includes both shaped positions and their chromatic options. It is tested against the opposite hand's positions and travel envelopes. Across chunks the preceding contact can serve as the cue source. A recent opposite-hand movement whose prior sweep cannot be reconstructed conservatively rules out that opportunity. Physical occupancy uses notated durations when explicit lifetimes are disabled. Explicit attack-only lifetimes are incompatible with techniques that need a preceding hold.
+
+Continuous landings and local alternates are diatonic relative to the active key, including allowed key-signature black keys for movement. Chromatic neighbors and their resolution remain available at ordinary attacks. Both hands, chord attacks, independent lanes and lifted relocations can coexist in the same stream. An overlapping same-hand chord or independent hold blocks a continuous gesture. A local alternate uses a single isolated attack and holds the same position. Ties can end at a permitted crossing source. The tie planner preserves the source cue and leaves continuous landings and alternate attacks untied. A substitution can use a final segment of a local or incoming tie if the hold and recovery fit. Its notehead metadata changes neither the lifetime ID nor its attack/release ticks. A stable dyad is supported during a substitution. Moving several held tones, general polyphonic crossings, pedal-only substitution and arbitrary re-fingerings are outside this model.
+
+The independent validator rechecks contacts, timing, occupied keys, hand clearance, technique runs and the retained boundary. Smart Hints show alternate fingers and show the continuous gesture at its cue and the landing finger at the attack. A visible landing can carry the gesture label if its cue is outside the notation window. Substitutions appear as a finger pair on the glyph where the transfer takes place, including a tied continuation. MIDI scores the same attack and release regardless of the planned transfer. These templates are conservative software models. Player comfort and pedagogical effectiveness require physical review.
+
+`GeneratorConfigurationError` reports contradictory or unrecognized parameters. `inspectGeneratorFeasibility` checks necessary range, rhythm, voice and contact-template conditions. Generation reports a failing context with `GeneratorContextInfeasibleError`. An eligible stochastic phrase can still contain zero technique occurrences when its realized sequence has no free window or passes no occurrence draw. The independent scheduler retains its configured retry limit and reports `GeneratorSearchExhaustedError` if that budget runs out.
+
+Each technique has a reusable rule in `src/generation/examples.ts`.
+
+```ts
+import { generateConfigured } from "./src/generation";
+import { dynamicFingeringExample } from "./src/generation/examples";
+
+const techniques = [
+  "thumb-under", "finger-over", "continuous-shift",
+  "adjacent-reach", "rested-alternate", "substitution",
+] as const;
+const exercises = techniques.map((technique) =>
+  generateConfigured(dynamicFingeringExample([technique]), `practice-${technique}`),
+);
+const duet = dynamicFingeringExample(["thumb-under", "finger-over"], {
+  hands: { active: "both" },
+  notation: { key: "G" },
+});
+const first = generateConfigured(duet, "crossing-duet");
+const next = generateConfigured(duet, first.seed, first.final);
+```
 
 ### Wide lifted leaps (programmatic API only)
 
@@ -500,14 +565,14 @@ Targets are sampled by region mass, then mapped to the nearest approved same-sha
 | Chords Off/Easy/Medium/Hard | Single notes, or occurrence **0.22/0.45/0.7**; dyads, add triads, add four-note shapes. Max spans **7/9/9**; sixth/minor-seventh recipes enabled in Hard. Voice-leading cap follows the resolved melody cap. |
 | Rhythm Gentle/Quarters/Mixed | **480:2,960:1** / **480:1** / **240:1,480:1,960:1,1920:1** duration weights. Gentle/Mixed breathe at bar 2; Quarters does not. Preparation rests remain independent. |
 
-No tempo, scoring mode, input offset, timing tolerance, assistance display, visible bar count, practice duration, MIDI/device setting or appearance preference controls generation. Smart inference memory is still computed in the same mode regardless of display settings. Legacy coverage context retains the original opaque settings token so existing stream state also compares byte-for-byte; parameter-driven callers use the resolved config fingerprint as their context automatically. The fourth engine argument exists only for this compatibility token and is not a practice-mode parameter.
+UI tempo, scoring mode, input offset, timing tolerance, assistance display, visible bar count, practice duration, MIDI/device setting and appearance preferences remain playback or presentation parameters for legacy presets. Version 11's programmatic tempo controls its physical timing constraints. Smart inference memory is still computed in the same mode regardless of display settings. Legacy coverage context retains the original opaque settings token so existing stream state also compares byte-for-byte; parameter-driven callers use the resolved config fingerprint as their context automatically. The fourth engine argument exists only for this compatibility token and is not a practice-mode parameter.
 
 ## Fixed invariants and remaining hardcoded behavior
 
 - MIDI 60 = C4, twelve semitones per octave, seven diatonic letters, physical black-key classes/centers, 480 TPQ, bar/tick arithmetic, five fingers and their mirrored hand order are notation/anatomical definitions.
 - The fixed approved offset library is natural **[0,1,2,3,4]**, thumb gap **[0,2,3,4,5]**, index gap **[0,1,3,4,5]**, two gaps **[0,2,4,5,6]**, in finger order away from the thumb. Total map span ≤10 semitones; adjacent thumb/index and index/middle ≤4, remaining adjacent fingers ≤2. Horizontal gaps are ≤2.5/1.5 white-key widths. These are safety ceilings, not user preferences.
 - Same-finger changes permit the same physical key or black-to-immediately-adjacent-white slides. Spelling does not change physical key color. Chromatic options use single-semitone alterations, no double accidentals or outer-finger alterations. Fixed base maps never change mid-position.
-- Relocation must preserve shape, separate hands, honor both distance/jump limits, have a novel landing unavailable in the prior map, and have an explicit full-beat-or-longer rest and advance cue. Small shifts cannot enter a chunk. Wide leaps may enter only with carried preparation evidence. Hand crossing, overpassing and thumb-under are unsupported. Arbitrary ergonomic bounds cannot be overridden.
+- Lifted relocation must preserve shape, separate hands, honor both distance/jump limits, have a novel landing unavailable in the prior map, and have an explicit full-beat-or-longer rest and advance cue. Small lifted shifts cannot enter a chunk. Wide leaps may enter only with carried preparation evidence. Continuous techniques use the contact templates above. Crossing one hand over the other and arbitrary ergonomic overrides are outside the model.
 - Chord distinctness, approved finger shapes, full harmonic sets, nine-semitone ceiling, conservative outer-black/inner-white exclusions and horizontal shape limits are safety rules. The factor 1.5 plus 0.5 key-width allowance is part of that physical restriction, not a distribution preference.
 - Four-bar chunk topology, shared-hand rhythmic attacks, diatonic triad qualities, deterministic ID conventions, contour/motif indexing, base untied duration vocabulary and chromatic resolution precedence are supported algorithm/model contracts. Uniform selection among otherwise equally weighted compatible positions or chromatic options is the defined sampler, not an unexposed second weighting system. No arbitrary additional weighting is applied.
 - FNV seed hashing and xorshift32 constants/state bounds are reproducibility machinery. Ordered candidate traversal and one-draw sampling (including singleton choices) are deliberately stable. The sampler does not add “helpful” rerolls or skip existing zero-probability draws where that would change seeded content.
@@ -518,6 +583,8 @@ These checks establish consistency with the declared conservative model, not uni
 
 Before editing generation algorithms, 96 representative legacy settings/seed cases were captured as SHA-256 checksums of **three complete consecutive phrases each**. They span both meters, all keys, both rhythm/rest families, all hand modes, all five difficulty dimensions, broad independent ranges and continuation state. `compatibility.test.ts` verifies all 288 complete phrase outputs, including event IDs/order, spelling, fingers, chords, harmonies, explicit movements, final RNG, hint memory and coverage memory. Canonical legacy settings retain generator **5.2.0**, existing difficulty fingerprints and exact replay eligibility because their behavior is preserved.
 
+The same test checks complete three-phrase v9 and v10 streams, including v10 guided movement and a wide-leap duet with cross-phrase chord ties. The v10 hashes were captured from the source before dynamic fingering was enabled.
+
 The former Gentle duplicate duration entries `[480,480,960]` become weights `[2,1]`, and uniform template/position/chord choices become ordered unit-weight distributions. Their selection intervals and number/order of PRNG calls remain identical. Existing session/import/preference tests remain applicable without schema changes.
 
 There is one intentional boundary tightening: malformed internal configurations are now rejected before sampling, and the independent validator rejects unsupported durations or harmonic plans outside the resolved libraries. In particular, negative/non-finite movement values can no longer disappear into an inactive branch, and reversed min/max bounds are rejected structurally even for a disabled hand. An older malformed settings object may therefore fail replay earlier with an actionable error; import/history data remains unchanged. A merely narrow but correctly ordered unused range is still ignored for contextual feasibility. This does not alter valid generated exercises or stored history (historical records do not store generated phrases). No outcomes are migrated or reinterpreted. The behavior-preserving modular refactor retains 5.2.0. The opt-in wide-leap capability uses a separate 6.0.0 parameter identity; future changes to canonical preset semantics still require versioning.
@@ -526,6 +593,6 @@ New custom values can intentionally select different exercises. Their complete r
 
 ## Future capabilities that are not parameter switches
 
-Slur evaluation remains outside the generator. General crossings, thumb-under, alternate ergonomic shapes, new meters, keys and durations, and non-major harmonic vocabularies require explicit model and validator work before their schemas can be widened.
+Slurs and expressive articulation evaluation remain outside the generator. General finger and hand crossings, additional ergonomic shapes, new meters, keys and durations, and non-major harmonic vocabularies require explicit model and validator work before their schemas can be widened.
 
 Future modules can be added as new typed fields/unions with their own defaults, resolver composition and validators. Unsupported capabilities are rejected today; no placeholder configuration fields or plugin registry claim those algorithms exist.

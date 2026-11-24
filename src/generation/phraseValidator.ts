@@ -1,5 +1,14 @@
 import { Chord, Note, Scale } from "tonal";
-import { TPQ, noteheads, type Phrase } from "../score/model";
+import {
+  TPQ,
+  isContinuousMovement,
+  noteheads,
+  type Phrase,
+} from "../score/model";
+import {
+  configuredAlternate,
+  validateDynamicFingering,
+} from "./fingeringValidator";
 import {
   generatorConfigFingerprint,
   generatorConfigVersion,
@@ -25,7 +34,7 @@ export function validateWithConfig(
   p: Omit<Phrase, "settings">,
   c: ValidatedGeneratorConfig,
 ): string[] {
-  const errors: string[] = [];
+  const errors = validateDynamicFingering(p, c);
   const ids = new Set<string>();
   const movement = c.movement;
   const black = (m: number) => [1, 3, 6, 8, 10].includes(m % 12);
@@ -323,6 +332,7 @@ export function validateWithConfig(
             (pos) => pos.hand === hand && pos.id === move.toPositionId,
           );
           const wide = move.technique === "lifted-wide-leap";
+          const continuous = isContinuousMovement(move);
           const smallPreparation = Math.max(
             preparationTicks,
             c.wideLeaps.kind === "lifted-wide" &&
@@ -335,30 +345,31 @@ export function validateWithConfig(
             !to ||
             move.fromPositionId !== active.id ||
             move.toPositionId === active.id ||
-            (!wide && move.technique !== "lift-and-reposition") ||
-            (!wide && !allowedBars.includes(bar - p.initial.bar)) ||
-            e.onset !== 0 ||
-            (!wide &&
-              (movement.kind !== "rested-reposition" ||
-                movement.probability === 0)) ||
-            e.kind !== "note" ||
-            move.landingNoteId !== e.id ||
-            move.landingMidi !== e.midi ||
-            move.landingFinger !== e.finger ||
-            (!wide &&
-              (move.cueTick !== move.landingTick - smallPreparation ||
-                !hasMovementPreparation(p, c, move))) ||
-            (wide &&
-              !validateWideLanding(
-                p,
-                c,
-                move,
-                active,
-                e,
-                lastPitch,
-                lastEnd,
-              )) ||
-            (lastEnd !== undefined && lastEnd > move.cueTick)
+            (!continuous &&
+              ((!wide && move.technique !== "lift-and-reposition") ||
+                (!wide && !allowedBars.includes(bar - p.initial.bar)) ||
+                e.onset !== 0 ||
+                (!wide &&
+                  (movement.kind !== "rested-reposition" ||
+                    movement.probability === 0)) ||
+                e.kind !== "note" ||
+                move.landingNoteId !== e.id ||
+                move.landingMidi !== e.midi ||
+                move.landingFinger !== e.finger ||
+                (!wide &&
+                  (move.cueTick !== move.landingTick - smallPreparation ||
+                    !hasMovementPreparation(p, c, move))) ||
+                (wide &&
+                  !validateWideLanding(
+                    p,
+                    c,
+                    move,
+                    active,
+                    e,
+                    lastPitch,
+                    lastEnd,
+                  )) ||
+                (lastEnd !== undefined && lastEnd > move.cueTick)))
           )
             errors.push(
               "Invalid movement, landing or advance preparation cue.",
@@ -376,8 +387,9 @@ export function validateWithConfig(
             if (
               move.distance !== distance ||
               !distance ||
-              (!wide && Math.abs(distance) > distanceCap) ||
-              active.pitches.includes(e.pitch)
+              (!continuous &&
+                ((!wide && Math.abs(distance) > distanceCap) ||
+                  active.pitches.includes(e.pitch)))
             )
               errors.push("Unnecessary or excessive repositioning.");
             active = to;
@@ -413,15 +425,16 @@ export function validateWithConfig(
               tick(rest) + rest.duration === tick(e),
           );
           const alternate =
-            e.fingering?.technique === "rested-alternate" &&
-            c.fingering.allowRestedAlternates &&
-            !move &&
-            e.fingering.expectedFinger === expectedFinger &&
-            expectedFinger > 0 &&
-            Math.abs(e.finger - expectedFinger) === 1 &&
-            Math.abs(active.fingerToMidi[e.finger - 1] - e.midi) <= 2 &&
-            !!preparation &&
-            (lastEnd === undefined || lastEnd <= tick(preparation));
+            configuredAlternate(c, e) ||
+            (e.fingering?.technique === "rested-alternate" &&
+              c.fingering.allowRestedAlternates &&
+              !move &&
+              e.fingering.expectedFinger === expectedFinger &&
+              expectedFinger > 0 &&
+              Math.abs(e.finger - expectedFinger) === 1 &&
+              Math.abs(active.fingerToMidi[e.finger - 1] - e.midi) <= 2 &&
+              !!preparation &&
+              (lastEnd === undefined || lastEnd <= tick(preparation)));
           if (e.fingering && !alternate)
             errors.push("Invalid rested alternate fingering.");
           if (

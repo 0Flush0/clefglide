@@ -7,6 +7,8 @@ import {
   resolveGeneratorConfig,
   tieDefaults,
   wideLeapDefaults,
+  type GeneratorConfig,
+  type GeneratorOverrides,
 } from "./config";
 
 /** A mobile treble part over a bass part that can carry a full chord across a phrase. */
@@ -84,4 +86,124 @@ export function guidedIndependentDuet() {
       },
     },
   });
+}
+
+type DynamicPolicy = NonNullable<GeneratorConfig["dynamicFingering"]>;
+type Technique = DynamicPolicy["techniques"][number]["technique"];
+const travel = {
+  probability: 0.7,
+  weight: 1,
+  directions: ["up", "down"] as ["up", "down"],
+  maxSemitones: 2,
+  minimumPreparationMs: 140,
+};
+const moving = {
+  ...travel,
+  minimumTransitionMs: 120,
+  allowBlackKeys: true,
+  allowTiedSource: true,
+};
+const dynamicRules = {
+  "thumb-under": {
+    technique: "thumb-under",
+    ...moving,
+    fingerPairs: [
+      [2, 1],
+      [3, 1],
+    ],
+    maxPositionSteps: 3,
+  },
+  "finger-over": {
+    technique: "finger-over",
+    ...moving,
+    fingerPairs: [
+      [1, 2],
+      [1, 3],
+    ],
+    maxPositionSteps: 3,
+  },
+  "continuous-shift": {
+    technique: "continuous-shift",
+    ...moving,
+    maxSemitones: 3,
+    fingerPairs: [
+      [1, 2],
+      [2, 3],
+      [3, 4],
+      [4, 5],
+      [2, 1],
+      [3, 2],
+      [4, 3],
+      [5, 4],
+    ],
+    maxPositionSteps: 1,
+  },
+  "adjacent-reach": {
+    technique: "adjacent-reach",
+    ...travel,
+    fingerPairs: [
+      [2, 3],
+      [3, 2],
+      [3, 4],
+      [4, 3],
+    ],
+  },
+  "rested-alternate": {
+    technique: "rested-alternate",
+    ...travel,
+    fingerPairs: [
+      [2, 3],
+      [3, 2],
+      [3, 4],
+      [4, 3],
+    ],
+    minimumRestTicks: 480,
+  },
+  substitution: {
+    technique: "substitution",
+    probability: 1,
+    fingerPairs: [
+      [2, 3],
+      [3, 2],
+      [3, 4],
+      [4, 3],
+    ],
+    minimumPreparationMs: 160,
+    transferMs: 100,
+    minimumRecoveryMs: 80,
+    allowTies: true,
+    heldNotes: "stable-dyad",
+  },
+} satisfies Record<Technique, DynamicPolicy["techniques"][number]>;
+
+/** Choose one or more techniques, then optionally override the exercise context. */
+export function dynamicFingeringExample(
+  techniques: readonly Technique[],
+  overrides: GeneratorOverrides = {},
+) {
+  const rests =
+    techniques.includes("rested-alternate") ||
+    techniques.includes("substitution");
+  const base = resolveGeneratorConfig({
+    hands: { right: { min: 60, max: 84 }, left: { min: 36, max: 59 } },
+    rhythm: {
+      breathBars: rests ? [1, 2] : [],
+      durations: [{ value: 480, weight: 1 }],
+    },
+    fingering: {
+      allowRestedAlternates: techniques.includes("rested-alternate"),
+    },
+    ...(techniques.includes("substitution")
+      ? { noteLifetimes: noteLifetimeDefaults }
+      : {}),
+    dynamicFingering: {
+      tempoBpm: 72,
+      techniques: techniques.map((technique) => dynamicRules[technique]),
+      fingerWeights: [1, 1, 1, 1, 1],
+      ...(techniques.some((technique) => technique !== "substitution")
+        ? { attacks: { maxConsecutive: 2, maxRepeated: 1, distanceCost: 0.2 } }
+        : {}),
+    },
+  });
+  return resolveGeneratorConfig(overrides, base);
 }

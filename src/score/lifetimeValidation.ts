@@ -1,5 +1,9 @@
 import { z } from "zod";
-import type { LifetimePlan, MovementPlan } from "./model";
+import {
+  isContinuousMovement,
+  type LifetimePlan,
+  type MovementPlan,
+} from "./model";
 
 const tick = z.number().int().nonnegative();
 export const noteLifetimeDataSchema = z
@@ -113,7 +117,13 @@ export function validateLifetimePlan(
         (m) =>
           m.hand === a.hand &&
           x.onsetTick < m.landingTick &&
-          physicalEnd(a) > m.cueTick,
+          physicalEnd(a) > m.cueTick &&
+          !(
+            isContinuousMovement(m) &&
+            a.midi === m.source?.midi &&
+            a.finger === m.source.finger &&
+            physicalEnd(a) === m.landingTick
+          ),
       )
     )
       errors.push(

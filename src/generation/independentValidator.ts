@@ -1,5 +1,12 @@
 import { Chord, Note } from "tonal";
-import { TPQ, noteheads, type LifetimeNote, type Phrase } from "../score/model";
+import {
+  TPQ,
+  isContinuousMovement,
+  noteheads,
+  type LifetimeNote,
+  type Phrase,
+} from "../score/model";
+import { configuredAlternate } from "./fingeringValidator";
 import { lifetimeNoteSchema } from "../score/lifetimeValidation";
 import {
   generatorConfigFingerprint,
@@ -230,17 +237,19 @@ export function validateIndependentVoices(
         const alternate =
           !!primary &&
           hold !== undefined &&
-          c.fingering.allowRestedAlternates &&
-          !move &&
-          heads.length === 1 &&
-          (!e.fingering ||
-            !primary.fingering ||
-            e.fingering.expectedFinger === primary.fingering.expectedFinger) &&
-          isRestedAlternateAssignment(pos, primary, tag) &&
-          ((primary.tie?.index ?? 0) > 0
-            ? alternateHolds.has(hold)
-            : tick(e) - TPQ >= start &&
-              voiceRests(p, c, hand, tick(e) - TPQ, tick(e), false));
+          (configuredAlternate(c, e) ||
+            (c.fingering.allowRestedAlternates &&
+              !move &&
+              heads.length === 1 &&
+              (!e.fingering ||
+                !primary.fingering ||
+                e.fingering.expectedFinger ===
+                  primary.fingering.expectedFinger) &&
+              isRestedAlternateAssignment(pos, primary, tag) &&
+              ((primary.tie?.index ?? 0) > 0
+                ? alternateHolds.has(hold)
+                : tick(e) - TPQ >= start &&
+                  voiceRests(p, c, hand, tick(e) - TPQ, tick(e), false))));
         if (alternate) alternateHolds.add(hold);
         else if (tag) errors.push("Invalid rested alternate fingering.");
         if (
@@ -563,7 +572,14 @@ export function validateIndependentVoices(
         (lastMain ? tick(lastMain) + lastMain.duration : initial.lastNoteEnd) ||
       (lastMain &&
         (final.lastIndex !==
-          (hand === "right" ? lastMain.finger - 1 : 5 - lastMain.finger) ||
+          (hand === "right"
+            ? (configuredAlternate(c, lastMain)
+                ? lastMain.fingering!.expectedFinger
+                : lastMain.finger) - 1
+            : 5 -
+              (configuredAlternate(c, lastMain)
+                ? lastMain.fingering!.expectedFinger
+                : lastMain.finger)) ||
           JSON.stringify(final.lastFingering) !==
             JSON.stringify(
               noteheads(lastMain).map(({ midi, finger }) => ({ midi, finger })),
@@ -586,6 +602,7 @@ export function validateIndependentVoices(
       m.landingTick,
     );
     const wide = m.technique === "lifted-wide-leap";
+    if (isContinuousMovement(m)) continue;
     const lastPitch =
       p.events
         .filter(

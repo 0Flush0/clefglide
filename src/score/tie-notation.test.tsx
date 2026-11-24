@@ -13,6 +13,9 @@ import {
 } from "../generation";
 import { selectFingeringHints } from "./hints";
 import { validateTieSegments } from "./ties";
+import { dynamicFingeringExample } from "../generation/examples";
+import { isContinuousMovement } from "./model";
+import { movementAnnotation } from "./hints";
 
 afterEach(() => {
   cleanup();
@@ -32,6 +35,57 @@ function setup() {
     value: () => createCanvas(10, 10).getContext("2d"),
   });
 }
+
+it("engraves a tied handoff and explicit crossing cues in Smart mode", () => {
+  setup();
+  const config = dynamicFingeringExample(
+    ["substitution", "thumb-under", "finger-over"],
+    {
+      notation: {
+        ties: {
+          ...tieDefaults,
+          probability: 1,
+          patterns: [{ value: "subdivide", weight: 1 }],
+        },
+      },
+    },
+  );
+  const p = Array.from({ length: 12 }, (_, i) =>
+    generateConfigured(config, `engrave-transfer-${i}`),
+  ).find(
+    (phrase) =>
+      phrase.movements.some(isContinuousMovement) &&
+      phrase.events
+        .flatMap(noteheads)
+        .some((n) => n.tie?.index && n.substitution),
+  )!;
+  const handoff = p.events
+    .flatMap(noteheads)
+    .find((n) => n.tie?.index && n.substitution)!.substitution!;
+  const move = p.movements.find(isContinuousMovement)!;
+  const props = {
+    events: p.events,
+    hands: p.initial.hands,
+    positions: p.positions,
+    movements: p.movements,
+    startBar: 0,
+    reveal: false,
+  };
+  const { container, rerender } = render(
+    <Notation {...props} settings={defaults} />,
+  );
+  const text = `${handoff.fromFinger}–${handoff.toFinger}`;
+  expect(container.querySelector("svg")?.textContent).toContain(text);
+  expect(container.querySelector("svg")?.textContent).toContain(
+    movementAnnotation(move),
+  );
+  expect(container.querySelectorAll(".vf-stavetie").length).toBeGreaterThan(0);
+  rerender(<Notation {...props} settings={{ ...defaults, hints: "hidden" }} />);
+  expect(container.querySelector("svg")?.textContent).not.toContain(text);
+  expect(container.querySelector("svg")?.textContent).not.toContain(
+    movementAnnotation(move),
+  );
+});
 
 it("validates and engraves multi-phrase chromatic holds with both endpoints outside a rolling window", () => {
   setup();
