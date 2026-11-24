@@ -5,13 +5,21 @@ import {
   type Hand,
   type MovementPlan,
   type StreamState,
+  type VoiceLeapPreparation,
 } from "../score/model";
 import {
   generatorConfigFingerprint,
   type ValidatedGeneratorConfig,
 } from "./config";
 import type { MovementDiagnostic } from "./model";
-import { diatonicIndex, separated, spacingSignature } from "./positionMaps";
+import {
+  diatonicIndex,
+  positionCenter,
+  separated,
+  spacingSignature,
+} from "./positionMaps";
+import { coverageMoveWeight } from "./rangeCoverage";
+import { clearsOppositeEdge, oppositeSweepEdge } from "./movementEnvelope";
 import { chooseWeighted } from "./sampling";
 import { random } from "./random";
 
@@ -103,6 +111,19 @@ export function movementSeparated(
   return others.every((other) => separated(to, other));
 }
 
+export type AcceptsLanding = (
+  from: HandState,
+  to: HandState,
+  pitch: string,
+  technique: MovementPlan["technique"],
+  cue: number,
+) => boolean;
+
+export type VoiceLeapWindow = (
+  hand: Hand,
+  landing: number,
+) => VoiceLeapPreparation | undefined;
+
 export function planWideLeaps(
   c: ValidatedGeneratorConfig,
   seed: string,
@@ -112,6 +133,8 @@ export function planWideLeaps(
   positions: HandState[],
   movements: MovementPlan[],
   diagnostics: MovementDiagnostic[],
+  acceptsLanding: AcceptsLanding,
+  voiceWindow?: VoiceLeapWindow,
 ) {
   const w = c.wideLeaps;
   const landings = new Map<Hand, number>();
@@ -125,13 +148,15 @@ export function planWideLeaps(
   const cue = tick - w.preparationBeats * TPQ;
   for (let hi = 0; hi < state.hands.length; hi++) {
     const from = state.hands[hi];
-    if (random(state) >= w.probability) continue;
-    const prepared =
-      cue >= state.bar * c.notation.beats * TPQ ||
-      (state.wideLeapPreparation?.landingTick === tick &&
-        state.wideLeapPreparation.cueTick === cue &&
-        state.wideLeapPreparation.configFingerprint ===
-          generatorConfigFingerprint(c));
+    const window = voiceWindow?.(from.hand, tick);
+    if (voiceWindow ? !window : random(state) >= w.probability) continue;
+    const prepared = voiceWindow
+      ? window?.cueTick === cue
+      : cue >= state.bar * c.notation.beats * TPQ ||
+        (state.wideLeapPreparation?.landingTick === tick &&
+          state.wideLeapPreparation.cueTick === cue &&
+          state.wideLeapPreparation.configFingerprint ===
+            generatorConfigFingerprint(c));
     if (
       !prepared ||
       from.lastPitch === undefined ||
@@ -145,8 +170,24 @@ export function planWideLeaps(
       });
       continue;
     }
+    const edge = voiceWindow
+      ? oppositeSweepEdge(
+          from.hand,
+          positions.slice(0, state.hands.length),
+          positions,
+          movements,
+          cue,
+          tick,
+        )
+      : undefined;
     let options = wideLandingOptions(c, from, available.get(from.hand)!).filter(
-      (o) => movementSeparated(o.to, state, positions, movements, tick),
+      ({ to, index }) =>
+        movementSeparated(to, state, positions, movements, tick) &&
+        clearsOppositeEdge(from, edge) &&
+        clearsOppositeEdge(to, edge) &&
+        clearsOppositeEdge(from, window?.oppositeEdge) &&
+        clearsOppositeEdge(to, window?.oppositeEdge) &&
+        acceptsLanding(from, to, to.pitches[index], "lifted-wide-leap", cue),
     );
     if (!options.length) {
       diagnostics.push({
@@ -177,6 +218,18 @@ export function planWideLeaps(
       })),
       state,
     );
+    if (
+      voiceWindow &&
+      c.coverage.kind === "guided" &&
+      random(state) >=
+        coverageMoveWeight(
+          state.coverage![from.hand]!,
+          positionCenter(from),
+          positionCenter(to),
+          c.coverage,
+        )
+    )
+      continue;
     const midi = Note.midi(to.pitches[index])!;
     movements.push({
       id: `${seed}-wide-${state.bar + b}-${from.hand}`,

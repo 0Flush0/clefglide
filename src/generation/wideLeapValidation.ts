@@ -2,14 +2,18 @@ import { Note } from "tonal";
 import {
   TPQ,
   type HandState,
+  type Hand,
   type MovementPlan,
   type Phrase,
   type ScoreEvent,
+  type StreamState,
 } from "../score/model";
 import {
   generatorConfigFingerprint,
   type ValidatedGeneratorConfig,
 } from "./config";
+import { clearsOppositeEdge, oppositeSweepEdge } from "./movementEnvelope";
+import { voiceSpecs } from "./voiceConfig";
 
 type Plan = Omit<Phrase, "settings">;
 const degree = (pitch: string) => {
@@ -24,6 +28,24 @@ export function hasMovementPreparation(
   m: Pick<MovementPlan, "hand" | "cueTick" | "landingTick">,
 ) {
   const start = p.initial.bar * c.notation.beats * TPQ;
+  if (c.independentVoices) {
+    const reserved = p.initial.independentVoices?.leapPreparations?.[m.hand];
+    if (
+      m.cueTick < start &&
+      (!reserved ||
+        reserved.cueTick !== m.cueTick ||
+        reserved.landingTick !== m.landingTick)
+    )
+      return false;
+    return voiceRests(
+      p,
+      c,
+      m.hand,
+      Math.max(start, m.cueTick),
+      m.landingTick,
+      m.cueTick >= start,
+    );
+  }
   let cursor = m.cueTick;
   if (cursor < start) {
     const reserved = p.initial.wideLeapPreparation;
@@ -46,6 +68,121 @@ export function hasMovementPreparation(
     cursor += e.duration;
   }
   return cursor === m.landingTick;
+}
+
+export function voiceRests(
+  p: Plan,
+  c: ValidatedGeneratorConfig,
+  hand: Hand,
+  from: number,
+  to: number,
+  exactCue: boolean,
+) {
+  const tick = (e: ScoreEvent) => e.bar * c.notation.beats * TPQ + e.onset;
+  return voiceSpecs(c)
+    .filter((v) => v.hand === hand)
+    .every(({ id }) => {
+      let cursor = from;
+      for (const e of p.events.filter((e) => e.voiceId === id)) {
+        const onset = tick(e);
+        if (onset >= to || onset + e.duration <= from) continue;
+        if (
+          e.kind !== "rest" ||
+          Math.max(from, onset) !== cursor ||
+          (exactCue && id.endsWith(":main") && onset < from)
+        )
+          return false;
+        cursor = Math.min(to, onset + e.duration);
+      }
+      return cursor === to;
+    });
+}
+
+export function validVoiceLeapBoundary(
+  state: StreamState,
+  c: ValidatedGeneratorConfig,
+) {
+  const wide = c.wideLeaps;
+  const measure = c.notation.beats * TPQ;
+  const boundary = state.bar * measure;
+  return Object.entries(state.independentVoices?.leapPreparations ?? {}).every(
+    ([hand, window]) =>
+      !(
+        !window ||
+        !state.hands.some((h) => h.hand === hand) ||
+        wide.kind !== "lifted-wide" ||
+        wide.probability === 0 ||
+        boundary === 0 ||
+        window.cueTick < 0 ||
+        window.cueTick >= boundary ||
+        window.landingTick < boundary ||
+        window.cueTick !== window.landingTick - wide.preparationBeats * TPQ ||
+        !wide.eligibleBars.some(
+          (bar) => window.landingTick === boundary + bar * measure,
+        ) ||
+        (state.hands.length === 2
+          ? !Number.isInteger(window.oppositeEdge) ||
+            window.oppositeEdge! < 21 ||
+            window.oppositeEdge! > 108
+          : window.oppositeEdge !== undefined) ||
+        (state.activeLifetimes ?? []).some(
+          (n) =>
+            n.hand === hand &&
+            n.lifetime.onsetTick < window.landingTick &&
+            n.lifetime.keyHold.kind === "required" &&
+            n.lifetime.keyHold.releaseTick > window.cueTick,
+        )
+      ),
+  );
+}
+
+export function validateVoiceLeapReservations(
+  p: Plan,
+  c: ValidatedGeneratorConfig,
+) {
+  const measure = c.notation.beats * TPQ;
+  const start = p.initial.bar * measure;
+  const end = p.final.bar * measure;
+  const errors: string[] = [];
+  for (const [state, outgoing] of [
+    [p.initial, false],
+    [p.final, true],
+  ] as const) {
+    if (!validVoiceLeapBoundary(state, c)) {
+      errors.push("Invalid independent wide-leap boundary preparation.");
+      continue;
+    }
+    for (const [hand, window] of Object.entries(
+      state.independentVoices?.leapPreparations ?? {},
+    )) {
+      const h = hand as Hand;
+      if (
+        outgoing
+          ? !voiceRests(p, c, h, window.cueTick, end, true) ||
+            window.oppositeEdge !==
+              oppositeSweepEdge(
+                h,
+                p.initial.hands,
+                p.positions,
+                p.movements,
+                window.cueTick,
+                end,
+              )
+          : !voiceRests(
+              p,
+              c,
+              h,
+              start,
+              Math.min(window.landingTick, end),
+              false,
+            )
+      )
+        errors.push(
+          "Independent wide-leap preparation differs from the score.",
+        );
+    }
+  }
+  return errors;
 }
 
 export function validateWideLanding(
@@ -88,8 +225,7 @@ export function validateWideLanding(
     w.preparationBeats >=
       w.minimumPreparationBeats +
         (abs / 7) * w.additionalPreparationBeatsPerOctave &&
-    lastEnd !== undefined &&
-    lastEnd <= m.cueTick &&
+    (c.independentVoices || (lastEnd !== undefined && lastEnd <= m.cueTick)) &&
     hasMovementPreparation(p, c, m)
   );
 }
@@ -115,6 +251,49 @@ export function validateWideSweeps(
       (h) => h.hand === m.hand && h.id === m.toPositionId,
     );
     if (!from || !to) continue;
+    if (c.independentVoices) {
+      const edge = oppositeSweepEdge(
+        m.hand,
+        p.initial.hands,
+        p.positions,
+        p.movements,
+        m.cueTick,
+        m.landingTick,
+      );
+      const prior = p.initial.independentVoices?.leapPreparations?.[m.hand];
+      const carriedEdge =
+        prior?.landingTick === m.landingTick ? prior.oppositeEdge : undefined;
+      if (
+        [edge, carriedEdge].some(
+          (limit) =>
+            !clearsOppositeEdge(from, limit) || !clearsOppositeEdge(to, limit),
+        )
+      )
+        errors.push("Wide-leap travel envelopes collide with the other hand.");
+      for (const opposite of p.movements.filter(
+        (o) =>
+          o.hand !== m.hand &&
+          o.landingTick > m.landingTick &&
+          o.cueTick <= m.landingTick,
+      )) {
+        const destination = p.positions.find(
+          (h) => h.hand === opposite.hand && h.id === opposite.toPositionId,
+        );
+        if (
+          destination &&
+          !clearsOppositeEdge(
+            destination,
+            opposite.hand === "right"
+              ? Math.max(...from.fingerToMidi, ...to.fingerToMidi)
+              : Math.min(...from.fingerToMidi, ...to.fingerToMidi),
+          )
+        )
+          errors.push(
+            "Wide-leap travel envelopes collide with the other hand.",
+          );
+      }
+      continue;
+    }
     const low = Math.min(extent(from)[0], extent(to)[0]),
       high = Math.max(extent(from)[1], extent(to)[1]);
     let other = p.initial.hands.find((h) => h.hand !== m.hand);

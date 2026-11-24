@@ -15,7 +15,12 @@ import {
 } from "./positionMaps";
 import { coverageMoveWeight } from "./rangeCoverage";
 import { random } from "./random";
-import { movementSeparated, planWideLeaps } from "./wideLeaps";
+import {
+  movementSeparated,
+  planWideLeaps,
+  type AcceptsLanding,
+  type VoiceLeapWindow,
+} from "./wideLeaps";
 import type { MovementDiagnostic } from "./model";
 
 /** Plan only explicit, prepared relocations; unavailable opportunities stay put. */
@@ -28,11 +33,8 @@ export function planMovements(
   positions: HandState[],
   movements: MovementPlan[],
   diagnostics: MovementDiagnostic[] = [],
-  acceptsLanding: (
-    from: HandState,
-    to: HandState,
-    pitch: string,
-  ) => boolean = () => true,
+  acceptsLanding: AcceptsLanding = () => true,
+  voiceWindow?: VoiceLeapWindow,
 ) {
   const movement = c.movement;
   const bar = state.bar + b;
@@ -45,6 +47,8 @@ export function planMovements(
     positions,
     movements,
     diagnostics,
+    acceptsLanding,
+    voiceWindow,
   );
   const usePreparation =
     movement.kind === "rested-reposition" && movement.probability > 0;
@@ -57,6 +61,19 @@ export function planMovements(
       const from = state.hands[hi];
       if (landings.has(from.hand)) continue;
       if (random(state) >= movement.probability || !from.lastPitch) continue;
+      const tick = bar * c.notation.beats * TPQ;
+      const cue =
+        tick -
+        Math.max(
+          movement.preparationBeats,
+          !voiceWindow &&
+            c.wideLeaps.kind === "lifted-wide" &&
+            c.wideLeaps.probability > 0 &&
+            c.wideLeaps.eligibleBars.includes(b)
+            ? c.wideLeaps.preparationBeats
+            : 0,
+        ) *
+          TPQ;
       const other = state.hands.find((h) => h.hand !== from.hand);
       // Only move when the old position cannot reach the landing pitch.
       const options = available.get(from.hand)!.flatMap((to) => {
@@ -83,7 +100,7 @@ export function planMovements(
             diatonicIndex(pitch) - diatonicIndex(from.lastPitch!),
           );
           return !from.pitches.includes(pitch) &&
-            acceptsLanding(from, to, pitch) &&
+            acceptsLanding(from, to, pitch, "lift-and-reposition", cue) &&
             leap <= c.melody.maxIntervalSteps
             ? [{ to, index, distance }]
             : [];
@@ -114,8 +131,7 @@ export function planMovements(
       const selected = options.findIndex((_, i) => (draw -= weights[i]) < 0);
       if (selected < 0) continue;
       const { to, index, distance } = options[selected];
-      const tick = bar * c.notation.beats * TPQ,
-        pitch = to.pitches[index],
+      const pitch = to.pitches[index],
         midi = Note.midi(pitch)!;
       movements.push({
         id: `${seed}-move-${bar}-${from.hand}`,
@@ -123,17 +139,7 @@ export function planMovements(
         technique: "lift-and-reposition",
         fromPositionId: from.id,
         toPositionId: to.id,
-        cueTick:
-          tick -
-          Math.max(
-            movement.preparationBeats,
-            c.wideLeaps.kind === "lifted-wide" &&
-              c.wideLeaps.probability > 0 &&
-              c.wideLeaps.eligibleBars.includes(b)
-              ? c.wideLeaps.preparationBeats
-              : 0,
-          ) *
-            TPQ,
+        cueTick: cue,
         landingTick: tick,
         landingNoteId: `${seed}-${bar}-0-${from.hand}`,
         landingMidi: midi,

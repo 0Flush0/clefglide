@@ -2,13 +2,14 @@ import { Note } from "tonal";
 import {
   TPQ,
   noteheads,
+  type Hand,
   type HandState,
   type MovementPlan,
   type Notehead,
   type ScoreEvent,
   type StreamState,
 } from "../score/model";
-import { attachNoteLifetimes } from "../score/lifetimes";
+import { attachNoteLifetimes, lifetimeNotes } from "../score/lifetimes";
 import { inferFingeringHints } from "../score/hints";
 import { writtenPitch } from "../score/pitch";
 import {
@@ -23,7 +24,12 @@ import {
   playableTransition,
 } from "./ergonomics";
 import { initialHands } from "./initialHands";
-import { diatonicIndex, positionsForConfig } from "./positionMaps";
+import {
+  diatonicIndex,
+  positionCenter,
+  positionsForConfig,
+  spacingSignature,
+} from "./positionMaps";
 import { planPhrase } from "./harmony";
 import { planChromatic } from "./chromatic";
 import { melodicChoices, melodicWeights } from "./melody";
@@ -42,9 +48,33 @@ import {
 import { validateGeneratedPhrase } from "./phraseValidator";
 import { inspectGeneratorFeasibility } from "./feasibility";
 import type { GeneratedPhrase } from "./model";
+import { planVoicePreparation } from "./voicePreparation";
+import { clearsOppositeEdge, oppositeSweepEdge } from "./movementEnvelope";
+import {
+  coveragePhraseShape,
+  planRangeCoverage,
+  recordRangeCoverage,
+  validCoverageMemory,
+} from "./rangeCoverage";
+import { validVoiceLeapBoundary } from "./wideLeapValidation";
+import type { MovementDiagnostic } from "./model";
 
 type Key = Pick<Notehead, "midi" | "finger" | "hand">;
-type Occupied = Key & { voice: string; onset: number; release: number };
+type Occupied = Key & {
+  voice: string;
+  onset: number;
+  release: number;
+  restedAlternate?: boolean;
+};
+
+export class GeneratorSearchExhaustedError extends Error {
+  constructor(attempts: number, reason: string) {
+    super(
+      `Independent voice search budget exhausted after ${attempts} attempts. Last rejected plan: ${reason}`,
+    );
+    this.name = "GeneratorSearchExhaustedError";
+  }
+}
 
 /** Plan one exact timeline per voice against the occupied keys of every other voice. */
 export function generateIndependent(
@@ -75,6 +105,15 @@ export function generateIndependent(
       "Independent voice continuation requires the original seed and configuration.",
     );
   if (previous) validateTieCarry(c, previous, seed);
+  if (previous && !validVoiceLeapBoundary(previous, c))
+    throw new Error("Invalid independent wide-leap boundary preparation.");
+  if (
+    previous &&
+    (c.coverage.kind === "guided"
+      ? !validCoverageMemory(previous, context, c.coverage)
+      : previous.coverage !== undefined)
+  )
+    throw new Error("Invalid independent register coverage state.");
   if (
     Object.keys(start.independentVoices.voices).length !== specs.length ||
     specs.some(
@@ -104,9 +143,7 @@ export function generateIndependent(
     reason = errors[0];
     rng = state.rng;
   }
-  throw new Error(
-    `Independent voices could not satisfy the requested constraints in ${policy.maxAttempts} attempts. ${reason} Adjust voice registers, fingers, activity, overlap or polyphony.`,
-  );
+  throw new GeneratorSearchExhaustedError(policy.maxAttempts, reason);
 
   function plan(state: StreamState, initial: StreamState): GeneratedPhrase {
     const memories = state.independentVoices!.voices;
@@ -114,11 +151,19 @@ export function generateIndependent(
     const events: ScoreEvent[] = [];
     const positions = structuredClone(state.hands);
     const movements: MovementPlan[] = [];
+    const diagnostics: MovementDiagnostic[] = [];
+    const wideEnabled =
+      c.wideLeaps.kind === "lifted-wide" && c.wideLeaps.probability > 0;
     const occupied: Occupied[] = (initial.activeLifetimes ?? []).map((n) => ({
       ...n,
       voice: n.lifetime.voiceId,
       onset: n.lifetime.onsetTick,
       release: n.lifetime.releaseTick,
+      restedAlternate: incoming.some(
+        (p) =>
+          p.head.tie?.lifetimeId === n.id &&
+          p.head.fingering?.technique === "rested-alternate",
+      ),
     }));
     for (const { id, profile } of specs) {
       const memory = memories[id];
@@ -128,7 +173,6 @@ export function generateIndependent(
           ? random(state) >= profile.exitProbability
           : random(state) < profile.entryProbability);
     }
-    const { harmony, motif, shapes, chords } = planPhrase(c, state);
     const measure = c.notation.beats * TPQ;
     const targets = previous
       ? available
@@ -138,9 +182,118 @@ export function generateIndependent(
             positionsForConfig(c, h.hand).filter(accepts),
           ]),
         );
+    const coverage = c.coverage;
+    if (coverage.kind === "guided") {
+      state.coverage ??= {};
+      for (const h of state.hands) {
+        const midis = targets
+          .get(h.hand)!
+          .filter((to) => spacingSignature(to) === spacingSignature(h))
+          .flatMap((to) => to.fingerToMidi);
+        state.coverage[h.hand] = planRangeCoverage(
+          state.coverage[h.hand],
+          {
+            min: Math.min(...midis),
+            max: Math.max(...midis),
+            context,
+            position: positionCenter(h),
+            destinations: targets
+              .get(h.hand)!
+              .filter((to) => spacingSignature(to) === spacingSignature(h))
+              .map(positionCenter),
+          },
+          state,
+          coverage,
+        );
+      }
+    }
+    const { harmony, motif, shapes, chords } = planPhrase(c, state);
+    const voiceShapes = new Map(
+      specs.map(({ hand, id, profile }) => {
+        const shape = shapes.get(hand)!;
+        if (coverage.kind !== "guided") return [id, shape] as const;
+        const h = state.hands.find((h) => h.hand === hand)!;
+        const pitches = h.fingerToMidi.filter((m, i) =>
+          voiceAllows(profile, m, i + 1),
+        );
+        const memory = state.coverage![hand]!;
+        const target = Math.max(
+          profile.minMidi ?? memory.min,
+          Math.min(profile.maxMidi ?? memory.max, memory.target),
+        );
+        return [
+          id,
+          coveragePhraseShape(
+            { ...memory, target },
+            pitches.length
+              ? (Math.min(...pitches) + Math.max(...pitches)) / 2
+              : positionCenter(h),
+            shape,
+            state,
+            coverage,
+          ),
+        ] as const;
+      }),
+    );
+    const windows = planVoicePreparation(c, state, targets);
+    const startTick = initial.bar * measure;
+    const voiceWindow = wideEnabled
+      ? (hand: Hand, landing: number) =>
+          windows.find((w) => w.hand === hand && w.landingTick === landing)
+      : undefined;
     for (let b = 0; b < c.notation.phraseBars; b++) {
       const bar = initial.bar + b,
         barTick = bar * measure;
+      const baseEnd = measure - smallRestBeats(c, b) * TPQ;
+      const restCues = (hand: Hand) =>
+        windows
+          .filter(
+            (w) =>
+              w.hand === hand &&
+              w.landingTick > barTick &&
+              w.cueTick < barTick + measure,
+          )
+          .map((w) => Math.max(0, w.cueTick - barTick));
+      const endFor = (hand: Hand) => Math.min(baseEnd, ...restCues(hand));
+      const mainDurations = (hand: Hand) =>
+        specs
+          .find((v) => v.hand === hand)!
+          .durations.filter((d) => d.value <= endFor(hand));
+      const overlapDraws = new Map<Hand, boolean>();
+      const considersLandingDuringOverlap = (hand: Hand) => {
+        if (
+          policy.overlapProbability === 1 ||
+          (!occupied.some(
+            (key) => key.hand !== hand && key.release > barTick,
+          ) &&
+            !movements.some(
+              (move) => move.hand !== hand && move.landingTick === barTick,
+            ))
+        )
+          return true;
+        if (!overlapDraws.has(hand))
+          overlapDraws.set(hand, random(state) < policy.overlapProbability);
+        return overlapDraws.get(hand)!;
+      };
+      const landingDurationAllowed = (hand: Hand, duration: number) =>
+        occupied.every(
+          (key) =>
+            key.release <= barTick ||
+            (key.hand !== hand &&
+              policy.overlapProbability > 0 &&
+              Math.min(key.release - barTick, duration) <=
+                policy.maxOverlapTicks),
+        ) &&
+        movements.every(
+          (move) =>
+            move.hand === hand ||
+            move.landingTick !== barTick ||
+            (policy.overlapProbability > 0 &&
+              Math.min(
+                duration,
+                ...mainDurations(move.hand).map((d) => d.value),
+              ) <= policy.maxOverlapTicks),
+        );
       const moves = planMovements(
         c,
         seed,
@@ -149,11 +302,22 @@ export function generateIndependent(
         b,
         positions,
         movements,
-        [],
-        (from, to, pitch) => {
+        diagnostics,
+        (from, to, pitch, technique, cue) => {
           const main = specs.find((v) => v.hand === from.hand)!;
           const voice = memories[main.id];
-          const movement = c.movement;
+          const wide = technique === "lifted-wide-leap";
+          const edge =
+            wideEnabled && !wide
+              ? oppositeSweepEdge(
+                  from.hand,
+                  initial.hands,
+                  positions,
+                  movements,
+                  cue,
+                  barTick,
+                )
+              : undefined;
           return (
             voice.active &&
             voiceAllows(
@@ -161,22 +325,36 @@ export function generateIndependent(
               Note.midi(pitch)!,
               to.fingerToMidi.indexOf(Note.midi(pitch)!) + 1,
             ) &&
-            main.durations.some(
-              (d) => d.value <= measure - smallRestBeats(c, b) * TPQ,
+            mainDurations(from.hand).some(
+              (d) => !wideEnabled || landingDurationAllowed(from.hand, d.value),
             ) &&
-            (!voice.lastPitch ||
+            (wide ||
+              !voice.lastPitch ||
               Math.abs(diatonicIndex(pitch) - diatonicIndex(voice.lastPitch)) <=
                 (main.profile.maxIntervalSteps ?? c.melody.maxIntervalSteps)) &&
-            movement.kind === "rested-reposition" &&
+            clearsOppositeEdge(from, edge) &&
+            clearsOppositeEdge(to, edge) &&
             !occupied.some(
               (key) =>
                 key.hand === from.hand &&
-                key.release > barTick - movement.preparationBeats * TPQ,
-            )
+                key.onset < barTick &&
+                key.release > cue,
+            ) &&
+            (!wideEnabled || considersLandingDuringOverlap(from.hand))
           );
         },
+        voiceWindow,
       );
-      const soundedEnd = measure - smallRestBeats(c, b) * TPQ;
+      for (const move of movements.filter(
+        (m) => m.landingTick === barTick && m.technique === "lifted-wide-leap",
+      )) {
+        for (const { id } of specs.filter((v) => v.hand === move.hand)) {
+          const { active, lastPitch } = memories[id];
+          memories[id] = id.endsWith(":main")
+            ? { active, lastPitch }
+            : { active };
+        }
+      }
       const cursors = specs.map(() => 0);
       const priority = Math.floor(random(state) * specs.length);
       while (Math.min(...cursors) < measure) {
@@ -185,7 +363,15 @@ export function generateIndependent(
         const lane = cursors.findIndex(
           (_, index) => cursors[(index + priority) % specs.length] === onset,
         );
-        const selectedLane = (lane + priority) % specs.length;
+        const landingLane =
+          wideEnabled && onset === 0
+            ? specs.findIndex(
+                ({ hand, id }, i) =>
+                  cursors[i] === 0 && id.endsWith(":main") && moves.has(hand),
+              )
+            : -1;
+        const selectedLane =
+          landingLane >= 0 ? landingLane : (lane + priority) % specs.length;
         const { hand, id, profile, durations } = specs[selectedLane];
         const h = state.hands.find((position) => position.hand === hand)!;
         const memory = memories[id];
@@ -200,7 +386,14 @@ export function generateIndependent(
           id.endsWith(":main") && onset === 0 ? moves.get(hand) : undefined;
         const otherLanding =
           onset === 0 && moves.has(hand) && landing === undefined;
-        const options = durations.filter((d) => d.value <= soundedEnd - onset);
+        const soundedEnd = endFor(hand);
+        const options = durations.filter(
+          (d) =>
+            d.value <= soundedEnd - onset &&
+            (landing === undefined ||
+              !wideEnabled ||
+              landingDurationAllowed(hand, d.value)),
+        );
         const active = occupied.filter(
           (key) => key.release > tick && key.voice !== id,
         );
@@ -236,6 +429,14 @@ export function generateIndependent(
                   Math.min(
                     measure - onset,
                     onset < soundedEnd ? soundedEnd - onset : measure - onset,
+                    ...(wideEnabled
+                      ? restCues(hand)
+                          .filter((cue) => cue > onset)
+                          .map((cue) => cue - onset)
+                      : []),
+                    ...(wideEnabled && baseEnd > onset
+                      ? [baseEnd - onset]
+                      : []),
                     otherLanding
                       ? Math.min(...durations.map((d) => d.value))
                       : measure,
@@ -288,15 +489,26 @@ export function generateIndependent(
             )
           )
             return false;
-          const held = [...sameHand, ...newHeads];
+          const held: (Key & { restedAlternate?: boolean })[] = [
+            ...sameHand,
+            ...newHeads,
+          ];
           if (held.length > policy[hand]!.maxPolyphony) return false;
           const map = [...h.fingerToMidi];
           held.forEach((key) => {
-            map[key.finger - 1] = key.midi;
+            if (!key.restedAlternate) map[key.finger - 1] = key.midi;
           });
           if (!comfortableMap(map, hand)) return false;
           const ordered = held.sort((a, b) => a.finger - b.finger);
           if (
+            (held.some((key) => key.restedAlternate) &&
+              ordered.some(
+                (key, i) =>
+                  i > 0 &&
+                  (key.midi - ordered[i - 1].midi) *
+                    (hand === "right" ? 1 : -1) <=
+                    0,
+              )) ||
             ordered.some(
               (key, i) =>
                 i > 0 &&
@@ -402,7 +614,7 @@ export function generateIndependent(
               0,
               Math.min(
                 4,
-                shapes.get(hand)![b] +
+                voiceShapes.get(id)![b] +
                   motif[(onset / 240) % motif.length] +
                   c.melody.motifOffset,
               ),
@@ -474,6 +686,7 @@ export function generateIndependent(
             addTones &&
             landing === undefined &&
             profile.chords &&
+            !anchor.fingering &&
             c.chords.kind === "voicings" &&
             !memory.resolutionPitch &&
             !pos.resolutionPitch &&
@@ -554,6 +767,55 @@ export function generateIndependent(
     state.bar += c.notation.phraseBars;
     attachNoteLifetimes(events, c);
     planTies(events, c, initial, state, seed);
+    if (wideEnabled) {
+      const endTick = state.bar * measure;
+      const pending = Object.fromEntries(
+        windows
+          .filter((w) => w.landingTick >= endTick)
+          .map(({ hand, cueTick, landingTick }) => {
+            const oppositeEdge = oppositeSweepEdge(
+              hand,
+              initial.hands,
+              positions,
+              movements,
+              cueTick,
+              endTick,
+            );
+            return [
+              hand,
+              {
+                cueTick,
+                landingTick,
+                ...(oppositeEdge === undefined ? {} : { oppositeEdge }),
+              },
+            ];
+          }),
+      );
+      if (Object.keys(pending).length)
+        state.independentVoices!.leapPreparations = pending;
+      else delete state.independentVoices!.leapPreparations;
+    }
+    if (coverage.kind === "guided") {
+      const lifetimes = [
+        ...(initial.activeLifetimes ?? []),
+        ...lifetimeNotes(events),
+      ];
+      for (const { hand } of state.hands) {
+        const heard = lifetimes.filter((n) => n.hand === hand);
+        recordRangeCoverage(
+          state.coverage![hand]!,
+          heard.map((n) => n.midi),
+          coverage,
+          heard.map(({ lifetime }) =>
+            Math.max(
+              0,
+              Math.min(state.bar * measure, lifetime.releaseTick) -
+                Math.max(startTick, lifetime.onsetTick),
+            ),
+          ),
+        );
+      }
+    }
     state.hints = inferFingeringHints(
       events,
       positions,
@@ -572,6 +834,9 @@ export function generateIndependent(
       events,
       positions,
       movements,
+      ...(c.wideLeaps.kind !== "disabled"
+        ? { movementDiagnostics: diagnostics }
+        : {}),
       harmonies: harmony.map(
         (degree, i) => `${degree}: ${chords[i].join(" · ")}`,
       ),

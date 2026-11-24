@@ -6,6 +6,15 @@ import {
   type ValidatedGeneratorConfig,
 } from "./config";
 import { voiceSpecs } from "./voiceConfig";
+import { isRestedAlternateAssignment } from "./alternateFingering";
+import {
+  hasMovementPreparation,
+  validateVoiceLeapReservations,
+  validateWideLanding,
+  validateWideSweeps,
+  voiceRests,
+} from "./wideLeapValidation";
+import { matchesCoverageUsage, validCoverageMemory } from "./rangeCoverage";
 
 /** Reconstruct voice schedules and physical occupancy from score data, without sampling. */
 export function validateIndependentVoices(
@@ -20,6 +29,17 @@ export function validateIndependentVoices(
     end = p.final.bar * measure;
   const tick = (e: { bar: number; onset: number }) => e.bar * measure + e.onset;
   const context = JSON.stringify([p.seed, generatorConfigFingerprint(c)]);
+  const alternateHolds = new Set<string>();
+  if (c.fingering.allowRestedAlternates)
+    for (const t of p.initial.pendingTies ?? []) {
+      const position = p.initial.hands.find((h) => h.hand === t.head.hand);
+      if (
+        position &&
+        t.head.tie &&
+        isRestedAlternateAssignment(position, t.head, t.head.fingering)
+      )
+        alternateHolds.add(t.head.tie.lifetimeId);
+    }
   const black = (m: number) => [1, 3, 6, 8, 10].includes(m % 12);
   const center = (m: number) =>
     Math.floor(m / 12) * 7 +
@@ -138,6 +158,15 @@ export function validateIndependentVoices(
       let cursor = 0;
       const b = bar - p.initial.bar;
       const movement = c.movement;
+      const wideMove = moveByHand(hand).some(
+        (m) =>
+          m.technique === "lifted-wide-leap" && m.landingTick === bar * measure,
+      );
+      if (wideMove && !id.endsWith(":main")) {
+        lastPitch = lastPosition = resolution = undefined;
+        lastFingering = undefined;
+        chromaticPending = false;
+      }
       const restBeats =
         movement.kind === "rested-reposition" &&
         movement.probability > 0 &&
@@ -158,7 +187,13 @@ export function validateIndependentVoices(
           );
         cursor = e.onset + e.duration;
         if (e.kind === "rest") {
-          if (e.action !== "REST" || e.notes?.length || e.tie || e.lifetime)
+          if (
+            e.action !== "REST" ||
+            e.notes?.length ||
+            e.tie ||
+            e.lifetime ||
+            e.fingering
+          )
             errors.push("Independent voice rest contains attack data.");
           continue;
         }
@@ -189,20 +224,42 @@ export function validateIndependentVoices(
         )
           errors.push("Voice activity or sounded rhythm violates its profile.");
         const primary = heads[0];
+        const move = moveByHand(hand).find((m) => m.landingNoteId === e.id);
+        const tag = e.fingering ?? primary?.fingering;
+        const hold = primary?.tie?.lifetimeId ?? primary?.id;
+        const alternate =
+          !!primary &&
+          hold !== undefined &&
+          c.fingering.allowRestedAlternates &&
+          !move &&
+          heads.length === 1 &&
+          (!e.fingering ||
+            !primary.fingering ||
+            e.fingering.expectedFinger === primary.fingering.expectedFinger) &&
+          isRestedAlternateAssignment(pos, primary, tag) &&
+          ((primary.tie?.index ?? 0) > 0
+            ? alternateHolds.has(hold)
+            : tick(e) - TPQ >= start &&
+              voiceRests(p, c, hand, tick(e) - TPQ, tick(e), false));
+        if (alternate) alternateHolds.add(hold);
+        else if (tag) errors.push("Invalid rested alternate fingering.");
         if (
           !primary ||
           primary.id !== e.id ||
           primary.midi !== e.midi ||
           primary.pitch !== e.pitch ||
           primary.finger !== e.finger ||
-          e.fingering ||
           e.action !==
             (Note.midi(lastPitch ?? "") === e.midi
               ? "REPEAT_NOTE"
               : "PLAY_WITHIN_POSITION")
         )
           errors.push("Invalid independent event anchor or hand action.");
-        if (lastPitch && Math.abs(degree(e.pitch) - degree(lastPitch)) > limit)
+        if (
+          move?.technique !== "lifted-wide-leap" &&
+          lastPitch &&
+          Math.abs(degree(e.pitch) - degree(lastPitch)) > limit
+        )
           errors.push("Independent voice exceeds its melodic interval limit.");
         if (lastPosition !== pos.id) {
           resolution = undefined;
@@ -225,7 +282,7 @@ export function validateIndependentVoices(
           const written = Note.get(n.pitch);
           if (
             n.hand !== hand ||
-            n.fingering ||
+            (n.fingering && (n !== primary || !alternate)) ||
             !Number.isInteger(n.finger) ||
             !allowed(n.midi, n.finger) ||
             written.midi !== n.midi ||
@@ -237,7 +294,8 @@ export function validateIndependentVoices(
             (!pos.pitches.includes(n.pitch) &&
               (!profile.chromatic || c.chromatic.kind !== "neighbors")) ||
             (pos.fingerToMidi[n.finger - 1] !== n.midi &&
-              !pos.pitchOptions?.[n.finger - 1]?.includes(n.pitch)) ||
+              !pos.pitchOptions?.[n.finger - 1]?.includes(n.pitch) &&
+              !(n === primary && alternate)) ||
             (lastPosition === pos.id &&
               lastFingering?.some((previous) => !transition(previous, n)))
           )
@@ -365,6 +423,45 @@ export function validateIndependentVoices(
           lifetime: n.lifetime,
         });
     }
+  const coverage = c.coverage;
+  if (coverage.kind === "guided") {
+    if (
+      (start
+        ? !validCoverageMemory(p.initial, context, coverage)
+        : p.initial.coverage !== undefined) ||
+      !validCoverageMemory(p.final, context, coverage) ||
+      p.initial.hands.some((hand) => {
+        const before = p.initial.coverage?.[hand.hand];
+        const after = p.final.coverage![hand.hand]!;
+        const center =
+          (Math.min(...hand.fingerToMidi) + Math.max(...hand.fingerToMidi)) / 2;
+        return (
+          (before &&
+            (before.min !== after.min ||
+              before.max !== after.max ||
+              (before.remaining > 0 &&
+                Math.abs(before.target - center) >
+                  coverage.reachedToleranceSemitones &&
+                (before.target !== after.target ||
+                  before.remaining - 1 !== after.remaining)))) ||
+          !matchesCoverageUsage(
+            notes,
+            hand,
+            before,
+            after,
+            start,
+            end,
+            coverage,
+          )
+        );
+      })
+    )
+      errors.push(
+        "Independent coverage state differs from the sounding score.",
+      );
+  } else if (p.initial.coverage || p.final.coverage) {
+    errors.push("Coverage state requires guided coverage.");
+  }
   const boundaries = [
     ...new Set([
       start,
@@ -412,7 +509,7 @@ export function validateIndependentVoices(
       }
       const map = [...position.fingerToMidi];
       sounding.forEach((n) => {
-        map[n.finger - 1] = n.midi;
+        if (!alternateHolds.has(n.id)) map[n.finger - 1] = n.midi;
       });
       if (
         Math.max(...map) - Math.min(...map) > 10 ||
@@ -427,6 +524,12 @@ export function validateIndependentVoices(
         errors.push("Combined voices exceed the playable hand map.");
       const sorted = [...sounding].sort((a, b) => a.finger - b.finger);
       if (
+        (sounding.some((n) => alternateHolds.has(n.id)) &&
+          sorted.some(
+            (n, i) =>
+              i > 0 &&
+              (n.midi - sorted[i - 1].midi) * (hand === "right" ? 1 : -1) <= 0,
+          )) ||
         sorted.some(
           (n, i) =>
             i > 0 &&
@@ -482,44 +585,36 @@ export function validateIndependentVoices(
       m.hand === "right" ? "left" : "right",
       m.landingTick,
     );
-    const prepared = specs
-      .filter((s) => s.hand === m.hand)
-      .every(({ id }) => {
-        const rests = p.events.filter(
+    const wide = m.technique === "lifted-wide-leap";
+    const lastPitch =
+      p.events
+        .filter(
           (e) =>
-            e.voiceId === id && tick(e) >= m.cueTick && tick(e) < m.landingTick,
-        );
-        return (
-          rests[0] &&
-          tick(rests[0]) === m.cueTick &&
-          rests.every((e) => e.kind === "rest") &&
-          rests.reduce((sum, e) => sum + e.duration, 0) ===
-            m.landingTick - m.cueTick
-        );
-      });
+            e.voiceId === `${m.hand}:main` &&
+            e.kind === "note" &&
+            tick(e) < m.landingTick,
+        )
+        .at(-1)?.pitch ??
+      p.initial.hands.find((h) => h.hand === m.hand)?.lastPitch;
     if (
-      movement.kind !== "rested-reposition" ||
-      movement.probability === 0 ||
-      m.technique !== "lift-and-reposition" ||
-      !movement.eligibleBars.some((bar) => bar === b) ||
-      m.cueTick !== m.landingTick - movement.preparationBeats * TPQ ||
-      !prepared ||
       !from ||
       !to ||
       from.id !== m.fromPositionId ||
       to.id !== m.toPositionId ||
       !delta ||
       delta !== m.distance ||
-      Math.abs(delta) > movement.maxDistanceSteps ||
       from.pitches.some(
         (pitch, i) => degree(to.pitches[i]) - degree(pitch) !== delta,
       ) ||
       !landing ||
+      landing.kind !== "note" ||
       landing.voiceId !== `${m.hand}:main` ||
       tick(landing) !== m.landingTick ||
       noteheads(landing).length !== 1 ||
       landing.midi !== m.landingMidi ||
       landing.finger !== m.landingFinger ||
+      noteheads(landing).some((n) => (n.tie?.index ?? 0) > 0 || n.fingering) ||
+      landing.fingering ||
       from.pitches.includes(landing.pitch) ||
       notes.some(
         (n) =>
@@ -527,6 +622,15 @@ export function validateIndependentVoices(
           n.lifetime.onsetTick < m.landingTick &&
           n.lifetime.releaseTick > m.cueTick,
       ) ||
+      (wide
+        ? !validateWideLanding(p, c, m, from, landing, lastPitch)
+        : movement.kind !== "rested-reposition" ||
+          movement.probability === 0 ||
+          m.technique !== "lift-and-reposition" ||
+          !movement.eligibleBars.some((bar) => bar === b) ||
+          m.cueTick !== m.landingTick - movement.preparationBeats * TPQ ||
+          Math.abs(delta) > movement.maxDistanceSteps ||
+          !hasMovementPreparation(p, c, m)) ||
       (opposite &&
         (m.hand === "right"
           ? Math.min(...to.fingerToMidi) <= Math.max(...opposite.fingerToMidi)
@@ -536,6 +640,10 @@ export function validateIndependentVoices(
         "Invalid independent hand relocation, preparation or landing.",
       );
   }
+  errors.push(
+    ...validateWideSweeps(p, c),
+    ...validateVoiceLeapReservations(p, c),
+  );
   if (
     new Set(p.movements.map((m) => `${m.hand}:${m.landingTick}`)).size !==
       p.movements.length ||

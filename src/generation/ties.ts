@@ -19,6 +19,7 @@ import { noteLifetimeDataSchema } from "../score/lifetimeValidation";
 import { diatonicIndex } from "./positionMaps";
 import { writtenPitch } from "../score/pitch";
 import { voiceEventId, voiceUnit } from "./voiceConfig";
+import { isRestedAlternateAssignment } from "./alternateFingering";
 
 /** Continuation identities are committed before the next phrase exists. */
 export function carryHeadId(eventId: string, finger: number, primary: boolean) {
@@ -356,7 +357,10 @@ export function validateTieCarry(
 ) {
   const pending = state.pendingTies ?? [];
   if (c.notation.ties === false) {
-    if (pending.length)
+    if (
+      pending.length ||
+      (c.independentVoices && state.activeLifetimes?.length)
+    )
       throw new Error("Pending ties require the tie capability.");
     return;
   }
@@ -382,7 +386,12 @@ export function validateTieCarry(
         JSON.stringify(n.written) !==
           JSON.stringify(writtenPitch(n.pitch, c.notation.key))) ||
       (h.fingerToMidi[n.finger - 1] !== n.midi &&
-        !h.pitchOptions?.[n.finger - 1]?.includes(n.pitch)) ||
+        !h.pitchOptions?.[n.finger - 1]?.includes(n.pitch) &&
+        !(
+          c.independentVoices &&
+          c.fingering.allowRestedAlternates &&
+          isRestedAlternateAssignment(h, n, n.fingering)
+        )) ||
       !tieSegmentSchema.safeParse(n.tie).success ||
       !noteLifetimeDataSchema.safeParse(l).success ||
       n.tie?.pattern !== "carry" ||

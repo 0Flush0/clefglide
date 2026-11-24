@@ -33,6 +33,8 @@ export function inspectGeneratorFeasibility(c: ValidatedGeneratorConfig) {
   );
   const errors: string[] = [],
     warnings: string[] = [];
+  const wideUnavailable: string[] = [];
+  const voices = voiceSpecs(c);
   const ties = c.notation.ties;
   if (
     ties !== false &&
@@ -41,7 +43,7 @@ export function inspectGeneratorFeasibility(c: ValidatedGeneratorConfig) {
       c.chords.probability === 0 ||
       !compatible.some((positions, i) =>
         c.independentVoices
-          ? voiceSpecs(c).some(
+          ? voices.some(
               (v) =>
                 v.hand === hands[i] &&
                 v.profile.chords &&
@@ -80,14 +82,29 @@ export function inspectGeneratorFeasibility(c: ValidatedGeneratorConfig) {
       );
     const movement = c.movement;
     const wide = c.wideLeaps;
+    const main = voices.find(
+      (voice) => voice.hand === hands[i] && voice.id.endsWith(":main"),
+    )?.profile;
     if (
       wide.kind === "lifted-wide" &&
       wide.probability > 0 &&
       compatible[i].length > 0 &&
-      !compatible[i].some((from) =>
-        wideLandingOptions(c, from, compatible[i]).some(
+      !compatible[i].some((from) => {
+        const previousPitches =
+          main?.chromatic && from.pitchOptions
+            ? from.pitchOptions.flat()
+            : from.pitches;
+        return wideLandingOptions(c, from, compatible[i]).some(
           ({ to, index }) =>
-            from.pitches.some(
+            (!main ||
+              (main.entryProbability > 0 &&
+                main.activity > 0 &&
+                voiceAllows(
+                  main,
+                  Note.midi(to.pitches[index])!,
+                  to.fingerToMidi.indexOf(Note.midi(to.pitches[index])!) + 1,
+                ))) &&
+            previousPitches.some(
               (last) =>
                 Math.abs(
                   diatonicIndex(to.pitches[index]) - diatonicIndex(last),
@@ -97,10 +114,10 @@ export function inspectGeneratorFeasibility(c: ValidatedGeneratorConfig) {
               lists[1 - i].some(
                 (other) => separated(from, other) && separated(to, other),
               )),
-        ),
-      )
+        );
+      })
     )
-      errors.push(
+      wideUnavailable.push(
         `${hands[i]} hand: wide leaps are infeasible for these ranges, spacing, distance, landing, direction and preparation constraints.`,
       );
     if (
@@ -146,6 +163,10 @@ export function inspectGeneratorFeasibility(c: ValidatedGeneratorConfig) {
         `${hands[i]} hand: no approved chord voicing fits these positions and harmonic plans; legal single notes will be retained.`,
       );
   }
+  (c.independentVoices && wideUnavailable.length < hands.length
+    ? warnings
+    : errors
+  ).push(...wideUnavailable);
   if (
     hands.length === 2 &&
     !lists[0].some((r) => lists[1].some((l) => separated(r, l)))

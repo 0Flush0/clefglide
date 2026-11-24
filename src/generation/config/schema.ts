@@ -385,16 +385,6 @@ const schema = z
           ["noteLifetimes"],
           "Independent voices require explicit physical key holds.",
         );
-      if (c.wideLeaps.kind !== "disabled" || c.coverage.kind !== "disabled")
-        error(
-          ["independentVoices"],
-          "Independent voices support fixed and rested repositioning plans. Disable wide leaps and coverage guidance.",
-        );
-      if (c.fingering.allowRestedAlternates)
-        error(
-          ["fingering", "allowRestedAlternates"],
-          "Independent voices require mapped fingers.",
-        );
       for (const hand of ["right", "left"] as const) {
         const group = independent[hand];
         if (hands.includes(hand) !== !!group)
@@ -408,19 +398,36 @@ const schema = z
             ["independentVoices", hand],
             "Minimum peak polyphony exceeds the simultaneous key limit.",
           );
+        const sounding = group.voices.filter(
+          (v) => v.activity > 0 && v.entryProbability > 0,
+        );
+        const chord = c.chords;
+        const maxHeads = sounding.map((v) =>
+          v.chords && chord.kind === "voicings" && chord.probability > 0
+            ? Math.max(
+                1,
+                ...chord.shapes
+                  .filter((shape) =>
+                    [...shape.value].every((finger) =>
+                      v.fingers.includes(Number(finger)),
+                    ),
+                  )
+                  .map((shape) => shape.value.length),
+              )
+            : 1,
+        );
+        const overlap =
+          independent.maxOverlapTicks > 0 && independent.overlapProbability > 0;
         if (
           group.minPolyphony > 1 &&
-          (independent.maxOverlapTicks === 0 ||
-            independent.overlapProbability === 0) &&
-          !(
-            c.chords.kind === "voicings" &&
-            c.chords.probability > 0 &&
-            group.voices.some((v) => v.chords)
-          )
+          group.minPolyphony >
+            (overlap
+              ? maxHeads.reduce((sum, count) => sum + count, 0)
+              : Math.max(0, ...maxHeads))
         )
           error(
             ["independentVoices", hand],
-            "This peak polyphony needs overlapping voices or enabled chords.",
+            "This peak polyphony needs more available keys from overlapping voices or enabled chords.",
           );
         if (
           group.minPolyphony > 0 &&
@@ -573,6 +580,7 @@ const schema = z
           "Chord-tone selection requires enabled chord voicings.",
         );
       if (
+        !independent &&
         ties.crossPhrase &&
         c.wideLeaps.kind === "lifted-wide" &&
         c.wideLeaps.probability > 0 &&
@@ -695,11 +703,16 @@ const schema = z
       );
     if (
       c.coverage.kind === "guided" &&
-      (c.movement.kind === "fixed" || c.movement.probability === 0)
+      (c.movement.kind === "fixed" || c.movement.probability === 0) &&
+      !(
+        independent &&
+        c.wideLeaps.kind === "lifted-wide" &&
+        c.wideLeaps.probability > 0
+      )
     )
       error(
         ["coverage"],
-        "Coverage guidance requires active rested repositioning; use disabled coverage for fixed hands.",
+        "Coverage guidance requires active rested repositioning or wide leaps with independent voices.",
       );
     const smallest = Math.min(...c.rhythm.durations.map((d) => d.value));
     const wide = c.wideLeaps;
@@ -720,17 +733,21 @@ const schema = z
         );
       const bars = [...wide.eligibleBars].sort((a, b) => a - b);
       if (
-        bars.some(
-          (b, i) =>
-            wide.preparationBeats >=
-            ((bars[(i + 1) % bars.length] - b + 4) % 4 || 4) * c.notation.beats,
-        )
+        wide.preparationBeats >= c.notation.phraseBars * c.notation.beats ||
+        (!independent &&
+          bars.some(
+            (b, i) =>
+              wide.preparationBeats >=
+              ((bars[(i + 1) % bars.length] - b + 4) % 4 || 4) *
+                c.notation.beats,
+          ))
       )
         error(
           ["wideLeaps", "preparationBeats"],
           "Leave at least one sounded beat between leap preparation windows.",
         );
       if (
+        !independent &&
         c.movement.kind === "rested-reposition" &&
         c.movement.probability > 0 &&
         wide.probability > 0 &&
@@ -756,7 +773,7 @@ const schema = z
           : c.rhythm.breathBars.includes(b)
             ? c.rhythm.breathBeats
             : 0;
-      if (wide.kind === "lifted-wide" && wide.probability > 0) {
+      if (!independent && wide.kind === "lifted-wide" && wide.probability > 0) {
         const end = (b + 1) * c.notation.beats;
         for (const landing of wide.eligibleBars) {
           const next =

@@ -6,23 +6,20 @@ import { coveragePhraseShape } from "./rangeCoverage";
 import { positionCenter } from "./positionMaps";
 
 export function planPhrase(c: ValidatedGeneratorConfig, state: StreamState) {
-  const useCoverage =
-    c.coverage.kind === "guided" &&
-    c.movement.kind === "rested-reposition" &&
-    c.movement.probability > 0;
+  const coverage = c.coverage;
   const harmony = chooseWeighted(c.harmony.progressions, state),
     shape = chooseWeighted(c.melody.contours, state);
   const motif = chooseWeighted(c.melody.motifs, state);
   const shapes = new Map(
     state.hands.map((h) => [
       h.hand,
-      useCoverage
+      coverage.kind === "guided" && !c.independentVoices
         ? coveragePhraseShape(
             state.coverage![h.hand]!,
             positionCenter(h),
             shape,
             state,
-            c.coverage.kind === "guided" ? c.coverage : undefined,
+            coverage,
           )
         : shape,
     ]),

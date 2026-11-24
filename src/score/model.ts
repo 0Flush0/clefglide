@@ -168,6 +168,7 @@ export interface StreamState {
   independentVoices?: {
     context: string;
     voices: Record<string, VoiceState>;
+    leapPreparations?: Partial<Record<Hand, VoiceLeapPreparation>>;
   };
   pendingTies?: {
     configFingerprint: string;
@@ -182,6 +183,12 @@ export interface StreamState {
     cueTick: number;
     landingTick: number;
   };
+}
+export interface VoiceLeapPreparation {
+  cueTick: number;
+  landingTick: number;
+  /** Nearest opposite-hand envelope edge over the elapsed preparation. */
+  oppositeEdge?: number;
 }
 export interface VoiceState {
   active: boolean;

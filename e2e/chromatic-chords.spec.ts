@@ -22,7 +22,13 @@ test("chromatic chord practice engraves, streams, keeps hints stable and saves a
       .getByRole("button", { name: "Hard" })
       .click();
   await page.getByLabel("Fingering assistance").selectOption("all");
-  await page.getByRole("button", { name: "Apply & generate" }).click();
+  // This seed puts a chord in the two bars visible on tablets.
+  await page.getByText("Advanced settings", { exact: true }).click();
+  await page.getByLabel("Exercise seed").fill("chord-hints");
+  await page.getByText("Advanced settings", { exact: true }).click();
+  const apply = page.getByRole("button", { name: "Apply & generate" });
+  await apply.click();
+  await expect(apply).toBeDisabled();
   await expect(page.locator(".notation svg")).toBeVisible();
   const eventIds = () =>
     page.locator(".vf-stavenote").evaluateAll((ns) => ns.map((n) => n.id));

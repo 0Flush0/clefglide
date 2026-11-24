@@ -75,7 +75,12 @@ export function generatorConfigFingerprint(
   return `${generatorConfigVersion(config)}:parameters:${JSON.stringify(identity)}`;
 }
 export function generatorConfigVersion(config: ValidatedGeneratorConfig) {
-  if (config.independentVoices) return "9.0.0";
+  if (config.independentVoices)
+    return config.wideLeaps.kind !== "disabled" ||
+      config.coverage.kind === "guided" ||
+      config.fingering.allowRestedAlternates
+      ? "10.0.0"
+      : "9.0.0";
   if (config.notation.ties !== false) return "8.1.0";
   if (config.noteLifetimes.kind === "explicit") return "7.0.0";
   return config.wideLeaps.kind === "disabled" ? VERSION : "6.0.0";

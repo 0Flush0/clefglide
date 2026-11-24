@@ -1,5 +1,6 @@
 import { random } from "./random";
 import { coverageDefaults, type GuidedCoverage } from "./config";
+import type { HandState, LifetimeNote, StreamState } from "../score/model";
 
 /** Ephemeral region-use estimates and one short-lived goal. */
 export interface RangeCoverage {
@@ -128,12 +129,88 @@ export function recordRangeCoverage(
   state: RangeCoverage,
   pitches: number[],
   config: GuidedCoverage = coverageDefaults,
+  weights?: number[],
 ): void {
   const counts = Array<number>(config.regions).fill(0);
-  for (const pitch of pitches) counts[region(state, pitch)]++;
+  pitches.forEach((pitch, i) => {
+    counts[region(state, pitch)] += weights?.[i] ?? 1;
+  });
+  const total = weights
+    ? weights.reduce((sum, weight) => sum + weight, 0)
+    : pitches.length;
   state.usage = state.usage.map(
     (use, i) =>
       use * config.decay +
-      (counts[i] / Math.max(1, pitches.length)) * (1 - config.decay),
+      (counts[i] / Math.max(1, total)) * (1 - config.decay),
+  );
+}
+
+export function validCoverageMemory(
+  state: StreamState,
+  context: string,
+  config: GuidedCoverage,
+) {
+  const memory = state.coverage;
+  return (
+    !!memory &&
+    Object.keys(memory).length === state.hands.length &&
+    state.hands.every((hand) => {
+      const entry = memory[hand.hand];
+      return (
+        !!entry &&
+        entry.context === context &&
+        Number.isInteger(entry.min) &&
+        entry.min >= hand.min &&
+        Number.isInteger(entry.max) &&
+        entry.max <= hand.max &&
+        entry.min < entry.max &&
+        Number.isFinite(entry.target) &&
+        entry.target >= entry.min &&
+        entry.target <= entry.max &&
+        Number.isInteger(entry.remaining) &&
+        entry.remaining >= 0 &&
+        entry.remaining <
+          config.minTargetPhrases + config.targetSpreadPhrases &&
+        Array.isArray(entry.usage) &&
+        entry.usage.length === config.regions &&
+        entry.usage.every(
+          (value) => Number.isFinite(value) && value >= 0 && value <= 1,
+        ) &&
+        entry.usage.reduce((sum, value) => sum + value, 0) <= 1 + 1e-12
+      );
+    })
+  );
+}
+
+/** Reconstruct the outgoing histogram from actual lifetime intersections. */
+export function matchesCoverageUsage(
+  notes: LifetimeNote[],
+  hand: HandState,
+  initial: RangeCoverage | undefined,
+  final: RangeCoverage,
+  start: number,
+  end: number,
+  config: GuidedCoverage,
+) {
+  const ticks = final.usage.map(() => 0);
+  for (const note of notes) {
+    if (note.hand === hand.hand)
+      ticks[region(final, note.midi)] += Math.max(
+        0,
+        Math.min(end, note.lifetime.releaseTick) -
+          Math.max(start, note.lifetime.onsetTick),
+      );
+  }
+  const total = Math.max(
+    1,
+    ticks.reduce((sum, value) => sum + value, 0),
+  );
+  return final.usage.every(
+    (use, index) =>
+      Math.abs(
+        use -
+          ((initial?.usage[index] ?? 0) * config.decay +
+            (ticks[index] / total) * (1 - config.decay)),
+      ) < 1e-12,
   );
 }
